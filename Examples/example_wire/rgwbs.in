@@ -1,0 +1,11 @@
+#
+# Flags to write BSE eigenvectors or not.
+#
+no_eigenvectors
+
+exchange_correlation hartree_fock
+
+number_iterations 20
+
+convergence_potential 0.01 eV
+

@@ -1,0 +1,116 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Write BSE Hamiltonian to checkpoint file bse_chkpt.dat.
+! Only master PE writes to disk. Other PEs send their components of
+! the Hamiltonian to master.
+! 
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zwrite_bse(nrep,chkpt,bsepol)
+
+  use typedefs
+  use mpi_module
+  implicit none
+#ifdef MPI
+  include 'mpif.h'
+#endif
+
+  ! arguments
+  ! number of representations
+  integer, intent(in) :: nrep
+  ! chekpoint flag
+  integer, intent(in) :: chkpt
+  ! BSE polarizability data
+  type (polinfo), dimension(nrep), intent(in) :: bsepol
+
+  ! local variables
+  integer, parameter :: iunit = 60
+  integer :: irp, ncount, irow, nmat, ipe, jpe, icol, pcol
+  SCALAR, allocatable :: tmpdum(:,:)
+#ifdef MPI
+  integer :: info
+  integer :: status(MPI_STATUS_SIZE)
+#endif
+
+  if (peinf%master) then
+     open(iunit,file='bse_chkpt.dat',form='unformatted')
+     write(iunit) chkpt
+     write(iunit) (bsepol(irp)%ntr,irp=1,nrep), &
+          (bsepol(irp)%nn,irp=1,nrep),r_grp%npes
+  endif
+
+  do irp = 1, nrep
+     if ( bsepol(irp)%ntr == 0 ) cycle
+     ncount = bsepol(irp)%ntr
+     nmat = bsepol(irp)%nn * r_grp%npes
+     if (peinf%master) allocate(tmpdum(nmat*2,bsepol(irp)%nn*2))
+     !  ipe : PE rank in the group that owns this representation.
+     !  jpe : world rank of PE with rank ipe.
+     do ipe = 0, r_grp%npes - 1
+        jpe = r_grp%map(ipe+1,r_grp%rep_g(irp)+1)
+        if (.not. peinf%master) then
+#ifdef MPI
+           if (jpe == peinf%inode) &
+                call MPI_SEND(bsepol(irp)%Zv,nmat*bsepol(irp)%nn*4, &
+                MPI_DOUBLE_SCALAR,peinf%masterid,jpe,peinf%comm,info)
+#endif
+        else
+           if (jpe == peinf%inode) then
+              tmpdum = bsepol(irp)%Zv
+           else
+#ifdef MPI
+              call MPI_RECV(tmpdum,nmat*bsepol(irp)%nn*4, &
+                   MPI_DOUBLE_SCALAR,jpe,jpe,peinf%comm,status,info)
+#endif
+           endif
+           do pcol = 1, bsepol(irp)%nn
+              icol = pcol + jpe*bsepol(irp)%nn
+              if (icol > ncount) cycle
+              write(iunit) (tmpdum(irow,pcol),irow=1,ncount)
+              write(iunit) (tmpdum(irow,pcol),irow=nmat+1,nmat+ncount)
+           enddo
+        endif
+#ifdef MPI
+        call MPI_BARRIER(peinf%comm,info)
+#endif
+     enddo
+     do ipe = 0, r_grp%npes - 1
+        jpe = r_grp%map(ipe+1,r_grp%rep_g(irp)+1)
+        if (.not. peinf%master) then
+#ifdef MPI
+           if (jpe == peinf%inode) &
+                call MPI_SEND(bsepol(irp)%Zv,nmat*bsepol(irp)%nn*4, &
+                MPI_DOUBLE_SCALAR,peinf%masterid,jpe,peinf%comm,info)
+#endif
+        else
+           if (jpe == peinf%inode) then
+              tmpdum = bsepol(irp)%Zv
+           else
+#ifdef MPI
+              call MPI_RECV(tmpdum,nmat*bsepol(irp)%nn*4, &
+                   MPI_DOUBLE_SCALAR,jpe,jpe,peinf%comm,status,info)
+#endif
+           endif
+           do pcol = bsepol(irp)%nn+1, 2*bsepol(irp)%nn
+              icol = pcol - bsepol(irp)%nn + jpe*bsepol(irp)%nn
+              if (icol > ncount) cycle
+              write(iunit) (tmpdum(irow,pcol),irow=1,ncount)
+              write(iunit) (tmpdum(irow,pcol),irow=nmat+1,nmat+ncount)
+           enddo
+        endif
+#ifdef MPI
+        call MPI_BARRIER(peinf%comm,info)
+#endif
+     enddo
+     if (peinf%master) deallocate(tmpdum)
+  enddo
+  if (peinf%master) close(iunit)
+#ifdef MPI
+        call MPI_BARRIER(peinf%comm,info)
+#endif
+
+end subroutine Zwrite_bse
+!===================================================================

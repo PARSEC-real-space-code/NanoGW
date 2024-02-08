@@ -1,0 +1,207 @@
+ Processor No            0   has started
+ Number of processors:            1
+ Original Laplacian coefficients are:    1.50000000000000     
+   1.50000000000000        1.50000000000000       -1.00000000000000     
+  -1.00000000000000       -1.00000000000000     
+ number of zero mixed derivatives is:            0
+ laplacian orthogonal dir is :           0
+ found the following 3 nearest neighbors
+           1          -1           0           1
+           2          -1           1           0
+           3           0          -1           1
+ uu matrix is:
+  -1.00000000000000       0.000000000000000E+000   1.00000000000000     
+  -1.00000000000000        1.00000000000000       0.000000000000000E+000
+  0.000000000000000E+000  -1.00000000000000        1.00000000000000     
+ mt matrix is:
+  0.000000000000000E+000  -2.00000000000000       0.000000000000000E+000
+  -2.00000000000000       0.000000000000000E+000  0.000000000000000E+000
+  0.000000000000000E+000  0.000000000000000E+000  -2.00000000000000     
+ coeffs vec is:
+  0.500000000000000       0.500000000000000       0.500000000000000     
+ bb is:  0.500000000000000       0.500000000000000       0.500000000000000     
+ lap_dir is:           1           1           1
+ Laplacian number of directions:  3
+ Laplacian coefficients data:
+ 0.50  0.50  0.50  0.50  0.50  0.50
+  grid%lap_dir_num > 0
+                     ********************                    
+ 
+  Group partition information: 
+  I am processor rank            0  in group            0
+  I am master in my group, with master rank            0
+ 
+                     ********************                    
+ 
+ Setup messages:
+ ---------------
+ The Hamiltonian matrix size is         216
+  reduced size is          216
+  maximum distance between grid points and their images is
+   0.000      [bohr]
+ 
+ There are 36 laplacian-related non-diagonal elements per row
+ The local dimension is :         216
+ INTERIOR POINTS Mvec - Prec          216         216
+ Information to be send to neighbors:
+ send proc            0  #rows:           0
+ I communicate with            0  processors, a total of            0  elements
+ I receive from these procs:            0
+ 
+ Non-local pseudopotential messages:
+ -----------------------------------
+ Max # of nonlocal points for one atom =           28
+ 
+ Sizes of all non-local blocks 
+    28    28
+ 
+ Transform atoms           2
+ My number of non-local rows:           56  of total           56
+  starting from Vlocal 
+# Poisson solver, return code =   0  convergence rate =   0.6519    
+ # the residual norm   2.627516654193972E-005  2.627516654324447E-005
+ ===================================================
+ ---------  Full convergence in chebdav ------------
+  ndim=     216,  blksize=  3,  n_spdim=   30
+  nwant  =   18,  nconv=   19,  true nconv=    19
+  num_iter =       9,  max_iter =   25000
+  num_mv  =     572,   num_restart=       0
+  num_outrst =    0,   max_outrst =    2
+  conv_tol=0.1000E-03,   ritzmax=0.3525E+01
+  kactmax =   30,   polym=   20
+ ===================================================
+  Eigensolver, representation =            1  k-point =            1  spin = 
+           1  iteration =            1
+  maxmvs =          572  nec =           19  nstate =           18  info = 
+           0
+ ===================================================
+ ---------  Full convergence in chebdav ------------
+  ndim=     216,  blksize=  3,  n_spdim=   30
+  nwant  =   18,  nconv=   18,  true nconv=    18
+  num_iter =      11,  max_iter =   25000
+  num_mv  =     698,   num_restart=       1
+  num_outrst =    1,   max_outrst =    2
+  conv_tol=0.1000E-03,   ritzmax=0.3878E+01
+  kactmax =   30,   polym=   20
+ ===================================================
+  Eigensolver, representation =            1  k-point =            2  spin = 
+           1  iteration =            1
+  maxmvs =          698  nec =           18  nstate =           18  info = 
+           0
+ ===================================================
+ ---------  Full convergence in chebdav ------------
+  ndim=     216,  blksize=  3,  n_spdim=   30
+  nwant  =   18,  nconv=   19,  true nconv=    19
+  num_iter =      10,  max_iter =   25000
+  num_mv  =     635,   num_restart=       1
+  num_outrst =    1,   max_outrst =    2
+  conv_tol=0.1000E-03,   ritzmax=0.3535E+01
+  kactmax =   30,   polym=   20
+ ===================================================
+  Eigensolver, representation =            1  k-point =            3  spin = 
+           1  iteration =            1
+  maxmvs =          635  nec =           19  nstate =           18  info = 
+           0
+ ===================================================
+ ---------  Full convergence in chebdav ------------
+  ndim=     216,  blksize=  3,  n_spdim=   30
+  nwant  =   18,  nconv=   18,  true nconv=    18
+  num_iter =      11,  max_iter =   25000
+  num_mv  =     698,   num_restart=       2
+  num_outrst =    2,   max_outrst =    2
+  conv_tol=0.1000E-03,   ritzmax=0.3709E+01
+  kactmax =   30,   polym=   20
+ ===================================================
+  Eigensolver, representation =            1  k-point =            4  spin = 
+           1  iteration =            1
+  maxmvs =          698  nec =           18  nstate =           18  info = 
+           0
+ ===================================================
+ ---------  Full convergence in chebdav ------------
+  ndim=     216,  blksize=  3,  n_spdim=   30
+  nwant  =   18,  nconv=   18,  true nconv=    18
+  num_iter =      10,  max_iter =   25000
+  num_mv  =     635,   num_restart=       1
+  num_outrst =    1,   max_outrst =    2
+  conv_tol=0.1000E-03,   ritzmax=0.3618E+01
+  kactmax =   30,   polym=   20
+ ===================================================
+  Eigensolver, representation =            1  k-point =            5  spin = 
+           1  iteration =            1
+  maxmvs =          635  nec =           18  nstate =           18  info = 
+           0
+ ===================================================
+ ---------  Full convergence in chebdav ------------
+  ndim=     216,  blksize=  3,  n_spdim=   30
+  nwant  =   18,  nconv=   19,  true nconv=    19
+  num_iter =      11,  max_iter =   25000
+  num_mv  =     698,   num_restart=       2
+  num_outrst =    2,   max_outrst =    2
+  conv_tol=0.1000E-03,   ritzmax=0.3828E+01
+  kactmax =   30,   polym=   20
+ ===================================================
+  Eigensolver, representation =            1  k-point =            6  spin = 
+           1  iteration =            1
+  maxmvs =          698  nec =           19  nstate =           18  info = 
+           0
+ ===================================================
+ ---------  Full convergence in chebdav ------------
+  ndim=     216,  blksize=  3,  n_spdim=   30
+  nwant  =   18,  nconv=   20,  true nconv=    20
+  num_iter =      10,  max_iter =   25000
+  num_mv  =     635,   num_restart=       1
+  num_outrst =    1,   max_outrst =    2
+  conv_tol=0.1000E-03,   ritzmax=0.3761E+01
+  kactmax =   30,   polym=   20
+ ===================================================
+  Eigensolver, representation =            1  k-point =            7  spin = 
+           1  iteration =            1
+  maxmvs =          635  nec =           20  nstate =           18  info = 
+           0
+ ===================================================
+ ---------  Full convergence in chebdav ------------
+  ndim=     216,  blksize=  3,  n_spdim=   30
+  nwant  =   18,  nconv=   18,  true nconv=    18
+  num_iter =       9,  max_iter =   25000
+  num_mv  =     572,   num_restart=       0
+  num_outrst =    0,   max_outrst =    2
+  conv_tol=0.1000E-03,   ritzmax=0.3719E+01
+  kactmax =   30,   polym=   20
+ ===================================================
+  Eigensolver, representation =            1  k-point =            8  spin = 
+           1  iteration =            1
+  maxmvs =          572  nec =           18  nstate =           18  info = 
+           0
+ 
+ Diagonalization time [sec] :       0.24,      tdiag_sum =        0.00
+ 
+# Poisson solver, return code =   0  convergence rate =   0.7015    
+ # the residual norm   3.486832074454965E-007  3.486832063154966E-007
+ 
+ Diagonalization time [sec] :       0.10,      tdiag_sum =        0.24
+ 
+# Poisson solver, return code =   0  convergence rate =   0.7475    
+ # the residual norm   6.298294477332943E-009  6.298293795984787E-009
+ 
+ Diagonalization time [sec] :       0.10,      tdiag_sum =        0.34
+ 
+# Poisson solver, return code =   0  convergence rate =   0.7617    
+ # the residual norm   6.653274362903149E-009  6.653273507465734E-009
+ 
+ Diagonalization time [sec] :       0.10,      tdiag_sum =        0.43
+ 
+# Poisson solver, return code =   0  convergence rate =   0.7186    
+ # the residual norm   9.094120251592738E-009  9.094120856797826E-009
+ 
+ Diagonalization time [sec] :       0.10,      tdiag_sum =        0.53
+ 
+# Poisson solver, return code =   0  convergence rate =   0.7503    
+ # the residual norm   2.312957065808691E-010  2.312942811388969E-010
+  I received L =            0  for atom #           1  with mnloc =           28
+  I received L =            1  for atom #           1  with mnloc =           28
+  I received L =            0  for atom #           2  with mnloc =           28
+  I received L =            1  for atom #           2  with mnloc =           28
+ 
+ Closing file on PE #           0
+ 
+  Error code ierr =           -1

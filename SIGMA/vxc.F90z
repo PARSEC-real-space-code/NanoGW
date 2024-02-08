@@ -1,0 +1,183 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Calculate Vxc matrix elements, or read them from disk. At the end,
+! compute the electronic total energy.
+! All quantities are global.
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zvxc(nspin,gvec,kpt,sig,readvxc,ik,isp)
+
+  use typedefs
+  use xc_functionals
+  use mpi_module
+  implicit none
+#ifdef MPI
+  include 'mpif.h'
+#endif
+
+  ! arguments
+  ! number of spins
+  integer, intent(in) :: nspin
+  type (gspace), intent(in) :: gvec
+  type (kptinfo), intent(inout) :: kpt
+  type (siginfo), intent(inout) :: sig
+  ! true if Vxc matrix elements are read from disk
+  logical, intent(in) :: readvxc
+  ! current k-point
+  integer, intent(in) :: ik
+
+  ! local variables
+  integer :: ii, jj, nn, isp, jsp, ikp, jk, info, kk
+  real(dp) :: tmp1, tmp2
+  integer, allocatable :: map_c(:,:), inv_diag(:), inv_offd(:)
+  complex(dpc), dimension(:), allocatable :: vx, vc
+  ! constant to track initialized Vxc matrix elements
+  real(dp), parameter :: v_large = 9.d9
+
+#ifdef DEBUG
+  if (peinf%master) then
+     write(6,*) ' map defined ', sig%nmap, sig%ndiag, &
+          sig%noffd, sig%ndiag_s, sig%noffd_s
+     write(6,*) sig%map
+     write(6,*) sig%diag
+     write(6,*) sig%off1
+     write(6,*) sig%off2
+  endif
+#endif
+
+  jk = sig%indxk
+  if (sig%ndiag_s /= 0) allocate(sig%vxcdiag(sig%ndiag_s))
+  if (sig%noffd_s /= 0) allocate(sig%vxcoffd(sig%noffd_s))
+
+  if (readvxc) then
+     !-------------------------------------------------------------------
+     ! Read V_xc matrix elements from disk.
+     !
+     if (peinf%master) then
+        allocate(inv_diag(kpt%wfn(isp,jk)%nstate))
+        inv_diag = 0
+        if (sig%ndiag_s /= 0) sig%vxcdiag = zone*v_large
+        if (sig%noffd_s /= 0) sig%vxcoffd = zone*v_large
+        do ii = 1, sig%ndiag_s
+           inv_diag(sig%map(sig%diag(ii))) = ii
+        enddo
+        allocate(inv_offd(kpt%wfn(isp,jk)%nstate * kpt%wfn(isp,jk)%nstate))
+        inv_offd = 0
+
+        do ii = 1, sig%noffd_s
+           jj = sig%map(sig%off1(ii)) + kpt%wfn(isp,jk)%nstate * &
+                ( sig%map(sig%off2(ii)) - 1 )
+           inv_offd(jj) = ii
+        enddo
+        open(23,file='sigma_mtxel.dat',form='formatted')
+        do
+#ifdef CPLX
+           read(23,*,end=10) ikp, jsp, ii, jj, tmp1, tmp2
+#else
+           read(23,*,end=10) ikp, jsp, ii, jj, tmp1
+           tmp2 = zero
+#endif
+           if (ik == ikp .and. isp == jsp) then
+              if ( ii == jj) then
+                 nn = inv_diag(ii)
+                 if ( nn > 0 ) sig%vxcdiag(nn) = cmplx(tmp1,tmp2) / ryd
+              else
+                 nn = inv_offd(ii + kpt%wfn(isp,jk)%nstate * ( jj - 1 ) )
+                 if ( nn > 0 ) sig%vxcoffd(nn) = cmplx(tmp1,tmp2) / ryd
+              endif
+           endif
+        enddo
+10      continue
+        close(23)
+        ii = 0
+        do jj = 1, sig%ndiag_s
+           if (real(sig%vxcdiag(jj),dp) == v_large) ii = ii + 1
+        enddo
+        do jj = 1, sig%noffd_s
+           if (real(sig%vxcoffd(jj),dp) == v_large) ii = ii + 1
+        enddo
+        if (ii > 0) then
+           write(6,*) 'ERROR! ', ii, &
+                ' undefined Vxc matrix elements for spin channel ', isp
+           call die('STOP.')
+        endif
+        deallocate(inv_diag, inv_offd)
+     endif
+#ifdef MPI
+     if (sig%ndiag_s /= 0) call MPI_BCAST(sig%vxcdiag,sig%ndiag_s, &
+          MPI_DOUBLE_COMPLEX,peinf%masterid,peinf%comm,info)
+     if (sig%noffd_s /= 0) call MPI_BCAST(sig%vxcoffd,sig%noffd_s, &
+          MPI_DOUBLE_COMPLEX,peinf%masterid,peinf%comm,info)
+#endif
+     if (peinf%master .and. sig%ndiag_s /= 0) then
+        write(6,'(/,a)') ' V_xc MATRIX ELEMENTS (eV) read from disk: '
+        if (nspin > 1 ) write(6,'(a,i2)') '    spin = ', isp
+        write(6,'(2a)') '   n     E_dft     E_0       V_xc'
+        do ii = 1,sig%ndiag_s
+           kk = sig%map(sig%diag(ii))
+#ifdef CPLX
+           write(6,'(i4,6f10.3)') kk,kpt%wfn(isp,jk)%e0(kk)*ryd, &
+                kpt%wfn(isp,jk)%e1(kk)*ryd, real(sig%vxcdiag(kk),dp)*ryd, &
+                aimag(sig%vxcdiag(kk))*ryd
+#else
+           write(6,'(i4,5f10.3)') kk,kpt%wfn(isp,jk)%e0(kk)*ryd, &
+                kpt%wfn(isp,jk)%e1(kk)*ryd, real(sig%vxcdiag(kk),dp)*ryd
+#endif
+        enddo
+        write(6,'(a,/)') repeat('-',65)
+     endif
+  else
+     !-------------------------------------------------------------------
+     ! Calculate V_xc matrix elements.
+     !
+     if (sig%ndiag_s /= 0) then
+        sig%vxcdiag = zzero
+        call Zvxcmtxel(gvec,kpt,xc_dft,1,isp,jk,nspin,sig%nmap, &
+             sig%map,sig%ndiag_s,0,sig%diag,sig%vxcdiag)
+        call Zvxcmtxel(gvec,kpt,xc_dft,11,isp,jk,nspin,sig%nmap, &
+             sig%map,sig%ndiag_s,0,sig%diag,sig%vxcdiag)
+        allocate(vx(sig%ndiag_s))
+        allocate(vc(sig%ndiag_s))
+        vx = zzero
+        vc = zzero
+        call Zvxcmtxel(gvec,kpt,xc_dft,1,isp,jk,nspin,sig%nmap, &
+             sig%map,sig%ndiag_s,0,sig%diag,vx)
+        call Zvxcmtxel(gvec,kpt,xc_dft,11,isp,jk,nspin,sig%nmap, &
+             sig%map,sig%ndiag_s,0,sig%diag,vc)
+        if (peinf%master) then
+           write(6,'(/,a)') ' V_xc MATRIX ELEMENTS (eV): '
+           if (nspin > 1 ) write(6,'(a,i2)') '    spin = ', isp
+           write(6,'(a)') &
+                '   n     E_dft     E_0       V_xc      V_x       V_c'
+           do ii = 1,sig%ndiag_s
+              kk = sig%map(sig%diag(ii))
+              write(6,'(i4,5f10.3)') kk,kpt%wfn(isp,jk)%e0(kk)*ryd, &
+                   kpt%wfn(isp,jk)%e1(kk)*ryd,real(sig%vxcdiag(ii),dp)*ryd, &
+                   real(vx(ii),dp)*ryd,real(vc(ii),dp)*ryd
+           enddo
+           write(6,'(a,/)') repeat('-',65)
+        endif
+        deallocate(vx, vc)
+     endif
+
+     if (sig%noffd_s /= 0) then
+        sig%vxcoffd = zzero
+        allocate(map_c(sig%noffd_s,2))
+        do ii = 1, sig%noffd_s
+           map_c(ii,1) = sig%off1(ii)
+           map_c(ii,2) = sig%off2(ii)
+        enddo
+        call Zvxcmtxel(gvec,kpt,xc_dft,1,isp,jk,nspin,sig%nmap, &
+             sig%map,0,sig%noffd_s,map_c,sig%vxcoffd)
+        call Zvxcmtxel(gvec,kpt,xc_dft,11,isp,jk,nspin,sig%nmap, &
+             sig%map,0,sig%noffd_s,map_c,sig%vxcoffd)
+        deallocate(map_c)
+     endif
+  endif
+
+end subroutine Zvxc
+!===================================================================

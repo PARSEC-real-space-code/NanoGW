@@ -1,0 +1,289 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Calculate the correlation part of self energy around the energy of
+! the DFT state. The correlation is written in Eq. 24 of Tiago
+! & Chelikowsky, PRB (2006). For the screened exchange, see for
+! example Hybertsen & Louie, Phys. Rev. B 34, 5390 (1986), Eq. 34a.
+!
+! Diagonal matrix elements are calculated at a range of energies
+! defined by delta_en (width of energy window) and nen (number of
+! data values).
+!
+! Flag sig_en defines at which energy the off-diagonal matrix elements
+! are calculated:
+!
+! sig_en = SIG_LEFT:       sig%scoffd(1,:) = <i| Sigma_c (E_i) |j>
+!                          sig%scoffd(2,:) = <j| Sigma_c (E_i) |i>
+! sig_en = SIG_RIGHT:      sig%scoffd(1,:) = <i| Sigma_c (E_j) |j>
+!                          sig%scoffd(2,:) = <j| Sigma_c (E_j) |i>
+! sig_en = SIG_AV:         sig%scoffd(1,:) = <i| Sigma_c ({E_i + E_j}/2) |j>
+!                          sig%scoffd(2,:) = <j| Sigma_c ({E_i + E_j}/2) |i>
+!
+! INPUT:
+!    sig%sexdiag : screened exchange part of self-energy
+!    sig%scsdiag : static correlation part of self-energy, diagonal
+!    sig%scdiag : correlation part of self-energy, diagonal
+!    sig%scsoffd : static correlation part of self-energy, off-diagonal
+!    sig%scoffd : correlation part of self-energy, off-diagonal
+!
+! OUTPUT (data modified incrementally):
+!    sig%sexdiag : screened exchange part of self-energy
+!    sig%scsdiag : static correlation part of self-energy, diagonal
+!    sig%scdiag : correlation part of self-energy, diagonal
+!    sig%scsoffd : static correlation part of self-energy, off-diagonal
+!    sig%scoffd : correlation part of self-energy, off-diagonal
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zcorrelation(kpt,pol,k_c,sig,pot_c,add_static, &
+     isp,nspin,ik,nen,sig_en,deltae_in,xsum)
+
+  use typedefs
+  use mpi_module
+  implicit none
+
+  ! arguments
+  ! k-points and electron wavefunctions
+  type (kptinfo), intent(in) :: kpt
+  ! polarizability (TDLDA) eigenvectors and eigenvalues
+  type (polinfo), intent(in) :: pol
+  ! kernel data for correlation
+  type (kernelinfo), intent(in) :: k_c
+  ! self-energy
+  type (siginfo), intent(inout) :: sig
+  ! potential fluctuations, Eq. 25 of Tiago & Chelikowsky, PRB (2006)
+  SCALAR, intent(in) :: pot_c(pol%nn,k_c%ncol)
+  ! true if static terms are calculated, false otherwise
+  logical, intent(in) :: add_static
+  integer, intent(in) :: &
+       isp, &         ! current spin channel
+       nspin, &       ! number of spin channels
+       ik, &          ! current k-point in the list kpt%fk
+       nen, &         ! number of energy values where self-energy is calculated
+       sig_en         ! energy flag, see above
+  real(dp), intent(in) :: &
+       deltae_in, &   ! width of energy range where self-energy is calculated
+       xsum
+
+  ! local variables
+  integer :: isig, m1, m2, jk, ij, ij1, ij2, jj, in, nij_start, &
+       nij_end, ien, nn, ioff
+  real(dp) :: occfac, deltae, en0, eni, ecuts, ecuts2
+  real(dp), dimension(nen) :: eden
+  SCALAR, allocatable :: sum0(:,:,:)
+
+  if (r_grp%master) write(6,'(a,f20.10,a,2i4)') &
+       ' CORRELATION , xsum = ', xsum, ' spin ', isp, ik
+  if (isp == 1) then
+     nij_start = 1
+     nij_end = k_c%ncol_up
+  else
+     nij_start = k_c%ncol_up + 1
+     nij_end = k_c%ncol
+  endif
+
+  deltae = deltae_in*xsum / real(nen - 1,dp)
+  eni = deltae_in*half*xsum
+  nn = pol%nn
+  if ( ( r_grp%inode + 1 )*nn > pol%ntr ) nn = pol%ntr - r_grp%inode*pol%nn
+  ioff = r_grp%inode*pol%nn + 1
+
+  !-------------------------------------------------------------------
+  ! Correlation, diagonal matrix elements.
+  !
+  allocate(sum0(2,0:nen,sig%ndiag),stat=jj)
+  call alccheck('sum0','correlation',2*(nen+1)*sig%ndiag,jj)
+  sum0 = Zzero
+
+  do isig = 1, sig%ndiag
+     if ( nn <= 0 ) exit
+     m1 = sig%map(sig%diag(isig))
+     ecuts = sig%sigmai(sig%diag(isig))
+     ecuts2 = ecuts * ecuts
+     !
+     ! Notice that, in static limit of correlation (scsdiag, sum0(0) ), 
+     ! occupied and empty states are treated equally.
+     !
+     do ij = nij_start, nij_end
+        if ( k_c%col(1,ij) /= m1 .or. k_c%col(3,ij) /= ik ) cycle
+        in = k_c%col(2,ij)
+        occfac = kpt%wfn(isp,k_c%col(4,ij))%occ1(in)
+        if ( occfac < tol_occ ) cycle
+        en0 = (kpt%wfn(isp,ik)%e1(m1) - kpt%wfn(isp,k_c%col(4,ij))%e1(in))*xsum - eni
+        do ien = 1, nen
+           eden(ien) = en0
+           en0 = en0 + deltae
+        enddo
+        call Zcontract_en(nn,nen,eden,one,ecuts,ecuts2,occfac, &
+             pol%eig(ioff),pot_c(1,ij),pot_c(1,ij),sum0(1,1,isig))
+     enddo
+     do ij = nij_start, nij_end
+        if ( k_c%col(1,ij) /= m1 .or. k_c%col(3,ij) /= ik ) cycle
+        in = k_c%col(2,ij)
+        occfac = one - kpt%wfn(isp,k_c%col(4,ij))%occ1(in)
+        if ( occfac < tol_occ ) cycle
+        en0 = (kpt%wfn(isp,ik)%e1(m1) - kpt%wfn(isp,k_c%col(4,ij))%e1(in))*xsum - eni
+        do ien = 1, nen
+           eden(ien) = en0
+           en0 = en0 + deltae
+        enddo
+        call Zcontract_en(nn,nen,eden,mone,ecuts,ecuts2,occfac, &
+             pol%eig(ioff),pot_c(1,ij),pot_c(1,ij),sum0(1,1,isig))
+     enddo
+
+     do ij = nij_start, nij_end
+        if ( k_c%col(1,ij) /= m1 .or. k_c%col(3,ij) /= ik ) cycle
+        in = k_c%col(2,ij)
+        call Zcontract_en(nn,1,zero,mone,zero,zero,one, &
+             pol%eig(ioff),pot_c(1,ij),pot_c(1,ij),sum0(1,0,isig))
+     enddo
+  enddo        ! isig = 1, sig%ndiag
+  call Zpsum(2*(nen+1)*sig%ndiag,r_grp%npes,r_grp%comm,sum0)
+
+  sum0 = sum0 * two/real(nspin,dp) / real(kpt%nk*kpt%nk,dp)
+
+  do isig = 1, sig%ndiag
+     if (add_static) sig%scsdiag(isig) = sig%scsdiag(isig) - sum0(1,0,isig)
+     do jj = 1, nen
+        sig%scdiag(jj,isig) = sig%scdiag(jj,isig) + sum0(1,jj,isig)
+        sig%scdiag(jj,isig+sig%ndiag) = sig%scdiag(jj,isig+sig%ndiag) + sum0(2,jj,isig)
+     enddo
+  enddo
+
+  !-------------------------------------------------------------------
+  ! Dynamic screened exchange matrix elements.
+  !
+  sum0 = Zzero
+  do isig = 1, sig%ndiag
+     if ( nn <= 0 ) exit
+     m1 = sig%map(sig%diag(isig))
+     ecuts = sig%sigmai(sig%diag(isig))
+     ecuts2 = ecuts * ecuts
+
+     do ij = nij_start, nij_end
+        if ( k_c%col(1,ij) /= m1 .or. k_c%col(3,ij) /= ik ) cycle
+        in = k_c%col(2,ij)
+        occfac = kpt%wfn(isp,k_c%col(4,ij))%occ1(in)
+        if ( occfac < tol_occ ) cycle
+        en0 = (kpt%wfn(isp,ik)%e1(m1) - kpt%wfn(isp,k_c%col(4,ij))%e1(in))*xsum - eni
+        do ien = 1, nen
+           eden(ien) = en0
+           en0 = en0 + deltae
+        enddo
+        call Zcontract_en(nn,nen,eden,one,ecuts,ecuts2,occfac, &
+             pol%eig(ioff),pot_c(1,ij),pot_c(1,ij),sum0(1,1,isig))
+        occfac = -occfac
+        call Zcontract_en(nn,nen,eden,mone,ecuts,ecuts2,occfac, &
+             pol%eig(ioff),pot_c(1,ij),pot_c(1,ij),sum0(1,1,isig))
+     enddo
+  enddo        ! isig = 1, sig%ndiag
+  call Zpsum(2*(nen+1)*sig%ndiag,r_grp%npes,r_grp%comm,sum0)
+
+  sum0 = sum0 * two/real(nspin,dp) / real(kpt%nk*kpt%nk,dp)
+
+  do isig = 1, sig%ndiag
+     do jj = 1, nen
+        sig%sexdiag(jj,isig) = sig%sexdiag(jj,isig) + sum0(1,jj,isig)
+        sig%sexdiag(jj,isig+sig%ndiag) = sig%sexdiag(jj,isig+sig%ndiag) + sum0(2,jj,isig)
+     enddo
+  enddo
+  deallocate(sum0)
+
+  !-------------------------------------------------------------------
+  ! Correlation, off-diagonal matrix elements.
+  !
+  allocate(sum0(2,0:2,sig%noffd),stat=jj)
+  call alccheck('sum0','correlation',2*3*sig%noffd,jj)
+  sum0 = Zzero
+
+  do isig = 1, sig%noffd
+     if ( nn <= 0 ) exit
+     m1 = sig%map(sig%off1(isig))
+
+     m2 = sig%map(sig%off2(isig))
+
+     ecuts = sig%sigmai(sig%off1(isig)) + sig%sigmai(sig%off2(isig))
+     ecuts = ecuts * half
+     ecuts2 = ecuts * ecuts
+
+     do ij1 = nij_start, nij_end
+        if ( k_c%col(1,ij1) /= m1 .or. k_c%col(3,ij1) /= ik ) cycle
+        in = k_c%col(2,ij1)
+        jk = k_c%col(4,ij1)
+        occfac = kpt%wfn(isp,jk)%occ1(in)
+        do ij2 = nij_start, nij_end
+           if ( k_c%col(1,ij2) /= m2 .or. k_c%col(3,ij2) /= ik ) cycle
+           if ( k_c%col(2,ij2) /= in .or. k_c%col(4,ij2) /= jk ) cycle
+           if ( occfac < tol_occ ) cycle
+           select case(sig_en)
+           case (SIG_LEFT)
+              eden(1) = (kpt%wfn(isp,ik)%e1(m1) - kpt%wfn(isp,jk)%e1(in))*xsum
+              eden(2) = (kpt%wfn(isp,ik)%e1(m2) - kpt%wfn(isp,jk)%e1(in))*xsum
+           case (SIG_RIGHT)
+              eden(1) = (kpt%wfn(isp,ik)%e1(m2) - kpt%wfn(isp,jk)%e1(in))*xsum
+              eden(2) = (kpt%wfn(isp,ik)%e1(m1) - kpt%wfn(isp,jk)%e1(in))*xsum
+           case (SIG_AV)
+              eden = (kpt%wfn(isp,ik)%e1(m1) + kpt%wfn(isp,ik)%e1(m2) - &
+                   two*kpt%wfn(isp,jk)%e1(in))*half*xsum
+           end select
+           call Zcontract_en(nn,2,eden,one,ecuts,ecuts2,occfac, &
+                pol%eig(ioff),pot_c(1,ij1),pot_c(1,ij2),sum0(1,1,isig))
+        enddo
+     enddo
+
+     do ij1 = nij_start, nij_end
+        if ( k_c%col(1,ij1) /= m1 .or. k_c%col(3,ij1) /= ik ) cycle
+        in = k_c%col(2,ij1)
+        jk = k_c%col(4,ij1)
+        occfac = one - kpt%wfn(isp,jk)%occ1(in)
+        do ij2 = nij_start, nij_end
+           if ( k_c%col(1,ij2) /= m2 .or. k_c%col(3,ij2) /= ik ) cycle
+           if ( k_c%col(2,ij2) /= in .or. k_c%col(4,ij2) /= jk ) cycle
+           if ( occfac < tol_occ ) cycle
+           select case(sig_en)
+           case (SIG_LEFT)
+              eden(1) = (kpt%wfn(isp,ik)%e1(m1) - kpt%wfn(isp,jk)%e1(in))*xsum
+              eden(2) = (kpt%wfn(isp,ik)%e1(m2) - kpt%wfn(isp,jk)%e1(in))*xsum
+           case (SIG_RIGHT)
+              eden(1) = (kpt%wfn(isp,ik)%e1(m2) - kpt%wfn(isp,jk)%e1(in))*xsum
+              eden(2) = (kpt%wfn(isp,ik)%e1(m1) - kpt%wfn(isp,jk)%e1(in))*xsum
+           case (SIG_AV)
+              eden = (kpt%wfn(isp,ik)%e1(m1) + kpt%wfn(isp,ik)%e1(m2) - &
+                   two*kpt%wfn(isp,jk)%e1(in))*half*xsum
+           end select
+           call Zcontract_en(nn,2,eden,mone,ecuts,ecuts2,occfac, &
+                pol%eig(ioff),pot_c(1,ij1),pot_c(1,ij2),sum0(1,1,isig))
+        enddo
+     enddo
+
+     do ij1 = nij_start, nij_end
+        if ( k_c%col(1,ij1) /= m1 .or. k_c%col(3,ij1) /= ik ) cycle
+        in = k_c%col(2,ij1)
+        jk = k_c%col(4,ij1)
+        do ij2 = nij_start, nij_end
+           if ( k_c%col(1,ij2) /= m2 .or. k_c%col(3,ij2) /= ik ) cycle
+           if ( k_c%col(2,ij2) /= in .or. k_c%col(4,ij2) /= jk ) cycle
+           call Zcontract_en(nn,1,zero,mone,zero,zero,one, &
+                pol%eig(ioff),pot_c(1,ij1),pot_c(1,ij2),sum0(1,0,isig))
+        enddo
+     enddo
+  enddo        ! isig = 1, sig%noffd
+
+  call Zpsum(2*3*sig%noffd,r_grp%npes,r_grp%comm,sum0)
+
+  sum0 = sum0 * two/real(nspin,dp) / real(kpt%nk*kpt%nk,dp)
+
+  do isig = 1, sig%noffd
+     if (add_static) sig%scsoffd(isig) = sig%scsoffd(isig) - sum0(1,0,isig)
+     sig%scoffd(1,isig) = sig%scoffd(1,isig) + sum0(1,1,isig)
+     sig%scoffd(2,isig) = sig%scoffd(2,isig) + sum0(1,2,isig)
+     sig%scoffd(1,isig+sig%noffd) = sig%scoffd(1,isig+sig%noffd) + sum0(2,1,isig)
+     sig%scoffd(2,isig+sig%noffd) = sig%scoffd(2,isig+sig%noffd) + sum0(2,2,isig)
+  enddo
+  deallocate(sum0)
+
+end subroutine Zcorrelation
+!===================================================================

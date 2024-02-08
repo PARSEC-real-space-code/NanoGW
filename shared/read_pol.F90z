@@ -1,0 +1,167 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! If chkpt < 0 at input, delete file pol_diag.dat if it exists and exit.
+! If chkpt >= 0 at input, open file pol_diag.dat and check sanity of
+! file. If it passes sanity tests, then update value of chkpt and
+! store TDLDA eigenvalues, oscillator strength.
+!
+! Checkpoint flag keeps track of which representations and q-vectors
+! already have eigenvalues/eigenvectors computed. Eigenpairs are
+! computed for q-vectors and then representations so that if
+!       chkpt = (iq - 1)*nrep + irp - 1
+! then all eigenpairs for q-vectors below iq were computed, eigenpairs
+! for q-vector iq and all representations irp and below were computed.
+!
+! OUTPUT:
+!   chkpt : checkpoint flag
+!   pol(:)%eig : eigenvalues, read from file
+!   pol(:)%ostr : oscillator strengths, calculated internally
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zread_pol(pol,nrep,nq,nstate,chkpt)
+
+  use typedefs
+  use mpi_module
+  implicit none
+#ifdef MPI
+  include 'mpif.h'
+#endif
+
+  ! arguments
+  integer, intent(in) :: &
+       nrep, &      ! number of representations
+       nq, &        ! number of q-vectors
+       nstate       ! total number of electronic orbitals
+  ! polarizabiity
+  type (polinfo), dimension(nrep,nq), intent(inout) :: pol
+  ! chekcpoint flag (see above)
+  integer, intent(inout) :: chkpt
+
+  ! local variables
+  integer, parameter :: iunit = 50  ! number of input/output unit
+  ! true if eigenpairs of a particular (irp,iq) were found and false otherwise
+  logical :: lfound(nrep,nq)
+  ! counters
+  integer :: ii, irp, i1, jj, iq, icol
+  ! date label
+  character (len=26) :: datelabel
+  ! temporary arrays and variables
+  logical ::  lcheck
+  SCALAR :: xtmp
+  integer, allocatable :: map_in(:,:)
+  SCALAR, allocatable :: v_pol(:)
+#ifdef MPI
+  integer :: info
+#endif
+  ! external functions
+  SCALAR, external :: Zdot_u
+
+  !-------------------------------------------------------------------
+  ! If chkpt < 0, delete old file and exit.
+  !
+  if (chkpt < 0) then
+     if (peinf%master) call delete_file(iunit,'pol_diag.dat')
+     return
+  endif
+
+  !-------------------------------------------------------------------
+  ! Search for pol_diag.dat file and test sanity of its contents.
+  !
+  lfound = .false.
+  if (peinf%master) then
+     open(iunit,file='pol_diag.dat',form='unformatted',status='old', &
+          iostat=ii)
+     if (ii == 0) then
+        irp = 1
+        write(6,*) 'Reading polarizability eigenvalues/eigenvectors ', &
+             ' from pol_diag.dat '
+        write(6,*)
+        read(iunit,end=30) datelabel
+        write(6,*) ' File created on ',datelabel,' UTC'
+
+        read(iunit,end=30) i1, jj, iq
+        call map_check('pol_diag.dat','number of DFT orbitals', &
+             1,nstate,i1,lcheck)
+        if (.not. lcheck) goto 30
+
+        call map_check('pol_diag.dat','number of representations', &
+             1,nrep,jj,lcheck)
+        if (.not. lcheck) goto 30
+
+        call map_check('pol_diag.dat','number of q-vectors', &
+             1,nq,iq,lcheck)
+        if (.not. lcheck) goto 30
+
+        do
+           read(iunit,end=30) irp, iq, jj
+           call map_check('pol_diag.dat','number of transitions', &
+                1,pol(irp,iq)%ntr,jj,lcheck)
+           if (.not. lcheck) goto 30
+
+           if (jj == 0) then
+              read(iunit,end=30)
+              read(iunit,end=30)
+              lfound(irp,iq) = .true.
+              cycle
+           endif
+           allocate(map_in(2,pol(irp,iq)%ntr))
+           read(iunit,end=30) (map_in(:,jj),jj = 1, pol(irp,iq)%ntr)
+           call map_check('pol_diag.dat','index of transitions', &
+                2*pol(irp,iq)%ntr,pol(irp,iq)%tr,map_in,lcheck)
+           deallocate(map_in)
+           if (.not. lcheck) goto 30
+
+           allocate(v_pol(pol(irp,iq)%ntr))
+           read(iunit,end=30) pol(irp,iq)%eig
+           pol(irp,iq)%ostr = zero
+           do icol = 1, pol(irp,iq)%ntr
+              read(iunit,end=30) v_pol
+              do jj = 1, 3
+                 xtmp = Zdot_u(pol(irp,iq)%ntr,v_pol,1,pol(irp,iq)%Zdipole(1,jj),1)
+                 pol(irp,iq)%ostr(icol,jj) = two * pol(irp,iq)%eig(icol) * abs(xtmp)**2
+              enddo
+           enddo
+           deallocate(v_pol)
+           write(6,*) ' Representation ',irp,' out of ',nrep
+           write(6,*) ' Lowest energy eigenvalues in polarizability (eV): '
+           write(6,'(f16.6)') (pol(irp,iq)%eig(jj)*ryd,jj=pol(irp,iq)%ntr, &
+                pol(irp,iq)%ntr-min(3,pol(irp,iq)%ntr)+1,-1)
+           lfound(irp,iq) = .true.
+        enddo
+30      continue
+        close(iunit)
+     endif
+  endif
+  chkpt = 0
+  loop_1: do iq = 1, nq
+     do irp = 1, nrep
+        if (pol(irp,iq)%ntr == 0) lfound(irp,iq) = .true.
+        if (.not. lfound(irp,iq)) exit loop_1
+        chkpt = chkpt + 1
+     enddo
+  enddo loop_1
+#ifdef MPI
+  call MPI_BCAST(chkpt,1,MPI_INTEGER,peinf%masterid,peinf%comm,info)
+
+  ii = 0
+  loop_2: do iq = 1, nq
+     do irp = 1, nrep
+        ii = ii + 1
+        if (ii > chkpt) exit loop_2
+        if (pol(irp,iq)%ntr == 0) cycle
+        call MPI_BCAST(pol(irp,iq)%eig,pol(irp,iq)%ntr, &
+             MPI_DOUBLE_PRECISION,peinf%masterid,peinf%comm,info)
+        call MPI_BCAST(pol(irp,iq)%ostr,pol(irp,iq)%ntr*3, &
+             MPI_DOUBLE_PRECISION,peinf%masterid,peinf%comm,info)
+     enddo
+  enddo loop_2
+
+  call MPI_BARRIER(peinf%comm,info)
+#endif
+
+end subroutine Zread_pol
+!===================================================================

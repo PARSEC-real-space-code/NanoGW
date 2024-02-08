@@ -1,0 +1,43 @@
+
+begin pw_jobs
+pw_job scf
+end pw_jobs
+
+begin latticevecs
+coord  0.000000  0.500000  0.500000
+coord  0.500000  0.000000  0.500000
+coord  0.500000  0.500000  0.000000
+volume 270.011394
+end latticevecs
+
+begin coordinates
+newtype Si
+coord -0.125000 -0.125000 -0.125000
+coord  0.125000  0.125000  0.125000
+end coordinates
+
+pp_format 3
+begin pseudopotential
+pp_data 3 2.0 2.0 0.0 0.0
+end pseudopotential
+
+number_of_spins 1
+diagonalization_method Grassmann
+
+energy_cutoff 10.0
+accuracy_diag 1.0e-10
+
+max_iter_diag 5
+
+number_kpoints 0
+k_grid 2 2 2
+k_grid_shift 0.49 0.31 0.93
+number_bands 12
+eigspacefrac 0.95
+occupy_levels normal
+gaussian_smearing 0.01
+
+mix_method pulay_kerker
+potential_convergence_criterion 1.0e-6
+
+output_flags gwc

@@ -1,0 +1,1175 @@
+
+=================================================================
+
+ SIGMA   2009 Jan 26 11:17:12  -420 UTC
+
+ Running serial version (no MPI)
+
+Version date : Fri Jan  2 17:07:49 EST 2009
+architecture = sp5_nersc
+pre-processing options = -DUSEESSL 
+compilation options = -O3 -qextname=flush -qarch=auto -qtune=auto -qhot -qalias=noaryovrlp -Q -qautodbl=dbl4 -q64
+
+=================================================================
+
+ ESDF WARNING: Unable to open main input file "rgwbs.in" - using defaults
+ ESDF WARNING: Unable to open main input file "rgwbs.in" - using defaults
+
+ Electronic structure data :
+ ---------------------------
+
+ Reading electron wavefunctions from file parsec.dat/wfn.dat
+ WARNING: parsec.dat file not found
+          Looking for file wfn.dat
+ ELAPSED TIME =        0.00 s. parsec_wfn:  reading wfn.dat
+
+ Wavefunction file created on 26-JAN-2009 10:12:41 -0700 UTC
+ ESDF WARNING: Unable to open main input file "rgwbs.in" - using defaults
+
+ Spin unpolarized calculation.
+
+  Number of occupied levels, spin  1  :  7.00000000000000000
+ DFT Eigenvalues (eV), spin  1  :
+ -23.75 -19.04 -12.23 -10.25 -10.25  -7.34  -7.34  -4.19  -0.39   0.63
+   0.67   0.67   1.11   1.38   1.38   1.51   1.51   1.91   2.38   2.38
+   2.55   2.57   2.57   2.73   2.73   2.98   2.98   2.98   2.99   3.09
+   3.33   3.75   3.75   3.76   3.76   3.79   3.80   3.80   3.82   3.82
+   3.89   3.89   4.10   4.10   5.02   5.02   5.06   5.07   5.07   5.09
+   5.09   5.11   5.12   5.12   5.12   5.16   5.16   5.30   5.41   5.82
+ Irreducible representations, spin  1  :
+    1    8    1    7    6    2    3    8    1    8
+    6    7    1    1    4    3    2    1    6    7
+    8    8    5    7    6    7    6    1    4    8
+    1    7    6    2    3    1    1    4    2    3
+    1    4    2    3    8    5    8    7    6    7
+    6    8    8    5    5    7    6    1    8    7
+ 
+ Maximum value of electron density (a.u.^-3) =   0.28697826E+00
+ Total number of electrons =    14.0000
+
+ MPI data :
+ ----------
+
+  Group partition information: 
+  Distributing  1  processors among  1  groups.
+  Each group contains  1  processors.
+  I am processor rank  0  in group  0
+  I am master in my group, with master rank  0
+  My group has representations: 
+    1    2    3    4    5    6    7    8
+
+  Wavefunction partition information: 
+  Distributing  1  processors among  1  groups.
+  Each group contains  1  processors.
+  I am processor rank  0  in group  0
+  I am master in my group, with master rank    0
+
+ Atom data :
+ -----------
+
+ Atom coordinates input in Bohr radii.
+
+  Atomic coordinates (all atoms) are :
+           x [a.u.]          y [a.u.]          z [a.u.]           Type
+   1       0.000000000       0.000000000       1.844979000         Cl
+   2       0.000000000       0.000000000      -1.844979000         Cl
+
+ Total number of atoms =    2
+ Total number of atom types =    1
+
+ Pseudopotential messages, element Cl :
+ --------------------------------------
+
+ Pseudopotential format : new Martins
+ Pseudopotential file for this atom type is Cl_POTRE.DAT
+  Cl ca nrl nc
+  atom 5.69p31-May-05   Improved Troullier - Martins potential
+ 3s(  2.00)  rc= 2.383p(  5.00)  rc= 2.293d(   .00)  rc= 2.38
+
+ logarithmic parameters of pseudopot. radial grid
+ r(i) = a*[Exp(b(i-1)) - 1)]
+ a (a.u.) = 0.145809E-03 b = 0.100000E-01 c = 0.145809E-03 nr =     1363
+
+ # of pseudopot= 3, Local component is l = 1
+ Core radius (a.u.) =  2.40
+
+ Normalization check and Kleinman-Bylander Integral:
+                        s             p             d
+ Normalization        1.00001667    1.00001667    1.00767965
+ K-B Integral (Ry)    0.71561345   -8.47661405    0.00000000
+ WARNING: The K-B Integral is too small!!
+ the Kleinman-Bylander integral of L = 2 is   -0.324109E-10
+ Integrals are renormalized to one.
+
+ Grid data :
+ -----------
+
+ Gradients and Laplacians calculated with finite differences, order   6
+
+ Number of finite difference directions =  3
+ Finite difference directions:
+     1     0     0     weight =  1.000000
+     0     1     0     weight =  1.000000
+     0     0     1     weight =  1.000000
+
+  ELECTRONIC SYSTEM IS CONFINED !
+
+
+ Confining radius (a.u.) =        14.991894
+
+ Grid spacing (a.u.) =         0.350000        0.350000        0.350000
+
+ Real-space FFT grid =  176 176 176 178
+
+ Long-wavelength Coulomb energy (eV) =         0.0000000000
+
+ Coulomb truncation length (a.u.) =        29.9837872858
+
+ Full grid has     329552 points.
+ Irreducible wedge has      41194 points.
+
+ ELAPSED TIME =        0.53 s. parsec_wfn:  reading wave functions
+
+ Read wavefunctions for         60 levels, spin    1
+
+-----------------------------------------------------------------
+
+ ESDF WARNING: Unable to open main input file "rgwbs.in" - using defaults
+
+-----------------------------------------------------------------
+
+ ELAPSED TIME =        0.81 s. Calling setup_s
+  Calculating  60  diagonal matrix elements
+  and  234  off-diagonal matrix elements.
+  Calculating  60  diagonal matrix elements
+  and  234  off-diagonal matrix elements beyond COHSEX.
+  Calculating exchange matrix elements, spin  1
+ Functional : Slater exchange
+  Calculating correlation matrix elements, spin  1
+ Functional : Perdew & Zunger
+  Calculating exchange matrix elements, spin  1
+ Functional : Slater exchange
+  Calculating correlation matrix elements, spin  1
+ Functional : Perdew & Zunger
+
+ V_xc MATRIX ELEMENTS (eV): 
+   n     E_dft     E_0       V_xc      V_x       V_c
+   1   -23.747   -23.747   -15.445   -13.757    -1.687
+   2   -19.036   -19.036   -15.412   -13.732    -1.680
+   3   -12.227   -12.227   -14.384   -12.756    -1.627
+   4   -10.250   -10.250   -13.540   -11.963    -1.577
+   5   -10.250   -10.250   -13.540   -11.963    -1.577
+   6    -7.337    -7.337   -13.973   -12.377    -1.597
+   7    -7.337    -7.337   -13.973   -12.377    -1.597
+   8    -4.191    -4.191   -13.379   -11.831    -1.548
+   9    -0.392    -0.392    -2.840    -2.278    -0.562
+  10     0.633     0.633    -1.779    -1.424    -0.356
+  11     0.671     0.671    -1.307    -1.009    -0.298
+  12     0.671     0.671    -1.307    -1.009    -0.298
+  13     1.105     1.105    -2.315    -1.877    -0.438
+  14     1.383     1.383    -1.686    -1.335    -0.351
+  15     1.384     1.384    -1.691    -1.339    -0.352
+  16     1.514     1.514    -0.929    -0.701    -0.228
+  17     1.514     1.514    -0.929    -0.701    -0.228
+  18     1.913     1.913    -1.392    -1.138    -0.254
+  19     2.378     2.378    -1.940    -1.592    -0.348
+  20     2.378     2.378    -1.940    -1.592    -0.348
+  21     2.555     2.555    -0.595    -0.433    -0.162
+  22     2.572     2.572    -0.553    -0.396    -0.157
+  23     2.575     2.575    -0.555    -0.398    -0.157
+  24     2.726     2.726    -0.257    -0.167    -0.090
+  25     2.726     2.726    -0.257    -0.167    -0.090
+  26     2.977     2.977    -1.731    -1.400    -0.331
+  27     2.977     2.977    -1.731    -1.400    -0.331
+  28     2.982     2.982    -3.459    -2.898    -0.561
+  29     2.986     2.986    -3.463    -2.901    -0.562
+  30     3.093     3.093    -2.048    -1.678    -0.370
+  31     3.328     3.328    -2.906    -2.440    -0.466
+  32     3.750     3.750    -6.023    -5.186    -0.837
+  33     3.750     3.750    -6.023    -5.186    -0.837
+  34     3.762     3.762    -0.342    -0.239    -0.104
+  35     3.762     3.762    -0.342    -0.239    -0.104
+  36     3.786     3.786    -0.299    -0.204    -0.095
+  37     3.796     3.796    -0.251    -0.163    -0.088
+  38     3.801     3.801    -0.252    -0.164    -0.088
+  39     3.824     3.824    -0.218    -0.137    -0.080
+  40     3.824     3.824    -0.218    -0.137    -0.080
+  41     3.887     3.887    -0.148    -0.090    -0.057
+  42     3.890     3.890    -0.148    -0.091    -0.057
+  43     4.101     4.101    -1.888    -1.524    -0.364
+  44     4.101     4.101    -1.888    -1.524    -0.364
+  45     5.015     5.015    -1.866    -1.513    -0.353
+  46     5.021     5.021    -1.894    -1.536    -0.358
+  47     5.064     5.064    -0.202    -0.133    -0.069
+  48     5.072     5.072    -0.177    -0.112    -0.065
+  49     5.072     5.072    -0.177    -0.112    -0.065
+  50     5.091     5.091    -0.164    -0.101    -0.063
+  51     5.091     5.091    -0.164    -0.101    -0.063
+  52     5.111     5.111    -1.181    -0.945    -0.236
+  53     5.115     5.115    -0.145    -0.088    -0.057
+  54     5.118     5.118    -1.163    -0.930    -0.233
+  55     5.119     5.119    -0.145    -0.088    -0.057
+  56     5.157     5.157    -0.103    -0.061    -0.042
+  57     5.157     5.157    -0.103    -0.061    -0.042
+  58     5.302     5.302    -2.181    -1.821    -0.360
+  59     5.407     5.407    -1.969    -1.581    -0.387
+  60     5.817     5.817    -0.862    -0.620    -0.242
+-----------------------------------------------------------------
+
+  Calculating exchange matrix elements, spin  1
+ Functional : Slater exchange
+  Calculating correlation matrix elements, spin  1
+ Functional : Perdew & Zunger
+ ELAPSED TIME =        9.42 s. FFT finalized
+ 
+                  Eigenvalue Energy =       -13.2568425636 [Ry]
+                     Kinetic Energy =        21.3571581854 [Ry]
+       Local Pseudopotential Energy =      -176.6354857313 [Ry]
+   Non-local Pseudopotential Energy =         2.7756659284 [Ry]
+                     Ion-ion Energy =        26.5585678753 [Ry]
+                       Total Energy =       -56.3211842152 [Ry]
+ Total energy excludes Exc - Int_{Vxc*rho}/2 term.
+ WARNING! Pseudopotential energies and total energy are
+ 
+
+-----------------------------------------------------------------
+
+ Self-energy input data: 
+ -----------------------
+
+ Number of transitions per representation in TDLDA polarizabillity:
+      55      45      44      37      37      48      50      55
+ total =        371
+
+ No energy cutoff in TDLDA polarizability
+ Not using the Tamm-Dancoff approximation in TDLDA polarizability.
+
+ Sum rule not renormalized
+
+ Order of highest LDA state included in Green function =    60
+ Order of highest LDA state included in COHSEX approximation =    60
+
+ Energy resolution in energy poles, self-energy (eV) =  1.361    
+
+ Energy range used to calculate self-energy  =    20.0000 eV 
+
+ Number of data points used to calculate self-energy =    21
+
+ Calculating < n_1 | Sigma | n_2 > at the energy of orbital n_1
+
+ Calculating W_pol in static limit with nr =  5333
+ Fraction of electron density within nr =  99.9900033961359043  %
+ Disk space used =      30.19 MB
+
+ Memory needed to store wavefunctions :      18.86 MB/proc.
+ Memory needed to calculate kernel matrix elements :       1.57 MB/proc.
+ Memory needed for diagonalization :       0.07 MB/proc.
+ Memory needed in self-energy calculation :      0.71 MB/proc.
+ Minimum memory needed :       0.71 MB/proc.
+
+-----------------------------------------------------------------
+
+
+*****************************************************************
+
+  Start self-consistent iteration  0  out of  0
+ 
+ ELAPSED TIME =        9.66 s.  Calling readmatrix kernel_p
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x + K_f (TDLDA spin singlet)
+ Using  62  data blocks to store matrix elements.
+ ELAPSED TIME =       10.04 s. Starting calculation of kernel
+Kernel done!       1540 matrix elements calculated by PE  0 representation  1
+ Buffer sizes:  2
+ 1540 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =       34.29 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =       34.29 s.  Calling diag_pol
+
+#################################################################
+ Calculation of polarizability eigenvectors for representation  1
+ number of pair transitions =           55
+ pair transitions per PE =           55
+#################################################################
+
+ ELAPSED TIME =       34.29 s. diag_pol: Calling eigensolver
+ ELAPSED TIME =       34.30 s. diag_pol: eigensolver done
+ ELAPSED TIME =       34.30 s. diag_pol: energy factors included in eigenvectors
+  Lowest energy eigenvalues in polarizability (eV): 
+        8.811476
+        8.918953
+       10.895067
+ ELAPSED TIME =       34.30 s.  Calling readmatrix kernel_p
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x + K_f (TDLDA spin singlet)
+ Using  52  data blocks to store matrix elements.
+ ELAPSED TIME =       34.68 s. Starting calculation of kernel
+Kernel done!       1035 matrix elements calculated by PE  0 representation  2
+ Buffer sizes:  2
+ 1035 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =       54.45 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =       54.45 s.  Calling diag_pol
+
+#################################################################
+ Calculation of polarizability eigenvectors for representation  2
+ number of pair transitions =           45
+ pair transitions per PE =           45
+#################################################################
+
+ ELAPSED TIME =       54.45 s. diag_pol: Calling eigensolver
+ ELAPSED TIME =       54.45 s. diag_pol: eigensolver done
+ ELAPSED TIME =       54.45 s. diag_pol: energy factors included in eigenvectors
+  Lowest energy eigenvalues in polarizability (eV): 
+        6.564173
+        6.934278
+        8.431076
+ ELAPSED TIME =       54.46 s.  Calling readmatrix kernel_p
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x + K_f (TDLDA spin singlet)
+ Using  51  data blocks to store matrix elements.
+ ELAPSED TIME =       54.84 s. Starting calculation of kernel
+Kernel done!        990 matrix elements calculated by PE  0 representation  3
+ Buffer sizes:  2
+ 990 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =       74.17 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =       74.17 s.  Calling diag_pol
+
+#################################################################
+ Calculation of polarizability eigenvectors for representation  3
+ number of pair transitions =           44
+ pair transitions per PE =           44
+#################################################################
+
+ ELAPSED TIME =       74.17 s. diag_pol: Calling eigensolver
+ ELAPSED TIME =       74.17 s. diag_pol: eigensolver done
+ ELAPSED TIME =       74.17 s. diag_pol: energy factors included in eigenvectors
+  Lowest energy eigenvalues in polarizability (eV): 
+        6.564173
+        6.934278
+        8.431076
+ ELAPSED TIME =       74.18 s.  Calling readmatrix kernel_p
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x + K_f (TDLDA spin singlet)
+ Using  44  data blocks to store matrix elements.
+ ELAPSED TIME =       74.56 s. Starting calculation of kernel
+Kernel done!        703 matrix elements calculated by PE  0 representation  4
+ Buffer sizes:  2
+ 703 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =       90.82 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =       90.82 s.  Calling diag_pol
+
+#################################################################
+ Calculation of polarizability eigenvectors for representation  4
+ number of pair transitions =           37
+ pair transitions per PE =           37
+#################################################################
+
+ ELAPSED TIME =       90.82 s. diag_pol: Calling eigensolver
+ ELAPSED TIME =       90.82 s. diag_pol: eigensolver done
+ ELAPSED TIME =       90.82 s. diag_pol: energy factors included in eigenvectors
+  Lowest energy eigenvalues in polarizability (eV): 
+        8.811503
+        8.850971
+       10.895072
+ ELAPSED TIME =       90.82 s.  Calling readmatrix kernel_p
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x + K_f (TDLDA spin singlet)
+ Using  44  data blocks to store matrix elements.
+ ELAPSED TIME =       91.20 s. Starting calculation of kernel
+Kernel done!        703 matrix elements calculated by PE  0 representation  5
+ Buffer sizes:  2
+ 703 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      107.45 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      107.45 s.  Calling diag_pol
+
+#################################################################
+ Calculation of polarizability eigenvectors for representation  5
+ number of pair transitions =           37
+ pair transitions per PE =           37
+#################################################################
+
+ ELAPSED TIME =      107.45 s. diag_pol: Calling eigensolver
+ ELAPSED TIME =      107.45 s. diag_pol: eigensolver done
+ ELAPSED TIME =      107.45 s. diag_pol: energy factors included in eigenvectors
+  Lowest energy eigenvalues in polarizability (eV): 
+        7.968361
+        8.008152
+        9.697950
+ ELAPSED TIME =      107.45 s.  Calling readmatrix kernel_p
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x + K_f (TDLDA spin singlet)
+ Using  55  data blocks to store matrix elements.
+ ELAPSED TIME =      107.83 s. Starting calculation of kernel
+Kernel done!       1176 matrix elements calculated by PE  0 representation  6
+ Buffer sizes:  2
+ 1176 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      128.96 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      128.96 s.  Calling diag_pol
+
+#################################################################
+ Calculation of polarizability eigenvectors for representation  6
+ number of pair transitions =           48
+ pair transitions per PE =           48
+#################################################################
+
+ ELAPSED TIME =      128.96 s. diag_pol: Calling eigensolver
+ ELAPSED TIME =      128.96 s. diag_pol: eigensolver done
+ ELAPSED TIME =      128.96 s. diag_pol: energy factors included in eigenvectors
+  Lowest energy eigenvalues in polarizability (eV): 
+        3.643443
+        7.957800
+        9.866245
+ ELAPSED TIME =      128.96 s.  Calling readmatrix kernel_p
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x + K_f (TDLDA spin singlet)
+ Using  57  data blocks to store matrix elements.
+ ELAPSED TIME =      129.35 s. Starting calculation of kernel
+Kernel done!       1275 matrix elements calculated by PE  0 representation  7
+ Buffer sizes:  2
+ 1275 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      151.35 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      151.35 s.  Calling diag_pol
+
+#################################################################
+ Calculation of polarizability eigenvectors for representation  7
+ number of pair transitions =           50
+ pair transitions per PE =           50
+#################################################################
+
+ ELAPSED TIME =      151.35 s. diag_pol: Calling eigensolver
+ ELAPSED TIME =      151.35 s. diag_pol: eigensolver done
+ ELAPSED TIME =      151.35 s. diag_pol: energy factors included in eigenvectors
+  Lowest energy eigenvalues in polarizability (eV): 
+        3.643443
+        7.957800
+        9.866245
+ ELAPSED TIME =      151.37 s.  Calling readmatrix kernel_p
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x + K_f (TDLDA spin singlet)
+ Using  62  data blocks to store matrix elements.
+ ELAPSED TIME =      151.75 s. Starting calculation of kernel
+Kernel done!       1540 matrix elements calculated by PE  0 representation  8
+ Buffer sizes:  2
+ 1540 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      176.00 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      176.00 s.  Calling diag_pol
+
+#################################################################
+ Calculation of polarizability eigenvectors for representation  8
+ number of pair transitions =           55
+ pair transitions per PE =           55
+#################################################################
+
+ ELAPSED TIME =      176.00 s. diag_pol: Calling eigensolver
+ ELAPSED TIME =      176.00 s. diag_pol: eigensolver done
+ ELAPSED TIME =      176.00 s. diag_pol: energy factors included in eigenvectors
+  Lowest energy eigenvalues in polarizability (eV): 
+        7.968350
+        8.023196
+        9.479588
+
+-----------------------------------------------------------------
+
+ Checking oscillator strength sum rule
+ Ratio between numerical and exact values :
+                            Field polarization
+                           x  ----  y  ----  z  ---- average
+  RPA-LDA Sum Rule  =   0.4654   0.4654   0.6879      0.5396
+     ALDA Sum Rule  =   0.4654   0.4654   0.6879      0.5396
+
+-----------------------------------------------------------------
+
+ Static polarizability (a.u.) 
+                                 Field polarization 
+                                x  ----  y  ----  z  ---- average
+ RPA-LDA Polarizability =    32.32    32.32    84.81       49.816
+    ALDA Polarizability =    23.44    23.44    39.59       28.821
+
+  Average ALDA sum rule =  0.539570558181011295
+  Average static RPA-LDA polarizability =  49.8157973247104451
+-----------------------------------------------------------------
+
+  Lowest energy eigenvalues in polarizability, all representations:
+ Order      Energy (eV)  Representation
+    1        3.643443         7
+    2        3.643443         6
+    3        6.564173         2
+    4        6.564173         3
+    5        6.934278         3
+    6        6.934278         2
+    7        7.957800         6
+    8        7.957800         7
+    9        7.968350         8
+   10        7.968361         5
+ ELAPSED TIME =      176.40 s.  Memory allocation done. Start calculating vvc,fvc.
+ ELAPSED TIME =      181.19 s.  vvc/fvc calculation
+        11 out of         55 representation  1 spin  1
+ ELAPSED TIME =      185.99 s.  vvc/fvc calculation
+        22 out of         55 representation  1 spin  1
+ ELAPSED TIME =      190.78 s.  vvc/fvc calculation
+        33 out of         55 representation  1 spin  1
+ ELAPSED TIME =      195.58 s.  vvc/fvc calculation
+        44 out of         55 representation  1 spin  1
+ ELAPSED TIME =      200.37 s.  vvc/fvc calculation
+        55 out of         55 representation  1 spin  1
+ ELAPSED TIME =      200.37 s. FFT finalized
+ ELAPSED TIME =      200.37 s. Finished calculation of vvc/fvc.
+ ELAPSED TIME =      200.75 s.  Memory allocation done. Start calculating vvc,fvc.
+ ELAPSED TIME =      204.67 s.  vvc/fvc calculation
+         9 out of         45 representation  2 spin  1
+ ELAPSED TIME =      208.59 s.  vvc/fvc calculation
+        18 out of         45 representation  2 spin  1
+ ELAPSED TIME =      212.50 s.  vvc/fvc calculation
+        27 out of         45 representation  2 spin  1
+ ELAPSED TIME =      216.43 s.  vvc/fvc calculation
+        36 out of         45 representation  2 spin  1
+ ELAPSED TIME =      220.35 s.  vvc/fvc calculation
+        45 out of         45 representation  2 spin  1
+ ELAPSED TIME =      220.35 s. FFT finalized
+ ELAPSED TIME =      220.35 s. Finished calculation of vvc/fvc.
+ ELAPSED TIME =      220.73 s.  Memory allocation done. Start calculating vvc,fvc.
+ ELAPSED TIME =      224.22 s.  vvc/fvc calculation
+         8 out of         44 representation  3 spin  1
+ ELAPSED TIME =      227.71 s.  vvc/fvc calculation
+        16 out of         44 representation  3 spin  1
+ ELAPSED TIME =      231.19 s.  vvc/fvc calculation
+        24 out of         44 representation  3 spin  1
+ ELAPSED TIME =      234.67 s.  vvc/fvc calculation
+        32 out of         44 representation  3 spin  1
+ ELAPSED TIME =      238.17 s.  vvc/fvc calculation
+        40 out of         44 representation  3 spin  1
+ ELAPSED TIME =      239.91 s. FFT finalized
+ ELAPSED TIME =      239.91 s. Finished calculation of vvc/fvc.
+ ELAPSED TIME =      240.29 s.  Memory allocation done. Start calculating vvc,fvc.
+ ELAPSED TIME =      243.36 s.  vvc/fvc calculation
+         7 out of         37 representation  4 spin  1
+ ELAPSED TIME =      246.40 s.  vvc/fvc calculation
+        14 out of         37 representation  4 spin  1
+ ELAPSED TIME =      249.46 s.  vvc/fvc calculation
+        21 out of         37 representation  4 spin  1
+ ELAPSED TIME =      252.51 s.  vvc/fvc calculation
+        28 out of         37 representation  4 spin  1
+ ELAPSED TIME =      255.55 s.  vvc/fvc calculation
+        35 out of         37 representation  4 spin  1
+ ELAPSED TIME =      256.42 s. FFT finalized
+ ELAPSED TIME =      256.42 s. Finished calculation of vvc/fvc.
+ ELAPSED TIME =      256.81 s.  Memory allocation done. Start calculating vvc,fvc.
+ ELAPSED TIME =      259.86 s.  vvc/fvc calculation
+         7 out of         37 representation  5 spin  1
+ ELAPSED TIME =      262.90 s.  vvc/fvc calculation
+        14 out of         37 representation  5 spin  1
+ ELAPSED TIME =      265.96 s.  vvc/fvc calculation
+        21 out of         37 representation  5 spin  1
+ ELAPSED TIME =      269.00 s.  vvc/fvc calculation
+        28 out of         37 representation  5 spin  1
+ ELAPSED TIME =      272.05 s.  vvc/fvc calculation
+        35 out of         37 representation  5 spin  1
+ ELAPSED TIME =      272.92 s. FFT finalized
+ ELAPSED TIME =      272.92 s. Finished calculation of vvc/fvc.
+ ELAPSED TIME =      273.31 s.  Memory allocation done. Start calculating vvc,fvc.
+ ELAPSED TIME =      277.23 s.  vvc/fvc calculation
+         9 out of         48 representation  6 spin  1
+ ELAPSED TIME =      281.15 s.  vvc/fvc calculation
+        18 out of         48 representation  6 spin  1
+ ELAPSED TIME =      285.07 s.  vvc/fvc calculation
+        27 out of         48 representation  6 spin  1
+ ELAPSED TIME =      288.99 s.  vvc/fvc calculation
+        36 out of         48 representation  6 spin  1
+ ELAPSED TIME =      292.90 s.  vvc/fvc calculation
+        45 out of         48 representation  6 spin  1
+ ELAPSED TIME =      294.21 s. FFT finalized
+ ELAPSED TIME =      294.21 s. Finished calculation of vvc/fvc.
+ ELAPSED TIME =      294.60 s.  Memory allocation done. Start calculating vvc,fvc.
+ ELAPSED TIME =      298.95 s.  vvc/fvc calculation
+        10 out of         50 representation  7 spin  1
+ ELAPSED TIME =      303.31 s.  vvc/fvc calculation
+        20 out of         50 representation  7 spin  1
+ ELAPSED TIME =      307.66 s.  vvc/fvc calculation
+        30 out of         50 representation  7 spin  1
+ ELAPSED TIME =      312.03 s.  vvc/fvc calculation
+        40 out of         50 representation  7 spin  1
+ ELAPSED TIME =      316.37 s.  vvc/fvc calculation
+        50 out of         50 representation  7 spin  1
+ ELAPSED TIME =      316.37 s. FFT finalized
+ ELAPSED TIME =      316.37 s. Finished calculation of vvc/fvc.
+ ELAPSED TIME =      316.76 s.  Memory allocation done. Start calculating vvc,fvc.
+ ELAPSED TIME =      321.57 s.  vvc/fvc calculation
+        11 out of         55 representation  8 spin  1
+ ELAPSED TIME =      326.36 s.  vvc/fvc calculation
+        22 out of         55 representation  8 spin  1
+ ELAPSED TIME =      331.15 s.  vvc/fvc calculation
+        33 out of         55 representation  8 spin  1
+ ELAPSED TIME =      335.94 s.  vvc/fvc calculation
+        44 out of         55 representation  8 spin  1
+ ELAPSED TIME =      340.74 s.  vvc/fvc calculation
+        55 out of         55 representation  8 spin  1
+ ELAPSED TIME =      340.74 s. FFT finalized
+ ELAPSED TIME =      340.74 s. Finished calculation of vvc/fvc.
+  Distributing grid points among PEs. 
+ 5333  grid points per PE. 
+ Seek representation   1 in pol_diag.dat.   1  1      55
+ ELAPSED TIME =      340.75 s.  vr/fr calculation
+      1066 out of       5333 representation  1 processor    0
+ ELAPSED TIME =      340.76 s.  vr/fr calculation
+      2132 out of       5333 representation  1 processor    0
+ ELAPSED TIME =      340.76 s.  vr/fr calculation
+      3198 out of       5333 representation  1 processor    0
+ ELAPSED TIME =      340.77 s.  vr/fr calculation
+      4264 out of       5333 representation  1 processor    0
+ ELAPSED TIME =      340.78 s.  vr/fr calculation
+      5330 out of       5333 representation  1 processor    0
+ Seek representation   2 in pol_diag.dat.   2  1      45
+ ELAPSED TIME =      340.78 s.  vr/fr calculation
+      1066 out of       5333 representation  2 processor    0
+ ELAPSED TIME =      340.78 s.  vr/fr calculation
+      2132 out of       5333 representation  2 processor    0
+ ELAPSED TIME =      340.79 s.  vr/fr calculation
+      3198 out of       5333 representation  2 processor    0
+ ELAPSED TIME =      340.79 s.  vr/fr calculation
+      4264 out of       5333 representation  2 processor    0
+ ELAPSED TIME =      340.80 s.  vr/fr calculation
+      5330 out of       5333 representation  2 processor    0
+ Seek representation   3 in pol_diag.dat.   3  1      44
+ ELAPSED TIME =      340.82 s.  vr/fr calculation
+      1066 out of       5333 representation  3 processor    0
+ ELAPSED TIME =      340.82 s.  vr/fr calculation
+      2132 out of       5333 representation  3 processor    0
+ ELAPSED TIME =      340.83 s.  vr/fr calculation
+      3198 out of       5333 representation  3 processor    0
+ ELAPSED TIME =      340.83 s.  vr/fr calculation
+      4264 out of       5333 representation  3 processor    0
+ ELAPSED TIME =      340.84 s.  vr/fr calculation
+      5330 out of       5333 representation  3 processor    0
+ Seek representation   4 in pol_diag.dat.   4  1      37
+ ELAPSED TIME =      340.85 s.  vr/fr calculation
+      1066 out of       5333 representation  4 processor    0
+ ELAPSED TIME =      340.85 s.  vr/fr calculation
+      2132 out of       5333 representation  4 processor    0
+ ELAPSED TIME =      340.85 s.  vr/fr calculation
+      3198 out of       5333 representation  4 processor    0
+ ELAPSED TIME =      340.86 s.  vr/fr calculation
+      4264 out of       5333 representation  4 processor    0
+ ELAPSED TIME =      340.86 s.  vr/fr calculation
+      5330 out of       5333 representation  4 processor    0
+ Seek representation   5 in pol_diag.dat.   5  1      37
+ ELAPSED TIME =      340.87 s.  vr/fr calculation
+      1066 out of       5333 representation  5 processor    0
+ ELAPSED TIME =      340.87 s.  vr/fr calculation
+      2132 out of       5333 representation  5 processor    0
+ ELAPSED TIME =      340.88 s.  vr/fr calculation
+      3198 out of       5333 representation  5 processor    0
+ ELAPSED TIME =      340.88 s.  vr/fr calculation
+      4264 out of       5333 representation  5 processor    0
+ ELAPSED TIME =      340.88 s.  vr/fr calculation
+      5330 out of       5333 representation  5 processor    0
+ Seek representation   6 in pol_diag.dat.   6  1      48
+ ELAPSED TIME =      340.90 s.  vr/fr calculation
+      1066 out of       5333 representation  6 processor    0
+ ELAPSED TIME =      340.90 s.  vr/fr calculation
+      2132 out of       5333 representation  6 processor    0
+ ELAPSED TIME =      340.91 s.  vr/fr calculation
+      3198 out of       5333 representation  6 processor    0
+ ELAPSED TIME =      340.91 s.  vr/fr calculation
+      4264 out of       5333 representation  6 processor    0
+ ELAPSED TIME =      340.92 s.  vr/fr calculation
+      5330 out of       5333 representation  6 processor    0
+ Seek representation   7 in pol_diag.dat.   7  1      50
+ ELAPSED TIME =      340.93 s.  vr/fr calculation
+      1066 out of       5333 representation  7 processor    0
+ ELAPSED TIME =      340.94 s.  vr/fr calculation
+      2132 out of       5333 representation  7 processor    0
+ ELAPSED TIME =      340.94 s.  vr/fr calculation
+      3198 out of       5333 representation  7 processor    0
+ ELAPSED TIME =      340.95 s.  vr/fr calculation
+      4264 out of       5333 representation  7 processor    0
+ ELAPSED TIME =      340.95 s.  vr/fr calculation
+      5330 out of       5333 representation  7 processor    0
+ Seek representation   8 in pol_diag.dat.   8  1      55
+ ELAPSED TIME =      340.97 s.  vr/fr calculation
+      1066 out of       5333 representation  8 processor    0
+ ELAPSED TIME =      340.97 s.  vr/fr calculation
+      2132 out of       5333 representation  8 processor    0
+ ELAPSED TIME =      340.98 s.  vr/fr calculation
+      3198 out of       5333 representation  8 processor    0
+ ELAPSED TIME =      340.99 s.  vr/fr calculation
+      4264 out of       5333 representation  8 processor    0
+ ELAPSED TIME =      340.99 s.  vr/fr calculation
+      5330 out of       5333 representation  8 processor    0
+
+ Checkpoint control =     0
+
+ ELAPSED TIME =      341.18 s.  Calling exchange
+ ELAPSED TIME =      524.69 s. FFT finalized
+
+ Checkpoint control =    16
+
+
+-----------------------------------------------------------------
+ Working now with representation   1 out of   8
+
+ Seek representation   1 in pol_diag.dat.   1  1      55
+ ELAPSED TIME =      524.70 s.  Calling readmatrix kernel_c
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  62  data blocks to store matrix elements.
+ ELAPSED TIME =      524.99 s. Starting calculation of kernel
+Kernel done!      14685 matrix elements calculated by PE  0 representation  1
+ Buffer sizes:  2
+ 14685 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      549.95 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      549.96 s.  Calling potential pot_c
+ ELAPSED TIME =      549.97 s.  Calling correlation
+ CORRELATION , xsum =         1.0000000000 spin    1   1
+ ELAPSED TIME =      550.06 s.  Calling readmatrix kernel_f
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_f (TDLDA kernel)
+ Using  62  data blocks to store matrix elements.
+ ELAPSED TIME =      550.44 s. Starting calculation of kernel
+Kernel done!      14685 matrix elements calculated by PE  0 representation  1
+ Buffer sizes:  2
+ 14685 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      551.33 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      551.34 s.  Calling potential pot_f
+ ELAPSED TIME =      551.34 s.  Calling vertex
+ VERTEX , xsum =         1.0000000000 spin    1   1
+
+ Checkpoint control =    17
+
+
+-----------------------------------------------------------------
+ Working now with representation   2 out of   8
+
+ Seek representation   2 in pol_diag.dat.   2  1      45
+ ELAPSED TIME =      551.51 s.  Calling readmatrix kernel_c
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  52  data blocks to store matrix elements.
+ ELAPSED TIME =      551.80 s. Starting calculation of kernel
+Kernel done!       9180 matrix elements calculated by PE  0 representation  2
+ Buffer sizes:  2
+ 9180 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      572.16 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      572.16 s.  Calling potential pot_c
+ ELAPSED TIME =      572.16 s.  Calling correlation
+ CORRELATION , xsum =         1.0000000000 spin    1   1
+ ELAPSED TIME =      572.23 s.  Calling readmatrix kernel_f
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_f (TDLDA kernel)
+ Using  52  data blocks to store matrix elements.
+ ELAPSED TIME =      572.61 s. Starting calculation of kernel
+Kernel done!       9180 matrix elements calculated by PE  0 representation  2
+ Buffer sizes:  2
+ 9180 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      573.20 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      573.21 s.  Calling potential pot_f
+ ELAPSED TIME =      573.21 s.  Calling vertex
+ VERTEX , xsum =         1.0000000000 spin    1   1
+
+ Checkpoint control =    18
+
+
+-----------------------------------------------------------------
+ Working now with representation   3 out of   8
+
+ Seek representation   3 in pol_diag.dat.   3  1      44
+ ELAPSED TIME =      573.32 s.  Calling readmatrix kernel_c
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  51  data blocks to store matrix elements.
+ ELAPSED TIME =      573.61 s. Starting calculation of kernel
+Kernel done!       8690 matrix elements calculated by PE  0 representation  3
+ Buffer sizes:  2
+ 8690 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      593.49 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      593.50 s.  Calling potential pot_c
+ ELAPSED TIME =      593.50 s.  Calling correlation
+ CORRELATION , xsum =         1.0000000000 spin    1   1
+ ELAPSED TIME =      593.56 s.  Calling readmatrix kernel_f
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_f (TDLDA kernel)
+ Using  51  data blocks to store matrix elements.
+ ELAPSED TIME =      593.95 s. Starting calculation of kernel
+Kernel done!       8690 matrix elements calculated by PE  0 representation  3
+ Buffer sizes:  2
+ 8690 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      594.51 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      594.51 s.  Calling potential pot_f
+ ELAPSED TIME =      594.51 s.  Calling vertex
+ VERTEX , xsum =         1.0000000000 spin    1   1
+
+ Checkpoint control =    19
+
+
+-----------------------------------------------------------------
+ Working now with representation   4 out of   8
+
+ Seek representation   4 in pol_diag.dat.   4  1      37
+ ELAPSED TIME =      594.62 s.  Calling readmatrix kernel_c
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  44  data blocks to store matrix elements.
+ ELAPSED TIME =      594.91 s. Starting calculation of kernel
+Kernel done!       6993 matrix elements calculated by PE  0 representation  4
+ Buffer sizes:  2
+ 6993 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      611.57 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      611.57 s.  Calling potential pot_c
+ ELAPSED TIME =      611.57 s.  Calling correlation
+ CORRELATION , xsum =         1.0000000000 spin    1   1
+ ELAPSED TIME =      611.62 s.  Calling readmatrix kernel_f
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_f (TDLDA kernel)
+ Using  44  data blocks to store matrix elements.
+ ELAPSED TIME =      612.01 s. Starting calculation of kernel
+Kernel done!       6993 matrix elements calculated by PE  0 representation  4
+ Buffer sizes:  2
+ 6993 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      612.47 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      612.47 s.  Calling potential pot_f
+ ELAPSED TIME =      612.47 s.  Calling vertex
+ VERTEX , xsum =         1.0000000000 spin    1   1
+
+ Checkpoint control =    20
+
+
+-----------------------------------------------------------------
+ Working now with representation   5 out of   8
+
+ Seek representation   5 in pol_diag.dat.   5  1      37
+ ELAPSED TIME =      612.57 s.  Calling readmatrix kernel_c
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  44  data blocks to store matrix elements.
+ ELAPSED TIME =      612.85 s. Starting calculation of kernel
+Kernel done!       6253 matrix elements calculated by PE  0 representation  5
+ Buffer sizes:  2
+ 6253 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      629.48 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      629.49 s.  Calling potential pot_c
+ ELAPSED TIME =      629.49 s.  Calling correlation
+ CORRELATION , xsum =         1.0000000000 spin    1   1
+ ELAPSED TIME =      629.53 s.  Calling readmatrix kernel_f
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_f (TDLDA kernel)
+ Using  44  data blocks to store matrix elements.
+ ELAPSED TIME =      629.92 s. Starting calculation of kernel
+Kernel done!       6253 matrix elements calculated by PE  0 representation  5
+ Buffer sizes:  2
+ 6253 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      630.31 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      630.31 s.  Calling potential pot_f
+ ELAPSED TIME =      630.31 s.  Calling vertex
+ VERTEX , xsum =         1.0000000000 spin    1   1
+
+ Checkpoint control =    21
+
+
+-----------------------------------------------------------------
+ Working now with representation   6 out of   8
+
+ Seek representation   6 in pol_diag.dat.   6  1      48
+ ELAPSED TIME =      630.40 s.  Calling readmatrix kernel_c
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  55  data blocks to store matrix elements.
+ ELAPSED TIME =      630.69 s. Starting calculation of kernel
+Kernel done!       9576 matrix elements calculated by PE  0 representation  6
+ Buffer sizes:  2
+ 9576 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      652.37 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      652.37 s.  Calling potential pot_c
+ ELAPSED TIME =      652.37 s.  Calling correlation
+ CORRELATION , xsum =         1.0000000000 spin    1   1
+ ELAPSED TIME =      652.44 s.  Calling readmatrix kernel_f
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_f (TDLDA kernel)
+ Using  55  data blocks to store matrix elements.
+ ELAPSED TIME =      652.83 s. Starting calculation of kernel
+Kernel done!       9576 matrix elements calculated by PE  0 representation  6
+ Buffer sizes:  2
+ 9576 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      653.42 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      653.42 s.  Calling potential pot_f
+ ELAPSED TIME =      653.42 s.  Calling vertex
+ VERTEX , xsum =         1.0000000000 spin    1   1
+
+ Checkpoint control =    22
+
+
+-----------------------------------------------------------------
+ Working now with representation   7 out of   8
+
+ Seek representation   7 in pol_diag.dat.   7  1      50
+ ELAPSED TIME =      653.54 s.  Calling readmatrix kernel_c
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  57  data blocks to store matrix elements.
+ ELAPSED TIME =      653.83 s. Starting calculation of kernel
+Kernel done!      10325 matrix elements calculated by PE  0 representation  7
+ Buffer sizes:  2
+ 10325 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      676.40 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      676.40 s.  Calling potential pot_c
+ ELAPSED TIME =      676.40 s.  Calling correlation
+ CORRELATION , xsum =         1.0000000000 spin    1   1
+ ELAPSED TIME =      676.49 s.  Calling readmatrix kernel_f
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_f (TDLDA kernel)
+ Using  57  data blocks to store matrix elements.
+ ELAPSED TIME =      676.88 s. Starting calculation of kernel
+Kernel done!      10325 matrix elements calculated by PE  0 representation  7
+ Buffer sizes:  2
+ 10325 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      677.51 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      677.51 s.  Calling potential pot_f
+ ELAPSED TIME =      677.51 s.  Calling vertex
+ VERTEX , xsum =         1.0000000000 spin    1   1
+
+ Checkpoint control =    23
+
+
+-----------------------------------------------------------------
+ Working now with representation   8 out of   8
+
+ Seek representation   8 in pol_diag.dat.   8  1      55
+ ELAPSED TIME =      677.65 s.  Calling readmatrix kernel_c
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  62  data blocks to store matrix elements.
+ ELAPSED TIME =      677.93 s. Starting calculation of kernel
+Kernel done!      11880 matrix elements calculated by PE  0 representation  8
+ Buffer sizes:  2
+ 11880 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      702.88 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      702.88 s.  Calling potential pot_c
+ ELAPSED TIME =      702.88 s.  Calling correlation
+ CORRELATION , xsum =         1.0000000000 spin    1   1
+ ELAPSED TIME =      702.97 s.  Calling readmatrix kernel_f
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_f (TDLDA kernel)
+ Using  62  data blocks to store matrix elements.
+ ELAPSED TIME =      703.36 s. Starting calculation of kernel
+Kernel done!      11880 matrix elements calculated by PE  0 representation  8
+ Buffer sizes:  2
+ 11880 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      704.08 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      704.09 s.  Calling potential pot_f
+ ELAPSED TIME =      704.09 s.  Calling vertex
+ VERTEX , xsum =         1.0000000000 spin    1   1
+
+ Checkpoint control =    24
+
+
+ Checkpoint control =    24
+
+
+ Found wpol0.dat file. Calculating static correction 
+
+
+ Reading static correction from file wpol0.dat.
+      r          rho        Wpol0_v          Wpol0_f
+   0   2   5      0.2870     -0.5204      0.0743
+   2   0   5      0.2870     -0.5204      0.0743
+   1   1   5      0.2798     -0.5181      0.0675
+   1   1   6      0.2773     -0.5259      0.0773
+   1   2   5      0.2773     -0.5104      0.0767
+   2   1   5      0.2773     -0.5105      0.0767
+   2   0   6      0.2747     -0.5096      0.0770
+   0   2   6      0.2747     -0.5097      0.0771
+   2   0   4      0.2685     -0.6310      0.1211
+   0   2   4      0.2685     -0.6310      0.1211
+ 
+
+ Checkpoint control =    32
+
+ ELAPSED TIME =      704.53 s.  All matrix elements calculated. Start printout
+ ELAPSED TIME =      704.55 s.  Calling rotate.
+ 
+ Spin  1
+ Maximum difference between input and output densities : 
+    0.5406288696E-02 a.u.^-3
+ Standard deviation of the difference between densities : 
+    0.1654339039E-03 a.u.^-3
+ Old integrated charge =      14.00000000    
+ New integrated charge =      14.00000000    
+
+ ELAPSED TIME =      705.32 s. FFT finalized
+ ELAPSED TIME =      711.40 s. FFT finalized
+ 
+                  Eigenvalue Energy =       -17.7654981532 [Ry]
+                     Kinetic Energy =        21.6615886427 [Ry]
+       Local Pseudopotential Energy =      -177.4980579537 [Ry]
+   Non-local Pseudopotential Energy =         2.8168047731 [Ry]
+                     Ion-ion Energy =        26.5585678753 [Ry]
+                       Total Energy =       -58.8340134703 [Ry]
+ Total energy excludes Exc - Int_{Vxc*rho}/2 term.
+ WARNING! Pseudopotential energies and total energy are
+ 
+
+ Iteration     0. Maximum potential (eV) =    5.91773
+
+
+-----------------------------------------------------------------
+                               CPU [s]     WALL [s]           #
+
+ SETUP_S:                         1.920        1.916          1
+ KERNEL:                        344.270      344.890         24
+ DIAG_POL:                        0.010        0.012          8
+ WPOL_0:                        165.170      165.624          1
+ EXCHANGE:                      183.520      183.775          1
+ POTENTIAL:                       0.000        0.006         16
+ CORRELATION:                     0.560        0.549          8
+ VERTEX:                          0.960        0.968          8
+ 
+ ROTATE:                          0.820        0.823          1
+ POISSON_FFT:                   557.140      558.171       3072
+ EIGENSOLVER:                     0.010        0.012          8
+ INTEGRATION:                    11.840       11.800       1113
+
+                TOTAL           713.540      715.028
+
+ Finished 2009 Jan 26 11:29: 7  -420 UTC
+-----------------------------------------------------------------

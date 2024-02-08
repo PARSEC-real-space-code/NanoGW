@@ -1,0 +1,69 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Sum the BSE Hamiltonian across all processors in the r_grp pool.
+! This pool contains the processors assigned to handle the BSE for
+! a given representation. Without MPI, nothing is done.
+!
+! INPUT:
+!    bsepol(:)%v : BSE Hamiltonian (local, column-distributed)
+!
+! OUTPUT:
+!    bsepol(:)%v : BSE Hamiltonian after MPI reduction
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zgroup_reduce_bse(nrep,bsepol)
+
+  use typedefs
+#ifdef MPI
+  use mpi_module
+  implicit none
+  include 'mpif.h'
+#endif
+
+  ! arguments
+  ! number of representations in Abelian group
+  integer, intent(in) :: nrep
+  ! BSE polarizability
+  type (polinfo), dimension(nrep), intent(inout) :: bsepol
+
+#ifdef MPI
+  ! local variables
+  integer :: w_group(r_grp%num), ntr, icol, irp, ipe, igrp, &
+       handle, w_handle, w_comm, w_inode, info
+
+  !-------------------------------------------------------------------
+  ! For each PE in group_npes, create the group of PEs that share
+  ! Hamiltonian components.
+  !
+  do ipe = 0, r_grp%npes - 1
+     do igrp = 0, r_grp%num - 1
+        w_group(igrp+1) = r_grp%map(ipe + 1,igrp + 1)
+     enddo
+     call MPI_GROUP_INCL(peinf%handle,r_grp%num,w_group,handle,info)
+     if (ipe == r_grp%inode) w_handle = handle
+  enddo
+  call MPI_COMM_CREATE(peinf%comm,w_handle,w_comm,info)
+  call MPI_GROUP_RANK(w_handle,w_inode,info)
+  !
+  ! Reduce Hamiltonian on the recently built group.
+  !
+  call MPI_BARRIER(w_comm,info)
+  do irp = 1, nrep
+     ntr = bsepol(irp)%nn*r_grp%npes * 2
+     do icol = 1, bsepol(irp)%nn * 2
+        call Zpsum(ntr,r_grp%num,w_comm,bsepol(irp)%Zv(1,icol))
+        if ( r_grp%map(r_grp%inode + 1,r_grp%rep_g(irp)+1) /= &
+             peinf%inode ) bsepol(irp)%Zv(1:ntr,icol) = Zzero
+        call MPI_BARRIER(w_comm,info)
+     enddo
+  enddo
+
+  call MPI_BARRIER(peinf%comm,info)
+#endif
+
+end subroutine Zgroup_reduce_bse
+!===================================================================

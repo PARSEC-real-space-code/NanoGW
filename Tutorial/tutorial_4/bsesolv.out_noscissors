@@ -1,0 +1,1349 @@
+
+=================================================================
+
+ BSESOLV   2009 Jan 26 11:29: 8  -420 UTC
+
+ Running serial version (no MPI)
+
+Version date : Fri Jan  2 17:07:49 EST 2009
+architecture = sp5_nersc
+pre-processing options = -DUSEESSL 
+compilation options = -O3 -qextname=flush -qarch=auto -qtune=auto -qhot -qalias=noaryovrlp -Q -qautodbl=dbl4 -q64
+
+=================================================================
+
+ ESDF WARNING: Unable to open main input file "rgwbs.in" - using defaults
+ ESDF WARNING: Unable to open main input file "rgwbs.in" - using defaults
+
+ Electronic structure data :
+ ---------------------------
+
+ Reading electron wavefunctions from file parsec.dat/wfn.dat
+ WARNING: parsec.dat file not found
+          Looking for file wfn.dat
+ ELAPSED TIME =        0.01 s. parsec_wfn:  reading wfn.dat
+
+ Wavefunction file created on 26-JAN-2009 10:12:41 -0700 UTC
+ ESDF WARNING: Unable to open main input file "rgwbs.in" - using defaults
+
+ Spin unpolarized calculation.
+
+  Number of occupied levels, spin  1  :  7.00000000000000000
+ DFT Eigenvalues (eV), spin  1  :
+ -23.75 -19.04 -12.23 -10.25 -10.25  -7.34  -7.34  -4.19  -0.39   0.63
+   0.67   0.67   1.11   1.38   1.38   1.51   1.51   1.91   2.38   2.38
+   2.55   2.57   2.57   2.73   2.73   2.98   2.98   2.98   2.99   3.09
+   3.33   3.75   3.75   3.76   3.76   3.79   3.80   3.80   3.82   3.82
+   3.89   3.89   4.10   4.10   5.02   5.02   5.06   5.07   5.07   5.09
+   5.09   5.11   5.12   5.12   5.12   5.16   5.16   5.30   5.41   5.82
+ Irreducible representations, spin  1  :
+    1    8    1    7    6    2    3    8    1    8
+    6    7    1    1    4    3    2    1    6    7
+    8    8    5    7    6    7    6    1    4    8
+    1    7    6    2    3    1    1    4    2    3
+    1    4    2    3    8    5    8    7    6    7
+    6    8    8    5    5    7    6    1    8    7
+ 
+ Maximum value of electron density (a.u.^-3) =   0.28697826E+00
+ Total number of electrons =    14.0000
+
+ MPI data :
+ ----------
+
+  Group partition information: 
+  Distributing  1  processors among  1  groups.
+  Each group contains  1  processors.
+  I am processor rank  0  in group  0
+  I am master in my group, with master rank  0
+  My group has representations: 
+    1    2    3    4    5    6    7    8
+
+  Wavefunction partition information: 
+  Distributing  1  processors among  1  groups.
+  Each group contains  1  processors.
+  I am processor rank  0  in group  0
+  I am master in my group, with master rank    0
+
+
+ Grid data :
+ -----------
+
+ Gradients and Laplacians calculated with FFT
+
+  ELECTRONIC SYSTEM IS CONFINED !
+
+
+ Confining radius (a.u.) =        14.991894
+
+ Grid spacing (a.u.) =         0.350000        0.350000        0.350000
+
+ Real-space FFT grid =  176 176 176 178
+
+ Long-wavelength Coulomb energy (eV) =         0.0000000000
+
+ Coulomb truncation length (a.u.) =        29.9837872858
+
+ Full grid has     329552 points.
+ Irreducible wedge has      41194 points.
+
+ ELAPSED TIME =        0.10 s. parsec_wfn:  reading wave functions
+
+ Read wavefunctions for         60 levels, spin    1
+
+-----------------------------------------------------------------
+
+ ESDF WARNING: Unable to open main input file "rgwbs.in" - using defaults
+
+-----------------------------------------------------------------
+
+ ELAPSED TIME =        0.34 s. Calling setup_b
+
+-----------------------------------------------------------------
+
+ BSE input data: 
+ ---------------
+
+ Number of transitions per representation in TDLDA polarizabillity:
+      55      45      44      37      37      48      50      55
+ total =        371
+
+ No energy cutoff in TDLDA polarizability
+ Not using the Tamm-Dancoff approximation in TDLDA polarizability.
+
+ Number of transitions per representation in BSE polarizabillity: 
+      55      45      44      37      37      48      50      55
+ total =        371
+
+ No energy cutoff in BSE polarizability
+
+Sum rule not renormalized
+
+ BSE for spin singlet excitations
+
+ No block mixing in BSE
+
+ Negative energy reference. Neglecting dynamical screening effects 
+
+ Using no energy resolution in BSE, energy poles
+
+ Coulomb potential is being truncated in the BSE equation.
+
+
+ Memory needed to store wavefunctions :      18.86 MB/proc.
+ Memory needed to calculate kernel matrix elements :       1.57 MB/proc.
+
+ Memory needed for polarizability diagonalization :       0.07 MB/proc.
+ Memory needed in potentials calculation :       0.68 MB/proc.
+ Memory needed for single proc. BSE diagonalization :       0.40 MB/proc.
+
+-----------------------------------------------------------------
+
+ Reading polarizability eigenvalues/eigenvectors  from pol_diag.dat 
+ 
+  File created on 2009 Jan 26 11:17:47  -420 UTC
+  Representation  1  out of  8
+  Lowest energy eigenvalues in polarizability (eV): 
+        8.811476
+        8.918953
+       10.895067
+  Representation  2  out of  8
+  Lowest energy eigenvalues in polarizability (eV): 
+        6.564173
+        6.934278
+        8.431076
+  Representation  3  out of  8
+  Lowest energy eigenvalues in polarizability (eV): 
+        6.564173
+        6.934278
+        8.431076
+  Representation  4  out of  8
+  Lowest energy eigenvalues in polarizability (eV): 
+        8.811503
+        8.850971
+       10.895072
+  Representation  5  out of  8
+  Lowest energy eigenvalues in polarizability (eV): 
+        7.968361
+        8.008152
+        9.697950
+  Representation  6  out of  8
+  Lowest energy eigenvalues in polarizability (eV): 
+        3.643443
+        7.957800
+        9.866245
+  Representation  7  out of  8
+  Lowest energy eigenvalues in polarizability (eV): 
+        3.643443
+        7.957800
+        9.866245
+  Representation  8  out of  8
+  Lowest energy eigenvalues in polarizability (eV): 
+        7.968350
+        8.023196
+        9.479588
+ ELAPSED TIME =        6.05 s.  Calling readmatrix kernel_p
+
+ readmatrix: skipping reading of matrix elements 
+
+ ELAPSED TIME =        6.05 s.  Calling readmatrix kernel_p
+
+ readmatrix: skipping reading of matrix elements 
+
+ ELAPSED TIME =        6.05 s.  Calling readmatrix kernel_p
+
+ readmatrix: skipping reading of matrix elements 
+
+ ELAPSED TIME =        6.05 s.  Calling readmatrix kernel_p
+
+ readmatrix: skipping reading of matrix elements 
+
+ ELAPSED TIME =        6.05 s.  Calling readmatrix kernel_p
+
+ readmatrix: skipping reading of matrix elements 
+
+ ELAPSED TIME =        6.05 s.  Calling readmatrix kernel_p
+
+ readmatrix: skipping reading of matrix elements 
+
+ ELAPSED TIME =        6.05 s.  Calling readmatrix kernel_p
+
+ readmatrix: skipping reading of matrix elements 
+
+ ELAPSED TIME =        6.05 s.  Calling readmatrix kernel_p
+
+ readmatrix: skipping reading of matrix elements 
+
+
+-----------------------------------------------------------------
+
+ Checking oscillator strength sum rule
+ Ratio between numerical and exact values :
+                            Field polarization
+                           x  ----  y  ----  z  ---- average
+  RPA-LDA Sum Rule  =   0.4654   0.4654   0.6879      0.5396
+     ALDA Sum Rule  =   0.4654   0.4654   0.6879      0.5396
+
+-----------------------------------------------------------------
+
+ Static polarizability (a.u.) 
+                                 Field polarization 
+                                x  ----  y  ----  z  ---- average
+ RPA-LDA Polarizability =    32.32    32.32    84.81       49.816
+    ALDA Polarizability =    23.44    23.44    39.59       28.821
+
+  Average ALDA sum rule =  0.539570558181011295
+  Average static RPA-LDA polarizability =  49.8157973247104451
+-----------------------------------------------------------------
+
+  Lowest energy eigenvalues in polarizability, all representations:
+ Order      Energy (eV)  Representation
+    1        3.643443         7
+    2        3.643443         6
+    3        6.564173         2
+    4        6.564173         3
+    5        6.934278         3
+    6        6.934278         2
+    7        7.957800         6
+    8        7.957800         7
+    9        7.968350         8
+   10        7.968361         5
+  Checkpoint control =  0
+ ELAPSED TIME =        6.06 s. Calling quasiparticle
+
+Reading quasi-particle Hamiltonian from file hmat_qp.
+
+
+ All values in eV. Read    528 spin      1 k-point      1 matrix elements.
+  QP HAMILTONIAN IS SYMMETRIZED
+
+-----------------------------------------------------------------
+
+ 1-electron, quasi-particle eigenvalues, occupied states:
+  SPIN UP
+  DFT orbital  QP orbital   DFT energy [eV]   QP energy [eV]   proj     occ
+      1           1          -23.747          -29.671         1.000   1.000
+      2           2          -19.036          -23.118         1.000   1.000
+      3           3          -12.227          -16.341         1.000   1.000
+      4           4          -10.250          -14.194         1.000   1.000
+      5           5          -10.250          -14.194         1.000   1.000
+      6           6           -7.337          -11.635         1.000   1.000
+      7           7           -7.337          -11.635         1.000   1.000
+
+-----------------------------------------------------------------
+
+
+ 1-electron, quasi-particle eigenvalues, unoccupied states:
+  SPIN UP
+  DFT orbital  QP orbital   DFT energy [eV]   QP energy [eV]   proj     occ
+      8           8           -4.191           -1.147         0.984   0.000
+      9           9           -0.392            0.781         0.798   0.000
+     10          12            0.633            1.429         0.914   0.000
+     11          11            0.671            1.316         0.914   0.000
+     12          10            0.671            1.315         0.893   0.000
+     13          13            1.105            1.919         0.707   0.000
+     14          14            1.383            1.986         0.849   0.000
+     15          15            1.384            1.989         0.849   0.000
+     16          16            1.514            2.033         0.927   0.000
+     17          17            1.514            2.033         0.927   0.000
+     18          25            1.913            2.992         0.999   0.000
+     19          19            2.378            2.897         0.836   0.000
+     20          18            2.378            2.897         0.636   0.000
+     21          20            2.555            2.917         0.836   0.000
+     22          21            2.572            2.935         0.949   0.000
+     23          22            2.575            2.939         0.969   0.000
+     24          23            2.726            2.953         0.969   0.000
+     25          24            2.726            2.988         0.990   0.000
+     26          35            2.977            4.210         0.951   0.000
+     27          36            2.977            4.211         0.944   0.000
+     28          39            2.982            5.041         0.683   0.000
+     29          40            2.986            5.046         0.683   0.000
+     30          37            3.093            4.492         0.988   0.000
+     31          38            3.328            4.886         0.981   0.000
+     32          54            3.750            6.405         0.613   0.000
+     33          55            3.750            6.405         1.000   0.000
+     34          27            3.762            4.034         0.883   0.000
+     35          28            3.762            4.034         0.840   0.000
+     36          26            3.786            4.020         0.883   0.000
+     37          29            3.796            4.039         0.840   0.000
+     38          32            3.801            4.046         0.847   0.000
+     39          33            3.824            4.057         0.847   0.000
+     40          34            3.824            4.057         0.951   0.000
+     41          30            3.887            4.042         0.876   0.000
+     42          31            3.890            4.046         0.801   0.000
+     43          52            4.101            5.396         0.605   0.000
+     44          53            4.101            5.396         1.000   0.000
+     45          59            5.015            6.797         0.957   0.000
+     46          60            5.021            6.806         0.987   0.000
+     47          41            5.064            5.240         0.999   0.000
+     48          42            5.072            5.243         0.993   0.000
+     49          43            5.072            5.243         0.716   0.000
+     50          46            5.091            5.264         0.591   0.000
+     51          49            5.091            5.269         0.993   0.000
+     52          44            5.111            5.252         0.716   0.000
+     53          50            5.115            5.271         0.986   0.000
+     54          45            5.118            5.259         0.583   0.000
+     55          51            5.119            5.275         0.999   0.000
+     56          48            5.157            5.265         0.993   0.000
+     57          47            5.157            5.265         0.987   0.000
+     58          56            5.302            6.602         0.989   0.000
+     59          57            5.407            6.705         1.000   0.000
+     60          58            5.817            6.708         0.898   0.000
+
+-----------------------------------------------------------------
+
+ Energy of highest occupied level (eV) =    -11.635
+ Energy of lowest unoccupied level (eV) =     -1.147
+
+-----------------------------------------------------------------
+ Calculation of Bare Exchange for representation  1
+
+ ELAPSED TIME =        6.06 s.  Starting readmatrix kernel_vc
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  62  data blocks to store matrix elements.
+ ELAPSED TIME =        6.43 s. Starting calculation of kernel
+Kernel done!       1540 matrix elements calculated by PE  0 representation  1
+ Buffer sizes:  2
+ 1540 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =       30.74 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =       30.74 s. Calling exchange_b
+
+-----------------------------------------------------------------
+ Calculation of Bare Exchange for representation  2
+
+ ELAPSED TIME =       30.75 s.  Starting readmatrix kernel_vc
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  52  data blocks to store matrix elements.
+ ELAPSED TIME =       31.04 s. Starting calculation of kernel
+Kernel done!       1035 matrix elements calculated by PE  0 representation  2
+ Buffer sizes:  2
+ 1035 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =       50.87 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =       50.87 s. Calling exchange_b
+
+-----------------------------------------------------------------
+ Calculation of Bare Exchange for representation  3
+
+ ELAPSED TIME =       50.87 s.  Starting readmatrix kernel_vc
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  51  data blocks to store matrix elements.
+ ELAPSED TIME =       51.16 s. Starting calculation of kernel
+Kernel done!        990 matrix elements calculated by PE  0 representation  3
+ Buffer sizes:  2
+ 990 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =       70.54 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =       70.54 s. Calling exchange_b
+
+-----------------------------------------------------------------
+ Calculation of Bare Exchange for representation  4
+
+ ELAPSED TIME =       70.55 s.  Starting readmatrix kernel_vc
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  44  data blocks to store matrix elements.
+ ELAPSED TIME =       70.84 s. Starting calculation of kernel
+Kernel done!        703 matrix elements calculated by PE  0 representation  4
+ Buffer sizes:  2
+ 703 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =       87.11 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =       87.11 s. Calling exchange_b
+
+-----------------------------------------------------------------
+ Calculation of Bare Exchange for representation  5
+
+ ELAPSED TIME =       87.12 s.  Starting readmatrix kernel_vc
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  44  data blocks to store matrix elements.
+ ELAPSED TIME =       87.41 s. Starting calculation of kernel
+Kernel done!        703 matrix elements calculated by PE  0 representation  5
+ Buffer sizes:  2
+ 703 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      103.68 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      103.69 s. Calling exchange_b
+
+-----------------------------------------------------------------
+ Calculation of Bare Exchange for representation  6
+
+ ELAPSED TIME =      103.70 s.  Starting readmatrix kernel_vc
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  55  data blocks to store matrix elements.
+ ELAPSED TIME =      103.98 s. Starting calculation of kernel
+Kernel done!       1176 matrix elements calculated by PE  0 representation  6
+ Buffer sizes:  2
+ 1176 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      125.11 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      125.11 s. Calling exchange_b
+
+-----------------------------------------------------------------
+ Calculation of Bare Exchange for representation  7
+
+ ELAPSED TIME =      125.12 s.  Starting readmatrix kernel_vc
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  57  data blocks to store matrix elements.
+ ELAPSED TIME =      125.41 s. Starting calculation of kernel
+Kernel done!       1275 matrix elements calculated by PE  0 representation  7
+ Buffer sizes:  2
+ 1275 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      147.49 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      147.49 s. Calling exchange_b
+
+-----------------------------------------------------------------
+ Calculation of Bare Exchange for representation  8
+
+ ELAPSED TIME =      147.50 s.  Starting readmatrix kernel_vc
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  62  data blocks to store matrix elements.
+ ELAPSED TIME =      147.79 s. Starting calculation of kernel
+Kernel done!       1540 matrix elements calculated by PE  0 representation  8
+ Buffer sizes:  2
+ 1540 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      172.09 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      172.09 s. Calling exchange_b
+
+-----------------------------------------------------------------
+ Calculation of Direct_bare kernel of BSE  Hamiltonian for representation  1
+
+ ELAPSED TIME =      172.10 s.  Starting readmatrix kernel_x
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  16  data blocks to store matrix elements.
+ ELAPSED TIME =      172.39 s. Starting calculation of kernel
+Kernel done!       2079 matrix elements calculated by PE  0 representation  1
+ Buffer sizes:  2
+ 2079 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      176.59 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+
+-----------------------------------------------------------------
+ Calculation of Direct_bare kernel of BSE  Hamiltonian for representation  2
+
+ ELAPSED TIME =      176.59 s.  Starting readmatrix kernel_x
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  13  data blocks to store matrix elements.
+ ELAPSED TIME =      176.89 s. Starting calculation of kernel
+Kernel done!       1068 matrix elements calculated by PE  0 representation  2
+ Buffer sizes:  2
+ 1068 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      179.65 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+
+-----------------------------------------------------------------
+ Calculation of Direct_bare kernel of BSE  Hamiltonian for representation  3
+
+ ELAPSED TIME =      179.65 s.  Starting readmatrix kernel_x
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  13  data blocks to store matrix elements.
+ ELAPSED TIME =      179.95 s. Starting calculation of kernel
+Kernel done!       1032 matrix elements calculated by PE  0 representation  3
+ Buffer sizes:  2
+ 1032 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      182.70 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+
+-----------------------------------------------------------------
+ Calculation of Direct_bare kernel of BSE  Hamiltonian for representation  4
+
+ ELAPSED TIME =      182.71 s.  Starting readmatrix kernel_x
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  11  data blocks to store matrix elements.
+ ELAPSED TIME =      183.00 s. Starting calculation of kernel
+Kernel done!        672 matrix elements calculated by PE  0 representation  4
+ Buffer sizes:  2
+ 672 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      184.84 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+
+-----------------------------------------------------------------
+ Calculation of Direct_bare kernel of BSE  Hamiltonian for representation  5
+
+ ELAPSED TIME =      184.84 s.  Starting readmatrix kernel_x
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  11  data blocks to store matrix elements.
+ ELAPSED TIME =      185.13 s. Starting calculation of kernel
+Kernel done!        592 matrix elements calculated by PE  0 representation  5
+ Buffer sizes:  2
+ 592 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      186.96 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+
+-----------------------------------------------------------------
+ Calculation of Direct_bare kernel of BSE  Hamiltonian for representation  6
+
+ ELAPSED TIME =      186.96 s.  Starting readmatrix kernel_x
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  13  data blocks to store matrix elements.
+ ELAPSED TIME =      187.29 s. Starting calculation of kernel
+Kernel done!       1032 matrix elements calculated by PE  0 representation  6
+ Buffer sizes:  2
+ 1032 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      190.04 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+
+-----------------------------------------------------------------
+ Calculation of Direct_bare kernel of BSE  Hamiltonian for representation  7
+
+ ELAPSED TIME =      190.04 s.  Starting readmatrix kernel_x
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  13  data blocks to store matrix elements.
+ ELAPSED TIME =      190.41 s. Starting calculation of kernel
+Kernel done!       1068 matrix elements calculated by PE  0 representation  7
+ Buffer sizes:  2
+ 1068 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      193.19 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+
+-----------------------------------------------------------------
+ Calculation of Direct_bare kernel of BSE  Hamiltonian for representation  8
+
+ ELAPSED TIME =      193.19 s.  Starting readmatrix kernel_x
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  15  data blocks to store matrix elements.
+ ELAPSED TIME =      193.48 s. Starting calculation of kernel
+Kernel done!       1472 matrix elements calculated by PE  0 representation  8
+ Buffer sizes:  2
+ 1472 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      197.18 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      197.18 s. Calling direct_b
+
+-----------------------------------------------------------------
+ Calculation of Direct_screened kernel of BSE Hamiltonian for representation  1
+
+ Seek representation   1 in pol_diag.dat.   1  1      55
+ ELAPSED TIME =      198.16 s.  Starting readmatrix kernel_vv c
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  16  data blocks to store matrix elements.
+ ELAPSED TIME =      198.45 s. Starting calculation of kernel
+Kernel done!        495 matrix elements calculated by PE  0 representation  1
+ Buffer sizes:  2
+ 495 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      202.47 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      202.47 s. Calling potential pot_c vcvv
+ ELAPSED TIME =      202.47 s.  Starting readmatrix kernel_vv f
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_f (TDLDA kernel)
+ Using  16  data blocks to store matrix elements.
+ ELAPSED TIME =      202.86 s. Starting calculation of kernel
+Kernel done!        495 matrix elements calculated by PE  0 representation  1
+ Buffer sizes:  2
+ 495 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      202.92 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      202.92 s. Calling potential pot_f vcvv
+ ELAPSED TIME =      202.92 s.  Starting readmatrix kernel_cc c
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  62  data blocks to store matrix elements.
+ ELAPSED TIME =      203.21 s. Starting calculation of kernel
+Kernel done!      12705 matrix elements calculated by PE  0 representation  1
+ Buffer sizes:  2
+ 12705 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      228.90 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      228.90 s. Calling potential pot_c1 vccc
+ ELAPSED TIME =      228.90 s.  Starting readmatrix kernel_cc f
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_f (TDLDA kernel)
+ Using  62  data blocks to store matrix elements.
+ ELAPSED TIME =      229.29 s. Starting calculation of kernel
+Kernel done!      12705 matrix elements calculated by PE  0 representation  1
+ Buffer sizes:  2
+ 12705 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      230.79 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      230.79 s. Calling potential pot_f1 vccc
+ ELAPSED TIME =      230.79 s. Calling direct_s
+ DIRECT , xsum =  0.000000000000000000E+00
+
+-----------------------------------------------------------------
+ Calculation of Direct_screened kernel of BSE Hamiltonian for representation  2
+
+ Seek representation   2 in pol_diag.dat.   2  1      45
+ ELAPSED TIME =      230.91 s.  Starting readmatrix kernel_vv c
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  13  data blocks to store matrix elements.
+ ELAPSED TIME =      231.24 s. Starting calculation of kernel
+Kernel done!        270 matrix elements calculated by PE  0 representation  2
+ Buffer sizes:  2
+ 270 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      233.92 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      233.92 s. Calling potential pot_c vcvv
+ ELAPSED TIME =      233.92 s.  Starting readmatrix kernel_vv f
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_f (TDLDA kernel)
+ Using  13  data blocks to store matrix elements.
+ ELAPSED TIME =      234.30 s. Starting calculation of kernel
+Kernel done!        270 matrix elements calculated by PE  0 representation  2
+ Buffer sizes:  2
+ 270 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      234.34 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      234.34 s. Calling potential pot_f vcvv
+ ELAPSED TIME =      234.34 s.  Starting readmatrix kernel_cc c
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  52  data blocks to store matrix elements.
+ ELAPSED TIME =      234.63 s. Starting calculation of kernel
+Kernel done!       8010 matrix elements calculated by PE  0 representation  2
+ Buffer sizes:  2
+ 8010 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      255.35 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      255.35 s. Calling potential pot_c1 vccc
+ ELAPSED TIME =      255.35 s.  Starting readmatrix kernel_cc f
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_f (TDLDA kernel)
+ Using  52  data blocks to store matrix elements.
+ ELAPSED TIME =      255.74 s. Starting calculation of kernel
+Kernel done!       8010 matrix elements calculated by PE  0 representation  2
+ Buffer sizes:  2
+ 8010 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      256.69 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      256.70 s. Calling potential pot_f1 vccc
+ ELAPSED TIME =      256.70 s. Calling direct_s
+ DIRECT , xsum =  0.000000000000000000E+00
+
+-----------------------------------------------------------------
+ Calculation of Direct_screened kernel of BSE Hamiltonian for representation  3
+
+ Seek representation   3 in pol_diag.dat.   3  1      44
+ ELAPSED TIME =      256.80 s.  Starting readmatrix kernel_vv c
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  13  data blocks to store matrix elements.
+ ELAPSED TIME =      257.08 s. Starting calculation of kernel
+Kernel done!        264 matrix elements calculated by PE  0 representation  3
+ Buffer sizes:  2
+ 264 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      259.77 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      259.77 s. Calling potential pot_c vcvv
+ ELAPSED TIME =      259.77 s.  Starting readmatrix kernel_vv f
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_f (TDLDA kernel)
+ Using  13  data blocks to store matrix elements.
+ ELAPSED TIME =      260.15 s. Starting calculation of kernel
+Kernel done!        264 matrix elements calculated by PE  0 representation  3
+ Buffer sizes:  2
+ 264 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      260.19 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      260.19 s. Calling potential pot_f vcvv
+ ELAPSED TIME =      260.19 s.  Starting readmatrix kernel_cc c
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  51  data blocks to store matrix elements.
+ ELAPSED TIME =      260.48 s. Starting calculation of kernel
+Kernel done!       7568 matrix elements calculated by PE  0 representation  3
+ Buffer sizes:  2
+ 7568 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      280.80 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      280.80 s. Calling potential pot_c1 vccc
+ ELAPSED TIME =      280.80 s.  Starting readmatrix kernel_cc f
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_f (TDLDA kernel)
+ Using  51  data blocks to store matrix elements.
+ ELAPSED TIME =      281.19 s. Starting calculation of kernel
+Kernel done!       7568 matrix elements calculated by PE  0 representation  3
+ Buffer sizes:  2
+ 7568 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      282.10 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      282.10 s. Calling potential pot_f1 vccc
+ ELAPSED TIME =      282.10 s. Calling direct_s
+ DIRECT , xsum =  0.000000000000000000E+00
+
+-----------------------------------------------------------------
+ Calculation of Direct_screened kernel of BSE Hamiltonian for representation  4
+
+ Seek representation   4 in pol_diag.dat.   4  1      37
+ ELAPSED TIME =      282.20 s.  Starting readmatrix kernel_vv c
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  11  data blocks to store matrix elements.
+ ELAPSED TIME =      282.49 s. Starting calculation of kernel
+Kernel done!        148 matrix elements calculated by PE  0 representation  4
+ Buffer sizes:  2
+ 148 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      284.27 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      284.27 s. Calling potential pot_c vcvv
+ ELAPSED TIME =      284.27 s.  Starting readmatrix kernel_vv f
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_f (TDLDA kernel)
+ Using  11  data blocks to store matrix elements.
+ ELAPSED TIME =      284.67 s. Starting calculation of kernel
+Kernel done!        148 matrix elements calculated by PE  0 representation  4
+ Buffer sizes:  2
+ 148 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      284.70 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      284.70 s. Calling potential pot_f vcvv
+ ELAPSED TIME =      284.70 s.  Starting readmatrix kernel_cc c
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  44  data blocks to store matrix elements.
+ ELAPSED TIME =      284.99 s. Starting calculation of kernel
+Kernel done!       6216 matrix elements calculated by PE  0 representation  4
+ Buffer sizes:  2
+ 6216 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      302.03 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      302.03 s. Calling potential pot_c1 vccc
+ ELAPSED TIME =      302.03 s.  Starting readmatrix kernel_cc f
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_f (TDLDA kernel)
+ Using  44  data blocks to store matrix elements.
+ ELAPSED TIME =      302.42 s. Starting calculation of kernel
+Kernel done!       6216 matrix elements calculated by PE  0 representation  4
+ Buffer sizes:  2
+ 6216 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      303.16 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      303.16 s. Calling potential pot_f1 vccc
+ ELAPSED TIME =      303.16 s. Calling direct_s
+ DIRECT , xsum =  0.000000000000000000E+00
+
+-----------------------------------------------------------------
+ Calculation of Direct_screened kernel of BSE Hamiltonian for representation  5
+
+ Seek representation   5 in pol_diag.dat.   5  1      37
+ ELAPSED TIME =      303.25 s.  Starting readmatrix kernel_vv c
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  11  data blocks to store matrix elements.
+ ELAPSED TIME =      303.54 s. Starting calculation of kernel
+Kernel done!        148 matrix elements calculated by PE  0 representation  5
+ Buffer sizes:  2
+ 148 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      305.32 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      305.32 s. Calling potential pot_c vcvv
+ ELAPSED TIME =      305.32 s.  Starting readmatrix kernel_vv f
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_f (TDLDA kernel)
+ Using  11  data blocks to store matrix elements.
+ ELAPSED TIME =      305.71 s. Starting calculation of kernel
+Kernel done!        148 matrix elements calculated by PE  0 representation  5
+ Buffer sizes:  2
+ 148 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      305.73 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      305.73 s. Calling potential pot_f vcvv
+ ELAPSED TIME =      305.73 s.  Starting readmatrix kernel_cc c
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  44  data blocks to store matrix elements.
+ ELAPSED TIME =      306.02 s. Starting calculation of kernel
+Kernel done!       5476 matrix elements calculated by PE  0 representation  5
+ Buffer sizes:  2
+ 5476 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      322.97 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      322.97 s. Calling potential pot_c1 vccc
+ ELAPSED TIME =      322.97 s.  Starting readmatrix kernel_cc f
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_f (TDLDA kernel)
+ Using  44  data blocks to store matrix elements.
+ ELAPSED TIME =      323.38 s. Starting calculation of kernel
+Kernel done!       5476 matrix elements calculated by PE  0 representation  5
+ Buffer sizes:  2
+ 5476 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      324.04 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      324.04 s. Calling potential pot_f1 vccc
+ ELAPSED TIME =      324.04 s. Calling direct_s
+ DIRECT , xsum =  0.000000000000000000E+00
+
+-----------------------------------------------------------------
+ Calculation of Direct_screened kernel of BSE Hamiltonian for representation  6
+
+ Seek representation   6 in pol_diag.dat.   6  1      48
+ ELAPSED TIME =      324.12 s.  Starting readmatrix kernel_vv c
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  13  data blocks to store matrix elements.
+ ELAPSED TIME =      324.40 s. Starting calculation of kernel
+Kernel done!        288 matrix elements calculated by PE  0 representation  6
+ Buffer sizes:  2
+ 288 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      327.09 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      327.09 s. Calling potential pot_c vcvv
+ ELAPSED TIME =      327.09 s.  Starting readmatrix kernel_vv f
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_f (TDLDA kernel)
+ Using  13  data blocks to store matrix elements.
+ ELAPSED TIME =      327.48 s. Starting calculation of kernel
+Kernel done!        288 matrix elements calculated by PE  0 representation  6
+ Buffer sizes:  2
+ 288 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      327.52 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      327.52 s. Calling potential pot_f vcvv
+ ELAPSED TIME =      327.52 s.  Starting readmatrix kernel_cc c
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  55  data blocks to store matrix elements.
+ ELAPSED TIME =      327.81 s. Starting calculation of kernel
+Kernel done!       8256 matrix elements calculated by PE  0 representation  6
+ Buffer sizes:  2
+ 8256 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      349.92 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      349.92 s. Calling potential pot_c1 vccc
+ ELAPSED TIME =      349.92 s.  Starting readmatrix kernel_cc f
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_f (TDLDA kernel)
+ Using  55  data blocks to store matrix elements.
+ ELAPSED TIME =      350.31 s. Starting calculation of kernel
+Kernel done!       8256 matrix elements calculated by PE  0 representation  6
+ Buffer sizes:  2
+ 8256 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      351.27 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      351.27 s. Calling potential pot_f1 vccc
+ ELAPSED TIME =      351.28 s. Calling direct_s
+ DIRECT , xsum =  0.000000000000000000E+00
+
+-----------------------------------------------------------------
+ Calculation of Direct_screened kernel of BSE Hamiltonian for representation  7
+
+ Seek representation   7 in pol_diag.dat.   7  1      50
+ ELAPSED TIME =      351.38 s.  Starting readmatrix kernel_vv c
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  13  data blocks to store matrix elements.
+ ELAPSED TIME =      351.66 s. Starting calculation of kernel
+Kernel done!        300 matrix elements calculated by PE  0 representation  7
+ Buffer sizes:  2
+ 300 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      354.35 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      354.35 s. Calling potential pot_c vcvv
+ ELAPSED TIME =      354.35 s.  Starting readmatrix kernel_vv f
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_f (TDLDA kernel)
+ Using  13  data blocks to store matrix elements.
+ ELAPSED TIME =      354.74 s. Starting calculation of kernel
+Kernel done!        300 matrix elements calculated by PE  0 representation  7
+ Buffer sizes:  2
+ 300 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      354.78 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      354.78 s. Calling potential pot_f vcvv
+ ELAPSED TIME =      354.78 s.  Starting readmatrix kernel_cc c
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  57  data blocks to store matrix elements.
+ ELAPSED TIME =      355.07 s. Starting calculation of kernel
+Kernel done!       8900 matrix elements calculated by PE  0 representation  7
+ Buffer sizes:  2
+ 8900 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      378.12 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      378.12 s. Calling potential pot_c1 vccc
+ ELAPSED TIME =      378.12 s.  Starting readmatrix kernel_cc f
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_f (TDLDA kernel)
+ Using  57  data blocks to store matrix elements.
+ ELAPSED TIME =      378.51 s. Starting calculation of kernel
+Kernel done!       8900 matrix elements calculated by PE  0 representation  7
+ Buffer sizes:  2
+ 8900 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      379.56 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      379.56 s. Calling potential pot_f1 vccc
+ ELAPSED TIME =      379.56 s. Calling direct_s
+ DIRECT , xsum =  0.000000000000000000E+00
+
+-----------------------------------------------------------------
+ Calculation of Direct_screened kernel of BSE Hamiltonian for representation  8
+
+ Seek representation   8 in pol_diag.dat.   8  1      55
+ ELAPSED TIME =      379.67 s.  Starting readmatrix kernel_vv c
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  15  data blocks to store matrix elements.
+ ELAPSED TIME =      379.96 s. Starting calculation of kernel
+Kernel done!        440 matrix elements calculated by PE  0 representation  8
+ Buffer sizes:  2
+ 440 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      383.54 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      383.54 s. Calling potential pot_c vcvv
+ ELAPSED TIME =      383.54 s.  Starting readmatrix kernel_vv f
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_f (TDLDA kernel)
+ Using  15  data blocks to store matrix elements.
+ ELAPSED TIME =      383.93 s. Starting calculation of kernel
+Kernel done!        440 matrix elements calculated by PE  0 representation  8
+ Buffer sizes:  2
+ 440 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      383.99 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      383.99 s. Calling potential pot_f vcvv
+ ELAPSED TIME =      383.99 s.  Starting readmatrix kernel_cc c
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x (Hartree/Exchange kernel)
+ Using  62  data blocks to store matrix elements.
+ ELAPSED TIME =      384.28 s. Starting calculation of kernel
+Kernel done!      10120 matrix elements calculated by PE  0 representation  8
+ Buffer sizes:  2
+ 10120 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      409.70 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      409.70 s. Calling potential pot_c1 vccc
+ ELAPSED TIME =      409.70 s.  Starting readmatrix kernel_cc f
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_f (TDLDA kernel)
+ Using  62  data blocks to store matrix elements.
+ ELAPSED TIME =      410.09 s. Starting calculation of kernel
+Kernel done!      10120 matrix elements calculated by PE  0 representation  8
+ Buffer sizes:  2
+ 10120 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =      411.29 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+ ELAPSED TIME =      411.30 s. Calling potential pot_f1 vccc
+ ELAPSED TIME =      411.30 s. Calling direct_s
+ DIRECT , xsum =  0.000000000000000000E+00
+
+#################################################################
+  Calculation of BSE eigenvectors for representation  1
+  number of pair transitions =  55
+#################################################################
+
+  Lowest eigenvalues for this representation (eV) : 
+ 10.6615455378005759
+ 10.8307944147660535
+ 12.2186765458555229
+
+#################################################################
+  Calculation of BSE eigenvectors for representation  2
+  number of pair transitions =  45
+#################################################################
+
+  Lowest eigenvalues for this representation (eV) : 
+ 5.76465910698721906
+ 8.38834983258379729
+ 10.0087874469145266
+
+#################################################################
+  Calculation of BSE eigenvectors for representation  3
+  number of pair transitions =  44
+#################################################################
+
+  Lowest eigenvalues for this representation (eV) : 
+ 5.76462337453891216
+ 8.38834963100947384
+ 10.0087819180877222
+
+#################################################################
+  Calculation of BSE eigenvectors for representation  4
+  number of pair transitions =  37
+#################################################################
+
+  Lowest eigenvalues for this representation (eV) : 
+ 10.6616093524962032
+ 10.6870231925413872
+ 12.2186735612703341
+
+#################################################################
+  Calculation of BSE eigenvectors for representation  5
+  number of pair transitions =  37
+#################################################################
+
+  Lowest eigenvalues for this representation (eV) : 
+ 9.66718617578822403
+ 9.72383810411134597
+ 11.2404834278232482
+
+#################################################################
+  Calculation of BSE eigenvectors for representation  6
+  number of pair transitions =  48
+#################################################################
+
+  Lowest eigenvalues for this representation (eV) : 
+ 3.23362184524651397
+ 9.69923129279706941
+ 11.0510976656710618
+
+#################################################################
+  Calculation of BSE eigenvectors for representation  7
+  number of pair transitions =  50
+#################################################################
+
+  Lowest eigenvalues for this representation (eV) : 
+ 3.23365411088642452
+ 9.69923187895769701
+ 11.0511089713424191
+
+#################################################################
+  Calculation of BSE eigenvectors for representation  8
+  number of pair transitions =  55
+#################################################################
+
+  Lowest eigenvalues for this representation (eV) : 
+ 9.42710532029457404
+ 9.66717933445006672
+ 9.99302519555420865
+
+-----------------------------------------------------------------
+
+ Checking oscillator strength sum rule 
+ Ratio between numerical and exact values : 
+                            Field polarization 
+                           x  ----  y  ----  z  ---- average
+      BSE Sum Rule  =   1.2026   1.2026   2.2580      1.5544
+
+-----------------------------------------------------------------
+
+ Static polarizability (a.u.) 
+                                 Field polarization 
+                                x  ----  y  ----  z  ---- average
+     BSE Polarizability =    25.2679  25.2680  52.8446     34.4602
+
+-----------------------------------------------------------------
+
+  Lowest eigenvalues from BSE, all representations
+ Order      Energy (eV)  Representation
+    1        3.233622         6
+    2        3.233654         7
+    3        5.764623         3
+    4        5.764659         2
+    5        8.388350         3
+    6        8.388350         2
+    7        9.427105         8
+    8        9.667179         8
+    9        9.667186         5
+   10        9.699231         6
+ 
+
+-----------------------------------------------------------------
+                               CPU [s]     WALL [s]           #
+
+ SETUP_B:                         5.710        5.727          1
+ KERNEL:                        403.480      404.166         56
+ DIAG_POL:                        0.000        0.000          0
+ POTENTIAL:                       0.010        0.005         32
+ EXCHANGE_B:                      0.000        0.008          8
+ DIRECT_B:                        0.980        0.974          1
+ DIRECT_S:                        0.760        0.757          8
+ DIRECT_MIX:                      0.000        0.000          0
+ 
+ DIAG_BSE:                        0.020        0.012          1
+ POISSON_FFT:                   305.720      306.138       1680
+ EIGENSOLVER:                     0.000        0.000          0
+ INTEGRATION:                    19.630       20.039       1260
+
+                TOTAL           411.430      412.278
+
+ Finished 2009 Jan 26 11:36: 0  -420 UTC
+-----------------------------------------------------------------

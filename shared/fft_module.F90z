@@ -1,0 +1,1554 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Module for FFT and related functions. All subroutines in this module
+! are public and fairly independent from each other. The purpose of
+! grouping them in a single module is that most of them use the same
+! data: FFT boxes and Coulomb boxes.
+!
+! FFT is actually performed by external libraries. The coding below
+! includes interface with four different librarires: FFTW 2.*, FFTW 3.*,
+! MKL and ESSL. Other libraries can be used if you build the necessary
+! interfaces (look at subroutines do_FFT, initialize_FFT, finalize_FFT,
+! create_coul_0D, create_coul_1D, and adjust_fft).
+!
+! Notice that, contrary to FFTW and MKL, ESSL defines FFTs with an extra
+! sign in the exponent (what do they want to be different from everybody
+! else?). This is accounted for in the calls to dft3, drcft3, etc.
+!
+! Calls to initialize_FFT should precede calls to other subroutines in
+! this module. Once FFT tasks are finished, one should make a call to
+! finalize_FFT in order to deallocate data. If more FFTs are done at
+! a later time (with the same grid size or not), initialize_FFT should
+! be called again.
+!
+! Potentials are always evaluated in units of Ry, therefore e^2 = 2.
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+#ifndef CPLX
+module fft_module
+
+  use myconstants
+  use typedefs
+#ifdef USEMKL
+  use mkl_dfti
+#endif
+
+  public
+
+  ! FFTW constants
+#if defined USEFFTW2 || USEFFTW3
+  integer, parameter :: fftw_forward = -1
+  integer, parameter :: fftw_backward = 1
+  integer, parameter :: fftw_measure = 1
+#endif
+#ifdef USEFFTW2
+  integer, parameter :: fftw_real_to_complex = -1
+  integer, parameter :: fftw_complex_to_real = 1
+  integer, parameter :: fftw_in_place = 8
+  integer, parameter :: fftw_use_wisdom = 16
+#endif
+
+  ! Number of extra points between two consecutive grid points in real space
+  ! (along directions y, z only). See subroutine create_coul_1D.
+  integer, parameter :: n_in = 2
+  ! Number of extra periodic cells beyond the original periodic cell
+  ! (along directions y, z only).
+  integer, parameter :: n_out = 2
+  ! Zero-vector threshold. Vectors q with magnitude less than this are assumed
+  ! to be zero.
+  real(dp), parameter :: qzero = 1.d-6
+  ! Euler-Mascheroni constant
+  real(dp), parameter :: euler_m = 0.57721566490153286060651209_dp
+
+  type fourier_transform
+     ! shape of FFT grid, nfft(4) is used in real FFTs only
+     integer :: nfft(4)
+     ! length of FFT boxes
+     integer :: n_size
+     ! scale = 1/( nfft(1) * nfft(2) * nfft(3) )
+     real(dp) :: scale
+     ! cutoff radius (in units of Bohr radius) in Coulomb potential,
+     ! potential is zero beyond this value
+     real(dp) :: trunc
+     ! Coulomb potential in reciprocal space (Ry units)
+     real(dp), pointer :: dcoul(:,:,:)
+     complex(dpc), pointer :: zcoul(:,:,:)
+     ! FFT box
+     real(dp), pointer :: dbox(:,:,:)
+     complex(dpc), pointer :: zbox(:,:,:)
+
+#if defined USEFFTW2 || USEFFTW3
+     ! FFTW plans, used by FFTW only
+     integer (kind=8) :: plus_plan, minus_plan
+#elif USEMKL
+     ! MKL descriptors, used by MKL only
+     type(dfti_descriptor), pointer :: plus_desc, minus_desc
+     complex(dpc), pointer :: cbox(:,:,:)
+#elif USEESSL
+     ! ESSL increments, used by ESSL only
+     integer :: inc(4)
+#endif
+  end type fourier_transform
+
+  ! FFT data
+  type (fourier_transform) :: fft_box
+
+contains
+
+#endif
+  !===================================================================
+  !
+  ! For an input density rho, solves the Poisson equation in
+  ! reciprocal space and returns the potential stored in variable rho.
+  ! The Poisson equation is solved in reciprocal space, by doing FFT
+  ! in the original density, multiplying that by the Coulomb potential,
+  ! and doing FFT back-transform to get the final potential in real
+  ! space.
+  !
+  ! INPUT:
+  !    rho : density for which a potential will be computed
+  !    irp : representation of input density (1 for fully symmetric densities)
+  !
+  ! OUTPUT:
+  !    rho : computed potential
+  !         V(r) = int_dr' rho(r') * e^2/|r - r'|
+  !         Laplacian[ V(r) ] = -4 * pi * e^2 * rho(r)
+  !
+  !-------------------------------------------------------------------
+  subroutine Zpoisson(gvec,rho,irp)
+
+    use typedefs
+    implicit none
+
+    ! arguments
+    type (gspace), intent(in):: gvec
+    SCALAR, intent(inout) :: rho(gvec%nr)
+    integer, intent(in) :: irp
+
+    ! local variables
+    integer :: jj, itr, gg(3)
+    real(dp) :: tsec(2), charac(gvec%syms%ntrans)
+    SCALAR :: xele, zscale
+
+    !-------------------------------------------------------------------
+    ! Put density in fft box.
+    !
+    fft_box%Zbox = Zzero
+    charac = real(gvec%syms%chi(irp,:),dp)
+    do jj = 1, gvec%nr
+       do itr = 1, gvec%syms%ntrans
+          call unfold(gvec%r(1,jj),gvec%syms%trans(1,1,itr),gvec%shift,gg)
+          fft_box%Zbox(gg(1),gg(2),gg(3)) = rho(jj) * charac(itr)
+       enddo
+    end do
+    !
+    ! Fourier transform: box(r) -> FFT[ box(r) ] = box(G).
+    !
+    call timacc(11,1,tsec)
+    call Zdo_FFT(-1,fft_box)
+    call timacc(11,2,tsec)
+    !
+    ! Solve Poisson's equation by multiplying it with the Coulomb potential.
+    ! box(G) -> box(G) * 4 * pi * e^2 / G^2
+    !
+    call Zmultiply_vec(fft_box%n_size,fft_box%Zcoul,fft_box%Zbox)
+    !
+    ! Inverse Fourier transform: box(G) = FFT[ box(r) ] -> box(r).
+    !
+    call timacc(11,1,tsec)
+    call Zdo_FFT(1,fft_box)
+    call timacc(11,2,tsec)
+    !
+    ! Reconstruct rho in irreducible wedge and include the normalization
+    ! factor.
+    !
+    rho = Zzero
+    do jj = 1, gvec%nr
+       gg = gvec%r(:,jj)
+       rho(jj) = fft_box%Zbox(gg(1),gg(2),gg(3))
+    end do
+    zscale = fft_box%scale
+    call Zscal(gvec%nr,zscale,rho,1)
+
+  end subroutine Zpoisson
+
+  subroutine Zfullpoisson(gvec,rho,outunit,verbose)
+  use typedefs
+  implicit none
+
+    ! arguments
+    type (gspace), intent(in):: gvec
+    SCALAR, intent(inout) :: rho(gvec%nr * gvec%syms%ntrans)
+    integer, intent(in) :: outunit
+    logical, intent(in) :: verbose
+
+    ! local variables
+    integer :: jj, itr, gg(3), ii, kk, count
+    real(dp) :: tsec(2)
+    SCALAR :: xele, zscale
+
+    !-------------------------------------------------------------------
+    ! Put density in fft box.
+    !
+    ! Here rho is stored in full grid
+    fft_box%Zbox = Zzero
+    do jj = 1, gvec%nr
+       do itr = 1, gvec%syms%ntrans
+          call unfold(gvec%r(1,jj),gvec%syms%trans(1,1,itr),gvec%shift,gg)
+          fft_box%Zbox(gg(1),gg(2),gg(3)) = rho((jj-1)*gvec%syms%ntrans + itr) 
+       enddo
+    end do
+    count=0
+    if(verbose) then
+       write(outunit,*) " inside zfullpoisson "
+       write(outunit,*) " fft%Zcoul = "
+       do ii = -fft_box%nfft(1)/2,fft_box%nfft(1)/2+1
+          do jj = -fft_box%nfft(2)/2,fft_box%nfft(2)/2-1
+             do kk = -fft_box%nfft(3)/2,fft_box%nfft(3)/2-1
+                count = count + 1
+                if(abs(fft_box%Zbox(ii,jj,kk))>0.01) &
+                    write(outunit, '(3i7,f20.8)') ii,jj,kk,fft_box%Zcoul(ii,jj,kk)
+             enddo
+          enddo
+       enddo
+    endif
+    !
+    ! Fourier transform: box(r) -> FFT[ box(r) ] = box(G).
+    !
+    call timacc(11,1,tsec)
+    call Zdo_FFT(-1,fft_box)
+    call timacc(11,2,tsec)
+    !
+    ! Solve Poisson's equation by multiplying it with the Coulomb potential.
+    ! box(G) -> box(G) * 4 * pi * e^2 / G^2
+    !
+    call Zmultiply_vec(fft_box%n_size,fft_box%Zcoul,fft_box%Zbox)
+    !
+    ! Inverse Fourier transform: box(G) = FFT[ box(r) ] -> box(r).
+    !
+    call timacc(11,1,tsec)
+    call Zdo_FFT(1,fft_box)
+    call timacc(11,2,tsec)
+    if(verbose) then
+       write(outunit,*) "After fft, fft%Zbox = "
+       count=0
+       do ii = -fft_box%nfft(1)/2,fft_box%nfft(1)/2+1
+          do jj = -fft_box%nfft(2)/2,fft_box%nfft(2)/2-1
+             do kk = -fft_box%nfft(3)/2,fft_box%nfft(3)/2-1
+                count = count + 1
+                if(abs(fft_box%Zbox(ii,jj,kk)*fft_box%scale)>1.00) &
+                    write(outunit, '(3i7,f20.8)') ii,jj,kk, &
+                      fft_box%Zbox(ii,jj,kk)*fft_box%scale
+             enddo
+          enddo
+       enddo
+    endif
+    !
+    ! Reconstruct rho in irreducible wedge and include the normalization
+    ! factor.
+    !
+    rho = Zzero
+    zscale = fft_box%scale
+    if(verbose) write(outunit,*) "zscale: ", zscale
+    if(verbose) write(outunit,*) "rho = "
+    do jj = 1, gvec%nr
+       do itr = 1,gvec%syms%ntrans
+          call unfold(gvec%r(1,jj),gvec%syms%trans(1,1,itr),gvec%shift,gg)
+          rho((jj-1)*gvec%syms%ntrans + itr) = fft_box%Zbox(gg(1),gg(2),gg(3))
+       enddo
+    end do
+    call Zscal(gvec%nr*gvec%syms%ntrans,zscale,rho,1)
+    do jj = 1, gvec%nr
+       do itr = 1,gvec%syms%ntrans
+          call unfold(gvec%r(1,jj),gvec%syms%trans(1,1,itr),gvec%shift,gg)
+          if(verbose .and. abs(rho((jj-1)*gvec%syms%ntrans + itr))>1.0) &
+              write(outunit,'(6i4,i8,f14.7)') & 
+              gvec%r(1,jj),gvec%r(2,jj),gvec%r(3,jj),gg(1),gg(2),gg(3),(jj-1)*gvec%syms%ntrans+itr,rho((jj-1)*gvec%syms%ntrans + itr)
+       enddo
+    end do
+
+  end subroutine Zfullpoisson
+
+  !===================================================================
+  !
+  ! Do an FFT in place: destroys contents of Zbox
+  ! and replaces them by the Fourier transform.
+  !
+  ! The FFT done is:
+  !
+  !   Zbox(p) <- sum_j { Zbox(j)*e^{sign*i*j.p} }
+  !
+  ! where j and p are integer 3 vectors ranging over Nfft(1:3).
+  !
+  ! MKL has a problem with argument overloading, so it does out-of-place
+  ! FFT instead.
+  !
+  ! FFTW with real algebra has a funny data layout which requires a 4-th
+  ! dimension ( nfft(4) ).
+  !
+  !-------------------------------------------------------------------
+  subroutine Zdo_FFT(sign,fft)
+
+    use myconstants
+#ifdef USEMKL
+    use mkl_dfti
+#endif
+    implicit none
+    ! direction: sign = 1 does FFT from reciprocal space to real space
+    !           sign = -1 does FFT from real space to reciprocal space
+    integer, intent(in) :: sign
+    ! FFT data
+    type (fourier_transform), intent(inout) :: fft
+
+    ! local variables
+#ifdef USEESSL
+    real(dp) :: xdummy
+#endif
+#ifdef USEMKL
+    integer :: info
+#endif
+
+    if (sign /= 1 .and. sign /= -1) &
+         call die('sign is not 1 or -1 in do_FFT')
+
+#ifdef USEFFTW2
+#ifdef CPLX
+    if (sign == 1) then
+       call fftwnd_f77_one(fft%plus_plan,fft%Zbox,0)
+    else if (sign == -1) then
+       call fftwnd_f77_one(fft%minus_plan,fft%Zbox,0)
+    endif
+#else
+    if (sign == 1) then
+       call rfftwnd_f77_one_complex_to_real(fft%plus_plan,fft%Zbox,0)
+    else if (sign == -1) then
+       call rfftwnd_f77_one_real_to_complex(fft%minus_plan,fft%Zbox,0)
+    endif
+#endif
+#elif USEFFTW3
+    if (sign == 1) then
+       call dfftw_execute( fft%plus_plan )
+    else if (sign == -1) then
+       call dfftw_execute( fft%minus_plan )
+    endif
+#elif USEMKL
+#ifdef CPLX
+    if (sign == 1) then
+       info = dfti_compute_backward_z( fft%plus_desc, fft%Zbox)
+    else if (sign == -1) then
+       info = dfti_compute_forward_z( fft%minus_desc, fft%Zbox)
+    endif
+#else
+    if (sign == 1) then
+       call dcopy(fft%n_size,fft%Zbox,1,fft%cbox,1)
+       info = dfti_compute_backward_zd_out( fft%plus_desc, &
+            fft%cbox, fft%Zbox)
+    else if (sign == -1) then
+       info = dfti_compute_forward_dz_out( fft%minus_desc, &
+            fft%Zbox, fft%cbox)
+       call dcopy(fft%n_size,fft%cbox,1,fft%Zbox,1)
+    endif
+#endif
+    if (info /= dfti_no_error) call die('ERROR: MKL DftiCompute failed')
+#elif USEESSL
+#ifdef CPLX
+    call dcft3(fft%Zbox,fft%inc(1),fft%inc(2),fft%Zbox,fft%inc(1), &
+         fft%inc(2),fft%nfft(1),fft%nfft(2),fft%nfft(3),-sign,one,xdummy,0)
+#else
+    if (sign == 1) then
+       call dcrft3(fft%Zbox,fft%inc(3),fft%inc(4),fft%Zbox,fft%inc(1), &
+            fft%inc(2),fft%nfft(1),fft%nfft(2),fft%nfft(3),-1,one,xdummy,0)
+    else if (sign == -1) then
+       call drcft3(fft%Zbox,fft%inc(1),fft%inc(2),fft%Zbox,fft%inc(3), &
+            fft%inc(4),fft%nfft(1),fft%nfft(2),fft%nfft(3),1,one,xdummy,0)
+    endif
+#endif
+#endif
+
+  end subroutine Zdo_FFT
+  !===================================================================
+  !
+  ! Initialize FFT environment. All arrays in structure "fft" are allocated
+  ! here. Value of fft%trunc and fft%nfft are defined in parent routine.
+  !
+  !-------------------------------------------------------------------
+  subroutine Zinitialize_FFT(inode,fft)
+
+    use myconstants
+#ifdef USEMKL
+    use mkl_dfti
+#endif
+    implicit none
+
+    ! arguments
+    ! rank of current PE, for I/O only
+    integer, intent(in) :: inode
+    ! FFT data
+    type (fourier_transform), intent(inout) :: fft
+
+    ! local variables
+    logical :: verbose
+    integer :: info
+    character (len=100) :: str
+#ifdef USEMKL
+    integer :: strides_in(4), strides_out(4)
+#endif
+
+    verbose = .false.
+    if (inode == 0) verbose = .true.
+    fft%scale = one/((one*fft%nfft(1))*(one*fft%nfft(2))*(one*fft%nfft(3)))
+
+    ! Allocate boxes: Zbox holds densities, Zcoul holds the Coulomb potential.
+#ifdef CPLX
+    fft%n_size = fft%nfft(1) * fft%nfft(2) * fft%nfft(3)
+    allocate( fft%Zbox(-fft%nfft(1)/2:fft%nfft(1)/2-1, &
+#else
+    fft%n_size = fft%nfft(4) * fft%nfft(2) * fft%nfft(3)
+    allocate( fft%Zbox(-fft%nfft(1)/2:fft%nfft(1)/2+1, &
+#endif
+                     -fft%nfft(2)/2:fft%nfft(2)/2-1, &
+                     -fft%nfft(3)/2:fft%nfft(3)/2-1), stat=info)
+    call alccheck('Zbox','intialize_FFT',fft%n_size,info)
+
+#ifdef CPLX
+    allocate( fft%Zcoul(-fft%nfft(1)/2:fft%nfft(1)/2-1, &
+#else
+    allocate( fft%Zcoul(-fft%nfft(1)/2:fft%nfft(1)/2+1, &
+#endif
+                    -fft%nfft(2)/2:fft%nfft(2)/2-1, &
+                    -fft%nfft(3)/2:fft%nfft(3)/2-1), stat=info)
+    call alccheck('fft%Zcoul','initialize_FFT',fft%n_size,info)
+
+#ifdef USEFFTW2
+    ! Initialize FFTW2 plans.
+    write(str,'(a,3(i4,a))') ' Creating ', &
+         fft%nfft(1),' x ',fft%nfft(2),' x ',fft%nfft(3),' FFTW 2 plans.'
+    call stopwatch(verbose,str)
+#ifdef CPLX
+    call fftwnd_f77_create_plan(fft%plus_plan,3,fft%nfft(1:3), &
+         fftw_backward,fftw_measure+fftw_in_place+fftw_use_wisdom)
+    call fftwnd_f77_create_plan(fft%minus_plan,3,fft%nfft(1:3), &
+         fftw_forward,fftw_measure+fftw_in_place+fftw_use_wisdom)
+#else
+    call rfftwnd_f77_create_plan(fft%plus_plan,3,fft%nfft(1:3), &
+         fftw_complex_to_real,fftw_measure+fftw_in_place+fftw_use_wisdom)
+    call rfftwnd_f77_create_plan(fft%minus_plan,3,fft%nfft(1:3), &
+         fftw_real_to_complex,fftw_measure+fftw_in_place+fftw_use_wisdom)
+#endif
+#elif USEFFTW3
+    ! Initialize FFTW3 plans.
+    write(str,'(a,3(i4,a))') ' Creating ', &
+         fft%nfft(1),' x ',fft%nfft(2),' x ',fft%nfft(3),' FFTW 3 plans.'
+    call stopwatch(verbose,str)
+#ifdef CPLX
+    call dfftw_plan_dft_3d(fft%plus_plan,fft%nfft(1),fft%nfft(2), &
+         fft%nfft(3),fft%Zbox,fft%Zbox, fftw_backward, fftw_measure)
+    call dfftw_plan_dft_3d(fft%minus_plan,fft%nfft(1),fft%nfft(2), &
+         fft%nfft(3),fft%Zbox,fft%Zbox, fftw_forward, fftw_measure)
+#else
+    call dfftw_plan_dft_c2r_3d(fft%plus_plan,fft%nfft(1),fft%nfft(2), &
+         fft%nfft(3),fft%Zbox,fft%Zbox, fftw_measure)
+    call dfftw_plan_dft_r2c_3d(fft%minus_plan,fft%nfft(1),fft%nfft(2), &
+         fft%nfft(3),fft%Zbox,fft%Zbox, fftw_measure)
+#endif
+#elif USEMKL
+    write(str,'(a,3(i4,a))') ' Creating ', &
+         fft%nfft(1),' x ',fft%nfft(2),' x ',fft%nfft(3),' FFT MKL descriptors.'
+    call stopwatch(verbose,str)
+
+    strides_in(1) = 0
+    strides_in(2) = 1
+    strides_out(1) = 0
+    strides_out(2) = 1
+#ifdef CPLX
+    strides_in(3) = fft%nfft(1)
+    strides_in(4) = fft%nfft(2) * fft%nfft(1)
+    strides_out(3) = fft%nfft(1)
+    strides_out(4) = fft%nfft(2) * fft%nfft(1)
+#else
+    strides_in(3) = fft%nfft(4)
+    strides_in(4) = fft%nfft(2) * fft%nfft(4)
+    strides_out(3) = fft%nfft(4) / 2
+    strides_out(4) = fft%nfft(2) * fft%nfft(4) / 2
+    allocate( fft%cbox(1:fft%nfft(1)/2+1, &
+                   -fft%nfft(2)/2:fft%nfft(2)/2-1, &
+                   -fft%nfft(3)/2:fft%nfft(3)/2-1), stat=info)
+    call alccheck('cbox','intialize_FFT',fft%n_size/2,info)
+#endif
+
+    ! Initialize real->complex MKL descriptor.
+#ifdef CPLX
+    info = dfticreatedescriptor( fft%minus_desc, dfti_double,  &
+         dfti_complex, 3, fft%nfft(1:3))
+#else
+    info = dfticreatedescriptor( fft%minus_desc, dfti_double,  &
+         dfti_real, 3, fft%nfft(1:3))
+#endif
+    if (.not. dftierrorclass(info, dfti_no_error)) &
+         call die('ERROR: MKL DftiCreateDescriptor minus failed')
+#ifndef CPLX
+    info = dftisetvalue( fft%minus_desc, dfti_placement, dfti_not_inplace )
+    if (.not. dftierrorclass(info, dfti_no_error)) &
+         call die('ERROR: MKL DftiSetValue minus placement failed')
+    info = dftisetvalue( fft%minus_desc, dfti_conjugate_even_storage, &
+         dfti_complex_complex )
+    if (.not. dftierrorclass(info, dfti_no_error)) &
+         call die('ERROR: MKL DftiSetValue minus storage failed')
+#endif
+    info = dftisetvalue( fft%minus_desc, dfti_input_strides, strides_in )
+    if (.not. dftierrorclass(info, dfti_no_error)) &
+         call die('ERROR: MKL DftiSetValue minus strides_in failed')
+    info = dftisetvalue( fft%minus_desc, dfti_output_strides, strides_out )
+    if (.not. dftierrorclass(info, dfti_no_error)) &
+         call die('ERROR: MKL DftiSetValue minus strides_out failed')
+    info = dfticommitdescriptor( fft%minus_desc )
+    if (.not. dftierrorclass(info, dfti_no_error)) &
+         call die('ERROR: MKL DftiCommitDescriptor minus failed')
+
+    ! Initialize complex->real MKL descriptor.
+#ifdef CPLX
+    info = dfticreatedescriptor( fft%plus_desc, dfti_double,  &
+         dfti_complex, 3, fft%nfft(1:3))
+#else
+    info = dfticreatedescriptor( fft%plus_desc, dfti_double,  &
+         dfti_real, 3, fft%nfft(1:3))
+#endif
+    if (.not. dftierrorclass(info, dfti_no_error)) &
+         call die('ERROR: MKL DftiCreateDescriptor plus failed')
+#ifndef CPLX
+    info = dftisetvalue( fft%plus_desc, dfti_placement, dfti_not_inplace )
+    if (.not. dftierrorclass(info, dfti_no_error)) &
+         call die('ERROR: MKL DftiSetValue plus placement failed')
+    info = dftisetvalue( fft%plus_desc, dfti_conjugate_even_storage, &
+         dfti_complex_complex )
+    if (.not. dftierrorclass(info, dfti_no_error)) &
+         call die('ERROR: MKL DftiSetValue plus storage failed')
+#endif
+    info = dftisetvalue( fft%plus_desc, dfti_output_strides, strides_in )
+    if (.not. dftierrorclass(info, dfti_no_error)) &
+         call die('ERROR: MKL DftiSetValue plus strides_out failed')
+    info = dftisetvalue( fft%plus_desc, dfti_input_strides, strides_out )
+    if (.not. dftierrorclass(info, dfti_no_error)) &
+         call die('ERROR: MKL DftiSetValue plus strides_in failed')
+    info = dfticommitdescriptor( fft%plus_desc )
+    if (.not. dftierrorclass(info, dfti_no_error)) &
+         call die('ERROR: MKL DftiCommitDescriptor plus failed')
+
+#elif USEESSL
+    ! Initialize ESSL increments.
+#ifdef CPLX
+    fft%inc(1) = fft%nfft(1)
+    fft%inc(2) = fft%nfft(1)*fft%nfft(2)
+    fft%inc(3) = fft%nfft(1)
+    fft%inc(4) = fft%nfft(1)*fft%nfft(2)
+#else
+    fft%inc(1) = fft%nfft(4)
+    fft%inc(2) = fft%nfft(4)*fft%nfft(2)
+    fft%inc(3) = fft%nfft(4)/2
+    fft%inc(4) = fft%nfft(4)/2*fft%nfft(2)
+#endif
+#else
+    call die( &
+         'No FFT package defined. Available options: FFTW2, FFTW3, MKL, ESSL')
+#endif
+
+  end subroutine Zinitialize_FFT
+  !===================================================================
+  !
+  ! Undefine all FFT variables, including V_coul.
+  !
+  !-------------------------------------------------------------------
+  subroutine Zfinalize_FFT(inode,fft)
+
+    use myconstants
+#ifdef USEMKL
+    use mkl_dfti
+#endif
+    implicit none
+
+    ! arguments
+    ! rank of current PE, for I/O only
+    integer, intent(in) :: inode
+    ! FFT data
+    type (fourier_transform), intent(inout) :: fft
+
+    ! local variables
+#ifdef USEMKL
+    integer :: info
+#endif
+    logical :: verbose
+
+    verbose = .false.
+    if (inode == 0) verbose = .true.
+    if (associated(fft%Zcoul)) deallocate(fft%Zcoul)
+    if (associated(fft%Zbox)) deallocate(fft%Zbox)
+    fft%scale = zero
+    fft%n_size = 0
+#ifdef USEFFTW2
+#ifdef CPLX
+    call fftwnd_f77_destroy_plan(fft%plus_plan)
+    call fftwnd_f77_destroy_plan(fft%minus_plan)
+#else
+    call rfftwnd_f77_destroy_plan(fft%plus_plan)
+    call rfftwnd_f77_destroy_plan(fft%minus_plan)
+#endif
+#elif USEFFTW3
+    call dfftw_destroy_plan(fft%minus_plan)
+    call dfftw_destroy_plan(fft%plus_plan)
+#elif USEMKL
+#ifndef CPLX
+    deallocate(fft%cbox)
+#endif
+    info = dftifreedescriptor( fft%plus_desc)
+    info = dftifreedescriptor( fft%minus_desc)
+#endif
+    call stopwatch(verbose,'FFT finalized')
+
+  end subroutine Zfinalize_FFT
+  !===================================================================
+  !
+  ! Calculate Coulomb interaction,
+  !        V_coul(G) = 4*pi*e^2/(q+G)^2 (rydberg units, e^2 = 2). 
+  ! Use the same layout as the FFT boxes in subroutine "poisson".
+  ! That saves reordering of arrays in the product Zbox * Zcoul.
+  ! If the Coulomb potential is not truncated in real space
+  ! (i.e., fft%trunc <= 0), then its singularity in reciprocal space
+  ! must be removed. We do that by setting V_coul = 0 when |q+G| < qzero.
+  ! Input vector q is given in units of reciprocal lattice vectors. This
+  ! subroutine performs spherical truncation, so it is suitable for confined
+  ! systems (with truncation) or bulk systems (without truncation). The
+  ! truncation algorithm is presented in several articles, see for example:
+  ! E. L. de la Grandmaison et al., Comput. Phys. Commun. 167, 7 (2005).
+  !
+  !-------------------------------------------------------------------
+  subroutine Zcreate_coul_0D(bdot,qq,fft)
+
+    use myconstants
+    implicit none
+
+    ! arguments
+    ! reciprocal space metric, q-vector in units of reciprocal lattice vectors
+    real(dp), intent(in) :: bdot(3,3), qq(3)
+    ! FFT data
+    type (fourier_transform), intent(inout) :: fft
+
+    ! local variables
+    integer :: i1, i2, i3, j1, j2, j3
+    real(dp) :: ekin, qpg(3)
+    SCALAR :: rtmp
+
+    fft%Zcoul = Zzero
+
+    do j3 = -fft%nfft(3)/2, fft%nfft(3)/2 - 1
+       qpg(3) = j3 + qq(3)
+       i3 = j3 - fft%nfft(3)/2
+       if (j3 < 0) i3 = fft%nfft(3) + i3
+       do j2 = -fft%nfft(2)/2, fft%nfft(2)/2 - 1
+          qpg(2) = j2 + qq(2)
+          i2 = j2 - fft%nfft(2)/2
+          if (j2 < 0) i2 = fft%nfft(2) + i2
+#ifdef CPLX
+          do j1 = -fft%nfft(1)/2, fft%nfft(1)/2 - 1
+#else
+          do j1 = 0, fft%nfft(1)/2
+#endif
+             qpg(1) = j1 + qq(1)
+             i1 = j1 - fft%nfft(1)/2
+             if (j1 < 0) i1 = fft%nfft(1) + i1
+
+             ekin = dot_product(qpg,matmul(bdot,qpg))
+
+             if (fft%trunc > zero) then
+                if (ekin < qzero*qzero) then
+                   rtmp = fft%trunc**2/two
+                else
+                   rtmp = (one-cos(fft%trunc*sqrt(ekin))) / ekin
+                endif
+             else
+                if (ekin < qzero*qzero) then
+                   rtmp = Zzero
+                else
+                   rtmp = Zone / ekin
+                endif
+             endif
+#ifdef CPLX
+             fft%Zcoul(i1,i2,i3) = rtmp
+#else
+             fft%Zcoul(2*i1+fft%nfft(1)/2,i2,i3) = rtmp
+             fft%Zcoul(2*i1+fft%nfft(1)/2+1,i2,i3) = rtmp
+#endif
+          enddo
+       enddo
+    enddo
+
+    rtmp = eight * pi
+    call Zscal(fft%n_size,rtmp,fft%Zcoul,1)
+
+  end subroutine Zcreate_coul_0D
+  !===================================================================
+  !
+  ! Calculate the Coulomb interaction with wire boundary conditions. The
+  ! system is assumed to be periodic along x direction and confined along
+  ! y and z directions. V_coul is calculated using truncation of periodic
+  ! images following this method:
+  ! S. Ismail-Beigi, Phys. Rev. B 73, 233103 (2006).
+  !
+  ! The Coulomb potential is calculated through 2-D FFT on the extended cell.
+  !
+  ! n_in is a (positive integer) parameter for real-space resolution.
+  ! If the energy cutoff is too small, then the FFT grid may not be very
+  ! dense and the Coulomb singularity at r = 0 may be poorly handled.
+  ! Larger values of n_in will add extra points in between the original
+  ! FFT grid. If the original grid has N points covering a space of length
+  ! L, then the grid used to do 2-dimensional FFTs will have N * n_in points
+  ! covering a space of length L.
+  !
+  ! When V_coul(G_1 + q,y,z) is calculated, we add a shift on the grid in
+  ! order to avoid the singularity at y = z = 0.
+  !
+  ! Output is truncated Zcoul(G_1+q,G_2,G_3) in reciprocal space such that,
+  ! without truncation, its value would be:
+  !
+  !             Zcoul(ig) = 8 Pi/(q + G)*2
+  !
+  ! for each G-vector in the FFT box.
+  !
+  ! Calculation is distributed over processors but array Zcoul returns
+  ! with global value.
+  !
+  !-------------------------------------------------------------------
+  subroutine Zcreate_coul_1D(inode,npes,comm,qq,gvec,fft)
+
+    use typedefs
+    use mpi_module
+#ifdef USEMKL
+    use mkl_dfti
+#endif
+    implicit none
+
+    ! arguments
+    ! MPI data: PE rank, number of PEs, communicator
+    integer, intent(in) :: inode, npes, comm
+    ! q-vector, in units of reciprocal lattice vectors
+    real(dp), intent(in) :: qq
+    ! real-space grid
+    type (gspace), intent(in):: gvec
+    ! FFT data
+    type (fourier_transform), intent(inout) :: fft
+
+    ! local variables
+    character (len=100) :: str
+    logical :: verbose
+    integer :: info, i1, i2, i3, j1, j2, j3, l2, l3, nfft_4, dNfft(3)
+    real(dp) :: g1, gr(3), bdot(3,3), step(3)
+!    real(dp) :: xdummy, bk0, bk1
+    SCALAR :: zscale
+    SCALAR, pointer :: box_1D(:,:)
+
+#if defined USEFFTW2 || USEFFTW3
+    ! FFTW plans, used by FFTW only
+    integer (kind=8) :: minus_plan_1D
+#elif USEMKL
+    ! MKL descriptors, used by MKL only
+    type(dfti_descriptor), pointer :: minus_desc_1D
+    integer :: strides_in(4), strides_out(4)
+#ifndef CPLX
+    complex(dpc), pointer :: cbox_1D(:,:)
+#endif
+#elif USEESSL
+    ! ESSL increments
+    integer :: inc2r_1D, inc3r_1D, inc2c_1D, inc3c_1D, n_1, n_2, n_3, init
+    real(dp) :: xdummy
+    real(dp), allocatable :: t_aux(:), t_aux2(:)
+#endif
+
+    verbose = .false.
+    if (inode == 0) verbose = .true.
+
+    ! Initialize two-dimensional FFT grid.
+    dNfft(1) = fft%nfft(1)
+    dNfft(2) = fft%nfft(2) * n_in * n_out
+    dNfft(3) = fft%nfft(3) * n_in * n_out
+#ifdef CPLX
+    nfft_4 = dNfft(2)
+#else
+    nfft_4 = dNfft(2) + 2
+#endif
+
+    ! Initialize real-space metric in the yz plane. Assume that directions
+    ! 2 and 3 are orthogonal (i.e. bdot(2,3) = bdot(3,2) = 0)
+    step(1) = gvec%step(1)
+    step(2) = gvec%step(2) / real( n_in, dp)
+    step(3) = gvec%step(3) / real( n_in, dp)
+
+    bdot = gvec%bdot
+    bdot(2,2) = (two * pi / (step(2)*dNfft(2)))**2
+    bdot(3,3) = (two * pi / (step(3)*dNfft(3)))**2
+
+    ! Initialize boxes.
+#ifdef CPLX
+    allocate( box_1D(-dNfft(2)/2:dNfft(2)/2-1, &
+#else
+    allocate( box_1D(-dNfft(2)/2:dNfft(2)/2+1, &
+#endif
+                        -dNfft(3)/2:dNfft(3)/2-1), stat=info)
+    i1 = dNfft(2) * dNfft(3)
+    call alccheck('box_1D','create_coul_1D',i1,info)
+
+    fft%Zcoul = Zzero
+    if (verbose) then
+       write(6,'(/,a)') ' Building truncated Coulomb potential using 2-D FFTs.'
+       write(6,*) ' FFT grid = ', dNfft(2:3)
+       write(6,*) ' Extra points between two points in 3-D FFT grid = ', n_in
+       write(6,*) ' Number of y-z supercells = ', n_out
+       write(6,*)
+    endif
+
+#ifdef USEFFTW2
+    ! Initialize FFTW2 plans.
+    write(str,'(a,3(i4,a))') 'Creating ', &
+         dNfft(2),' x',dNfft(3),' FFTW 2 plans '
+    call stopwatch(verbose,str)
+#ifdef CPLX
+    call fftwnd_f77_create_plan(minus_plan_1D,2,dNfft(2:3), &
+         fftw_forward,fftw_measure+fftw_in_place+fftw_use_wisdom)
+#else
+    call rfftwnd_f77_create_plan(minus_plan_1D,2,dNfft(2:3), &
+         fftw_real_to_complex,fftw_measure+fftw_in_place+fftw_use_wisdom)
+#endif
+#elif USEFFTW3
+    ! Initialize FFTW3 plans.
+    write(str,'(a,3(i4,a))') 'Creating ', &
+         dNfft(2),' x',dNfft(3),' FFTW 3 plans '
+    call stopwatch(verbose,str)
+#ifdef CPLX
+    call dfftw_plan_dft_2d(minus_plan_1D,dNfft(2), &
+#else
+    call dfftw_plan_dft_r2c_2d(minus_plan_1D,dNfft(2), &
+#endif
+         dNfft(3),box_1D,box_1D, fftw_measure)
+#elif USEMKL
+    write(str,'(a,3(i4,a))') 'Creating ', &
+         dNfft(2),' x',dNfft(3),' FFT MKL descriptors '
+    call stopwatch(verbose,str)
+
+    strides_in(1) = 0
+    strides_in(2) = 1
+    strides_out(1) = 0
+    strides_out(2) = 1
+#ifdef CPLX
+    strides_in(3) = nfft_4
+    strides_out(3) = nfft_4
+#else
+    strides_in(3) = nfft_4
+    strides_out(3) = nfft_4 / 2
+    allocate( cbox_1D(1:dNfft(2)/2+1,-dNfft(3)/2:dNfft(3)/2-1), stat=info)
+    call alccheck('cbox_1D','create_coul_1D',i1/2,info)
+    cbox_1D = zero
+#endif
+
+    ! Initialize real->complex MKL descriptor.
+#ifdef CPLX
+    info = dfticreatedescriptor( minus_desc_1D, dfti_double,  &
+         dfti_complex, 2, dNfft(2:3))
+#else
+    info = dfticreatedescriptor( minus_desc_1D, dfti_double,  &
+         dfti_real, 2, dNfft(2:3))
+#endif
+    if (.not. dftierrorclass(info, dfti_no_error)) &
+         call die('ERROR: MKL DftiCreateDescriptor minus failed')
+#ifndef CPLX
+    info = dftisetvalue( minus_desc_1D, dfti_placement, dfti_not_inplace )
+    if (.not. dftierrorclass(info, dfti_no_error)) &
+         call die('ERROR: MKL DftiSetValue minus placement failed')
+    info = dftisetvalue( minus_desc_1D, dfti_conjugate_even_storage, &
+         dfti_complex_complex )
+    if (.not. dftierrorclass(info, dfti_no_error)) &
+         call die('ERROR: MKL DftiSetValue minus storage failed')
+#endif
+    info = dftisetvalue( minus_desc_1D, dfti_input_strides, strides_in )
+    if (.not. dftierrorclass(info, dfti_no_error)) &
+         call die('ERROR: MKL DftiSetValue minus strides_in failed')
+    info = dftisetvalue( minus_desc_1D, dfti_output_strides, strides_out )
+    if (.not. dftierrorclass(info, dfti_no_error)) &
+         call die('ERROR: MKL DftiSetValue minus strides_out failed')
+    info = dfticommitdescriptor( minus_desc_1D )
+    if (.not. dftierrorclass(info, dfti_no_error)) &
+         call die('ERROR: MKL DftiCommitDescriptor minus failed')
+
+#elif USEESSL
+    ! Initialize ESSL increments.
+    inc2r_1D = nfft_4
+
+#ifdef CPLX
+    inc2c_1D = nfft_4
+    if ( max(dNfft(2),dNfft(3)) <= 2048) then
+       n_1 = 60000
+    else
+       n_1 = 60000 + 2.28 * (dNfft(2)+dNfft(3))
+    endif
+    allocate(t_aux(n_1))
+    init = 1
+
+    call dcft2(init,box_1D,inc2r_1D,box_1D,inc2c_1D,dNfft(2), &
+         dNfft(3),1,one,t_aux,n_1,0)
+#else
+    inc2c_1D = nfft_4/2
+    if ( max(dNfft(2)/2,dNfft(3)) <= 2048) then
+       n_1 = 62000
+    else
+       n_1 = 60000 + 1.64 * dNfft(2) + 2.28 * dNfft(3)
+    endif
+    allocate(t_aux(n_1))
+    n_2 = 0
+    allocate(t_aux2(n_2+1))
+    init = 1
+
+    call drcft2(init,box_1D,inc2r_1D,box_1D,inc2c_1D,dNfft(2), &
+         dNfft(3),1,one,t_aux,n_1,t_aux2,n_2,0)
+#endif
+    init = 0
+
+#else
+    call die( &
+         'No FFT package defined. Available options: FFTW2, FFTW3, MKL, ESSL')
+#endif
+    !
+    ! Start loop over planes of yz points.
+    !
+#ifdef CPLX
+    do j1 = -fft%nfft(1)/2 + inode, fft%nfft(1)/2 - 1, npes
+#else
+    do j1 = 0 + inode, fft%nfft(1)/2, npes
+#endif
+       g1 = abs(j1 + qq) * two * pi / gvec%avec(1,1)
+       i1 = j1 - fft%nfft(1)/2
+       if (j1 < 0) i1 = fft%nfft(1) + i1
+
+       box_1D = Zzero
+#ifndef CPLX
+#ifdef USEMKL
+       cbox_1D = Zzero
+#endif
+#endif
+       !
+       ! For each plane, calculate the potential V_trunc(G_1+q,y,z).
+       ! The potential is not zero only inside the Wigner-Seitz cell.
+       ! Because of the logarithmic singularity, we must separate the case
+       ! G_1 + q = 0.
+       !
+       if (g1 < qzero) then
+          do j3 = -dNfft(3)/2/n_out, dNfft(3)/2/n_out - 1
+             gr(3) = (j3 + gvec%shift(3)) * step(3)
+             i3 = j3 - dNfft(3)/2
+             if (j3 < 0) i3 = dNfft(3) + i3
+             do j2 = -dNfft(2)/2/n_out, dNfft(2)/2/n_out - 1
+                gr(2) = (j2 + gvec%shift(2)) * step(2)
+                i2 = j2 - dNfft(2)/2
+                if (j2 < 0) i2 = dNfft(2) + i2
+                box_1D(i2,i3) = -log( sqrt(dot_product(gr(2:3),gr(2:3))) )
+             enddo
+          enddo
+       else
+          do j3 = -dNfft(3)/2/n_out, dNfft(3)/2/n_out - 1
+             gr(3) = (j3 + gvec%shift(3)) * step(3)
+             i3 = j3 - dNfft(3)/2
+             if (j3 < 0) i3 = dNfft(3) + i3
+             do j2 = -dNfft(2)/2/n_out, dNfft(2)/2/n_out - 1
+                gr(2) = (j2 + gvec%shift(2)) * step(2)
+                i2 = j2 - dNfft(2)/2
+                if (j2 < 0) i2 = dNfft(2) + i2
+!                xdummy = sqrt(dot_product(gr(2:3),gr(2:3))) * g1
+!                call bessel_k(xdummy,bk0,bk1)
+!                box_1D(i2,i3) = bk0
+                box_1D(i2,i3) = &
+                     bessel_k0( sqrt(dot_product(gr(2:3),gr(2:3))) * g1 )
+             enddo
+          enddo
+       endif
+       !
+       ! Do a two-dimensional Fourier transform:
+       !  V_trunc(G_1+q,y,z) -> V_trunc(G_1+q,G_2,G_3)
+       !
+#ifdef USEFFTW2
+#ifdef CPLX
+       call fftwnd_f77_one(minus_plan_1D,box_1D,0)
+#else
+       call rfftwnd_f77_one_real_to_complex(minus_plan_1D,box_1D,0)
+#endif
+#elif USEFFTW3
+       call dfftw_execute( minus_plan_1D )
+#elif USEMKL
+#ifdef CPLX
+       info = dfti_compute_forward_z( minus_desc_1D, box_1D)
+#else
+       info = dfti_compute_forward_dz_out( minus_desc_1D, box_1D, cbox_1D)
+#endif
+       if (info /= dfti_no_error) &
+            call die('ERROR: MKL DftiCompute failed')
+#ifndef CPLX
+       call dcopy(nfft_4*dNfft(3),cbox_1D,1,box_1D,1)
+#endif
+#elif USEESSL
+#ifdef CPLX
+       call dcft2(init,box_1D,inc2r_1D,box_1D,inc2c_1D,dNfft(2), &
+            dNfft(3),1,one,t_aux,n_1,0)
+#else
+       call drcft2(init,box_1D,inc2r_1D,box_1D,inc2c_1D,dNfft(2), &
+            dNfft(3),1,one,t_aux,n_1,t_aux2,n_2,0)
+#endif
+#endif
+       !
+       ! Store the truncated potential V_trunc in Zcoul.
+       !
+       do j3 = -fft%nfft(3)/2, fft%nfft(3)/2 - 1
+          l3 = j3 - fft%nfft(3)/2
+          if (j3 < 0) l3 = fft%nfft(3) + l3
+          i3 = j3 * n_out - dNfft(3)/2 
+          if (j3 < 0) i3 = dNfft(3) + i3
+#ifdef CPLX
+          do j2 = -fft%nfft(2)/2, fft%nfft(2)/2 - 1
+             l2 = j2 - fft%nfft(2)/2
+             if (j2 < 0) l2 = fft%nfft(2) + l2
+             i2 = j2 * n_out - dNfft(2)/2
+             if (j2 < 0) i2 = dNfft(2) + i2
+             fft%Zcoul(i1,l2,l3) = box_1D(i2,i3)
+          enddo
+#else
+          do j2 = -fft%nfft(2)/2, - 1
+             l2 = j2 + fft%nfft(2)/2
+             i2 = j2 * n_out + dNfft(2)/2
+             fft%Zcoul(2*j1-fft%nfft(1)/2,l2,l3) = box_1D(-2*i2+dNfft(2)/2,i3)
+             fft%Zcoul(2*j1-fft%nfft(1)/2+1,l2,l3) = box_1D(-2*i2+dNfft(2)/2,i3)
+          enddo
+          do j2 = 0, fft%nfft(2)/2 - 1
+             l2 = j2 - fft%nfft(2)/2
+             i2 = j2 * n_out - dNfft(2)/2
+             fft%Zcoul(2*j1-fft%nfft(1)/2,l2,l3) = box_1D(2*i2+dNfft(2)/2,i3)
+             fft%Zcoul(2*j1-fft%nfft(1)/2+1,l2,l3) = box_1D(2*i2+dNfft(2)/2,i3)
+          enddo
+#endif
+       enddo
+    enddo
+    !
+    ! Remove the long-wavelength (G1 = G2 = G3 = 0) part.
+    !
+    if (abs(qq) < qzero) then
+       fft%Zcoul(-fft%nfft(1)/2,-fft%nfft(2)/2,-fft%nfft(3)/2) = Zzero
+#ifndef CPLX
+       fft%Zcoul(-fft%nfft(1)/2+1,-fft%nfft(2)/2,-fft%nfft(3)/2) = Zzero
+#endif
+    endif
+    !
+    ! Global reduction if there is more than one processor. And rescale Zcoul
+    ! with the area of the unit cell in the yz plane.
+    !
+    call Zpsum(fft%n_size,npes,comm,fft%Zcoul)
+    zscale = Zone * four * step(2) * step(3)
+    call Zscal(fft%n_size,zscale,fft%Zcoul,1)
+
+#ifdef USEFFTW2
+    call fftwnd_f77_destroy_plan( minus_plan_1D )
+#elif USEFFTW3
+    call dfftw_destroy_plan( minus_plan_1D )
+#elif USEMKL
+    info = dftifreedescriptor( minus_desc_1D )
+    if (.not. dftierrorclass(info, dfti_no_error)) &
+         call die('ERROR: MKL DftiFreeDescriptor minus failed')
+#ifndef CPLX
+    deallocate(cbox_1D)
+#endif
+#elif USEESSL
+#ifndef CPLX
+    deallocate(t_aux2)
+#endif
+    deallocate(t_aux)
+#endif
+
+    deallocate(box_1D)
+
+  end subroutine Zcreate_coul_1D
+  !===================================================================
+  !
+  ! Calculate the Coulomb interaction with slab boundary conditions. The
+  ! system is assumed to be periodic along x and y directions and confined
+  ! along z direction. V_coul is calculated using truncation of periodic
+  ! images following this method:
+  ! S. Ismail-Beigi, Phys. Rev. B 73, 233103 (2006).
+  !
+  ! The Coulomb potential is calculated using Eq. 3 in the article above.
+  !
+  !-------------------------------------------------------------------
+  subroutine Zcreate_coul_2D(bdot,qq,fft)
+
+    use typedefs
+    implicit none
+
+    ! arguments
+    ! reciprocal space metric, q-vector in units of reciprocal lattice vectors
+    real(dp), intent(in) :: bdot(3,3), qq(2)
+    ! FFT data
+    type (fourier_transform), intent(inout) :: fft
+
+    ! local variables
+    integer :: i1, i2, i3, j1, j2, j3, cosgz
+    real(dp) :: gz, qpg2, qpg(2), bdot_2d(2,2)
+    SCALAR :: rtmp
+
+    fft%Zcoul = Zzero
+    bdot_2d = bdot(1:2,1:2)
+
+    do j3 = -fft%nfft(3)/2, fft%nfft(3)/2 - 1
+       gz = j3 * pi / fft%trunc
+       cosgz = 1 - 2 * mod(j3,2)
+       i3 = j3 - fft%nfft(3)/2
+       if (j3 < 0) i3 = fft%nfft(3) + i3
+       do j2 = -fft%nfft(2)/2, fft%nfft(2)/2 - 1
+          qpg(2) = j2 + qq(2)
+          i2 = j2 - fft%nfft(2)/2
+          if (j2 < 0) i2 = fft%nfft(2) + i2
+#ifdef CPLX
+          do j1 = -fft%nfft(1)/2, fft%nfft(1)/2 - 1
+#else
+          do j1 = 0, fft%nfft(1)/2
+#endif
+             qpg(1) = j1 + qq(1)
+             i1 = j1 - fft%nfft(1)/2
+             if (j1 < 0) i1 = fft%nfft(1) + i1
+
+             qpg2 = dot_product(qpg,matmul(bdot_2d,qpg))
+             if (qpg2 < qzero*qzero .and. j3 == 0) cycle
+             rtmp = (one - exp(-sqrt(qpg2)*fft%trunc)*cosgz) / (qpg2 + gz*gz)
+
+#ifdef CPLX
+             fft%Zcoul(i1,i2,i3) = rtmp
+#else
+             fft%Zcoul(2*i1+fft%nfft(1)/2,i2,i3) = rtmp
+             fft%Zcoul(2*i1+fft%nfft(1)/2+1,i2,i3) = rtmp
+#endif
+          enddo
+       enddo
+    enddo
+
+    rtmp = eight * pi
+    call Zscal(fft%n_size,rtmp,fft%Zcoul,1)
+
+  end subroutine Zcreate_coul_2D
+  !===================================================================
+  !
+  ! Calculate the phase offset, bphase = exp( i qq.r ),
+  ! where qq = k4 - k3 + k1 - k2.
+  ! This is needed only in periodic systems. For confined systems
+  ! (CPLX disabled) it returns bphase = one. Vector qq is assumed to
+  ! be equal to some reciprocal lattice point.
+  !
+  !-------------------------------------------------------------------
+  subroutine Zget_phase(gvec,istart,nelem,qq,bphase)
+
+    use myconstants
+    implicit none
+
+    ! arguments
+    ! real-space grid
+    type (gspace), intent(inout):: gvec
+    ! address of first grid point in bphase, number of grid points in bphase
+    integer, intent(in) :: istart, nelem
+    ! q-vector, in units of reciprocal lattice vectors
+    real(dp), intent(in) :: qq(3)
+    ! phase, calculated only at grid points (istart+1) through (istart+nelem)
+    SCALAR, intent(out) :: bphase(nelem)
+
+#ifdef CPLX
+    ! local variables
+    integer :: i1, i2, i3, j1, j2, j3, gg(3)
+    real(dp) :: tsec(2)
+#endif
+
+    bphase = Zone
+
+#ifdef CPLX
+    gg = nint(qq)
+    !
+    ! Compute phase in reciprocal space:
+    !         bphase(G) = 1   if G = qq
+    !         bphase(G) = 0   if G /= qq.
+    !
+    j3 = gg(3)
+    i3 = j3 - fft_box%nfft(3)/2
+    if (j3 < 0) i3 = fft_box%nfft(3) + i3
+    j2 = gg(2)
+    i2 = j2 - fft_box%nfft(2)/2
+    if (j2 < 0) i2 = fft_box%nfft(2) + i2
+    j1 = gg(1)
+    i1 = j1 - fft_box%nfft(1)/2
+    if (j1 < 0) i1 = fft_box%nfft(1) + i1
+
+    fft_box%Zbox = Zzero
+    fft_box%Zbox(i1,i2,i3) = Zone
+    !
+    ! Inverse Fourier transform: bphase(G) = FFT[ bphase(r) ] -> bphase(r)
+    !
+    call timacc(11,1,tsec)
+    call Zdo_FFT(1,fft_box)
+    call timacc(11,2,tsec)
+    !
+    ! Reshape bphase(r) in the list of grid points.
+    !
+    i1 = 0
+    do i2 = istart, istart + nelem - 1
+       gg = gvec%r(:,i2)
+       i1 = i1 + 1
+       bphase(i1) = fft_box%Zbox(gg(1),gg(2),gg(3))
+    end do
+#endif
+
+  end subroutine Zget_phase
+  !===================================================================
+  !
+  ! Calculate the negative of the Laplacian using FFT.
+  !
+  ! INPUT:
+  !   given_func : function f(r) on the real-space grid
+  !   irp : irreducible representation of f(r), 1 for fully symmetric function.
+  !
+  ! OUTPUT:
+  !   laplf : -Laplacian[ f(r) ] on the real-space grid
+  !
+  !-------------------------------------------------------------------
+  subroutine Zget_lap_FFT(gvec,given_func,laplf,irp)
+
+    use typedefs
+    implicit none
+
+    ! arguments
+    type (gspace), intent(inout):: gvec
+    SCALAR, intent(in) :: given_func(gvec%nr)
+    SCALAR, intent(out) :: laplf(gvec%nr)
+    integer, intent(in) :: irp
+
+    ! local variables
+    integer :: i1, i2, i3, j1, j2, j3, jj, itr, gg(3)
+    real(dp) :: tsec(2), charac(gvec%syms%ntrans), ekin
+    SCALAR :: zscale
+
+    !-------------------------------------------------------------------
+    ! Put input function in fft box.
+    !
+    fft_box%Zbox = Zzero
+    charac = real(gvec%syms%chi(irp,:),dp)
+    do jj = 1, gvec%nr
+       do itr = 1, gvec%syms%ntrans
+          call unfold(gvec%r(1,jj),gvec%syms%trans(1,1,itr),gvec%shift,gg)
+          fft_box%Zbox(gg(1),gg(2),gg(3)) = given_func(jj) * charac(itr)
+       enddo
+    end do
+    !
+    ! Fourier transform: box(r) -> FFT[ box(r) ] = box(G).
+    !
+    call timacc(11,1,tsec)
+    call Zdo_FFT(-1,fft_box)
+    call timacc(11,2,tsec)
+    !
+    ! Calculate Laplacian in reciprocal space: box(G) -> box(G) * G^2.
+    !
+    do j3 = -fft_box%nfft(3)/2, fft_box%nfft(3)/2 - 1
+       gg(3) = j3
+       i3 = j3 - fft_box%nfft(3)/2
+       if (j3 < 0) i3 = fft_box%nfft(3) + i3
+       do j2 = -fft_box%nfft(2)/2, fft_box%nfft(2)/2 - 1
+          gg(2) = j2
+          i2 = j2 - fft_box%nfft(2)/2
+          if (j2 < 0) i2 = fft_box%nfft(2) + i2
+          do j1 = -fft_box%nfft(1)/2, fft_box%nfft(1)/2 - 1
+             gg(1) = j1
+             i1 = j1 - fft_box%nfft(1)/2
+             if (j1 < 0) i1 = fft_box%nfft(1) + i1
+             ekin = dot_product(gg,matmul(gvec%bdot,gg))
+             fft_box%Zbox(i1,i2,i3) = fft_box%Zbox(i1,i2,i3) * ekin
+          enddo
+       enddo
+    enddo
+    !
+    ! Inverse Fourier transform: box(G) = FFT[ box(r) ] -> box(r).
+    !
+    call timacc(11,1,tsec)
+    call Zdo_FFT(1,fft_box)
+    call timacc(11,2,tsec)
+    !
+    ! Store result in output array, laplf(r), and change its sign.
+    !
+    do jj = 1, gvec%nr
+       gg = gvec%r(:,jj)
+       laplf(jj) = fft_box%Zbox(gg(1),gg(2),gg(3))
+    end do
+    zscale = -fft_box%scale
+    call Zscal(gvec%nr,zscale,laplf,1)
+
+  end subroutine Zget_lap_FFT
+  !===================================================================
+  !
+  ! Calculate the gradient using FFT. Since a generic function and its
+  ! gradient do not always belong to the same irreducible representation,
+  ! the output gradient is calculated on the full grid, not only the
+  ! irreducible wedge.
+  !
+  ! INPUT:
+  !   given_func : function f(r) on the real-space grid
+  !   irp : irreducible representation of f(r), 1 for fully symmetric function.
+  !
+  ! OUTPUT:
+  !   gradf : Gradient[ f(r) ] on the real-space grid
+  !
+  !-------------------------------------------------------------------
+  subroutine Zget_grad_FFT(gvec,given_func,gradf,irp)
+
+    use typedefs
+    implicit none
+
+    ! arguments
+    type (gspace), intent(inout):: gvec
+    SCALAR, intent(in) :: given_func(gvec%nr)
+    SCALAR, intent(out) :: gradf(3,gvec%nr*gvec%syms%ntrans)
+    integer, intent(in) :: irp
+
+    ! local variables
+    integer :: i1, i2, i3, j1, j2, j3, jj, itr, idir, gg(3)
+    real(dp) :: tsec(2), charac(gvec%syms%ntrans), rr(3), rrp(3)
+    SCALAR :: zscale
+
+    do idir = 1, 3
+       !-------------------------------------------------------------------
+       ! Put input function in fft box.
+       !
+       fft_box%Zbox = Zzero
+       charac = real(gvec%syms%chi(irp,:),dp)
+       do jj = 1, gvec%nr
+          do itr = 1, gvec%syms%ntrans
+             call unfold(gvec%r(1,jj),gvec%syms%trans(1,1,itr),gvec%shift,gg)
+             fft_box%Zbox(gg(1),gg(2),gg(3)) = given_func(jj) * charac(itr)
+          enddo
+       end do
+       !
+       ! Fourier transform: box(r) -> FFT[ box(r) ] = box(G).
+       !
+       call timacc(11,1,tsec)
+       call Zdo_FFT(-1,fft_box)
+       call timacc(11,2,tsec)
+       !
+       ! Calculate derivative in reciprocal space: box(G) -> box(G) * G.
+       !
+       do j3 = -fft_box%nfft(3)/2, fft_box%nfft(3)/2 - 1
+          rr(3) = j3
+          i3 = j3 - fft_box%nfft(3)/2
+          if (j3 < 0) i3 = fft_box%nfft(3) + i3
+          do j2 = -fft_box%nfft(2)/2, fft_box%nfft(2)/2 - 1
+             rr(2) = j2
+             i2 = j2 - fft_box%nfft(2)/2
+             if (j2 < 0) i2 = fft_box%nfft(2) + i2
+             do j1 = -fft_box%nfft(1)/2, fft_box%nfft(1)/2 - 1
+                rr(1) = j1
+                i1 = j1 - fft_box%nfft(1)/2
+                if (j1 < 0) i1 = fft_box%nfft(1) + i1
+                call dmatvec3('N',gvec%bvec,rr,rrp)
+                fft_box%Zbox(i1,i2,i3) = &
+                     fft_box%Zbox(i1,i2,i3) * rrp(idir)
+             enddo
+          enddo
+       enddo
+       !
+       ! Inverse Fourier transform: box(G) = FFT[ box(r) ] -> box(r).
+       !
+       call timacc(11,1,tsec)
+       call Zdo_FFT(1,fft_box)
+       call timacc(11,2,tsec)
+       !
+       ! Store result in output array, gradf(r).
+       !
+       charac = real(gvec%syms%chi(irp,:),dp)
+       do jj = 1, gvec%nr
+          do itr = 1, gvec%syms%ntrans
+             call unfold(gvec%r(1,jj),gvec%syms%trans(1,1,itr),gvec%shift,gg)
+             gradf(idir,jj + (itr-1)*gvec%nr) = &
+                  fft_box%Zbox(gg(1),gg(2),gg(3)) * charac(itr)
+          enddo
+       end do
+    enddo
+
+    zscale = fft_box%scale
+    call Zscal(3*gvec%nr*gvec%syms%ntrans,zscale,gradf,1)
+
+  end subroutine Zget_grad_FFT
+  !===================================================================
+#ifdef CPLX
+  !
+  ! Compute modified Bessel function K0(x) for x > 0.
+  !
+  ! Based on subroutine mik01a.for, copyrighted by Jianming Jin,
+  ! S. Zhang and J. M. Jin, Computation of Special Functions.
+  ! New York: John Wiley & Sons, 1996.
+  ! http://jin.ece.uiuc.edu/routines/routines.html.
+  !
+  ! Simplified version by Murilo Tiago, tiagoml@ornl.gov, 2009
+  !
+  !-------------------------------------------------------------------
+  function bessel_k0(xx) result(bk0)
+
+    use myconstants
+    implicit none
+
+    real(dp), intent(in) :: xx
+    real(dp) :: bk0
+    real(dp) :: ct, cb, ca, rr, x2, xr, xr2, w0, ww, bi0
+    integer :: kk, k0
+    real(dp), parameter :: a1(8) = (/0.125d0, 0.2109375d0, &
+         1.0986328125d0, 1.1775970458984d01, 2.1461706161499d02, &
+         5.9511522710323d03, 2.3347645606175d05, 1.2312234987631d07/), &
+         a2(12) = (/0.125d0, 7.03125d-2, 7.32421875d-2, &
+         1.1215209960938d-1, 2.2710800170898d-1, 5.7250142097473d-1, &
+         1.7277275025845d0, 6.0740420012735d0, 2.4380529699556d01, &
+         1.1001714026925d02, 5.5133589612202d02, 3.0380905109224d03/)
+
+    x2 = xx*xx
+    if (xx == zero) then
+       bk0 = 1.0d+300
+       return
+    else if (xx <= 18.0d0) then
+       bi0 = one
+       rr = one
+       do kk = 1, 50
+          rr = half*half*rr*x2/(kk*kk)
+          bi0 = bi0 + rr
+          if (dabs(rr/bi0) < 1.0d-15) exit
+       enddo
+    else
+       k0 = 12
+       if (xx >= 35.0) k0 = 9
+       if (xx >= 50.0) k0 = 7
+       ca = dexp(xx)/dsqrt(two*pi*xx)
+       bi0 = one
+       xr = one/xx
+       do kk = 1, k0
+          bi0 = bi0 + a2(kk)*xr**kk
+       enddo
+       bi0 = ca*bi0
+    endif
+    if (xx <= 9.0d0) then
+       ct = -(dlog(xx*half)+euler_m)
+       bk0 = zero
+       w0 = zero
+       ww = zero
+       rr = one
+       do kk = 1, 50
+          w0 = w0 + 1.0d0/kk
+          rr = half*half*rr/(kk*kk)*x2
+          bk0 = bk0 + rr*(w0+ct)
+          if (dabs((bk0-ww)/bk0) < 1.0d-15) exit
+          ww = bk0
+       enddo
+       bk0 = bk0 + ct
+    else
+       cb = half/xx
+       xr2 = one/x2
+       bk0 = one
+       do kk = 1, 8
+          bk0 = bk0 + a1(kk)*xr2**kk
+       enddo
+       bk0 = cb*bk0/bi0
+    endif
+ 
+  end function bessel_k0
+  !===================================================================
+  !
+  ! Define the average of the Coulomb potential inside a "mini"-Brillouin
+  ! zone. This average is necessary because the Coulomb potential has
+  ! a singularity at r=0. Averages below were calculated by averaging
+  ! the Fourier transform of the potential (1/r) around the origin k=0.
+  ! For simplicity, the vicinity of k=0 is taken to be circular
+  ! (that is: spherical in 3d, cylindrical in 2d, straight line in 1d).
+  !
+  !-------------------------------------------------------------------
+  function vq_average(per,nk,celvol,rmax) result(average)
+
+    use myconstants
+    implicit none
+
+    ! arguments
+    integer, intent(in) :: per, nk
+    real(dp), intent(in) :: celvol, rmax
+    real(dp) :: average
+
+    select case(per)
+    case(1)
+       average = four * ( log(celvol*nk/rmax) + log(two) - euler_m ) / &
+            (celvol*nk)
+    case(2)
+       average = four * sqrt(pi) / sqrt(celvol*nk)
+    case(3)
+       average = eight * exp(log(three/(four*pi*celvol*nk))/three)
+    case default
+       average = zero
+    end select
+    return
+
+  end function vq_average
+  !===================================================================
+  !
+  ! Increases the fft grid in nfft(3) to fit a value allowed by ESSL,
+  ! e.g. a power of two, three etc.
+  !
+  ! Version 0: 1996 Bernd Pfrommer.
+  ! symmetry-related features deleted by Murilo Tiago (2004).
+  !
+  !-------------------------------------------------------------------
+  subroutine adjust_fft(nfft)
+
+    use myconstants
+    implicit none
+
+    ! arguments
+    integer, intent(inout) :: nfft(3)            ! fft grid dimensions
+
+#ifdef USEESSL
+    ! local variables
+    character (len=600) :: lastwords
+    integer :: ii, jj, kk
+    integer, parameter :: numfast = 99
+    integer, parameter :: fastsize(numfast) = (/ &
+         2,4,6,8,10,12,14,16,18, &
+         20,22,24,28,30,32,36,40,42, &
+         44,48,56,60,64,66,70,72,80, &
+         84,88,90,96,110,112,120,126,128, &
+         132,140,144,154,160,168,176,180,192, &
+         198,210,220,224,240,252,256,264,280, &
+         288,308,320,330,336,352,360,384,396, &
+         420,440,448,462,480,504,512,528,560, &
+         576,616,630,640,660,672,704,720,768, &
+         770,792,840,880,896,924,960,990,1008, &
+         1024,1056,1120,1152,1232,1260,1280,1320,1344 /)
+
+    do ii = 1, 3 
+       do jj = nfft(ii), fastsize(numfast)
+          do kk = 1, numfast
+             if (fastsize(kk) == jj) goto 10
+          end do
+       end do
+       write(lastwords,20) ii 
+       call die(lastwords)
+
+10     continue
+       nfft(ii) = jj
+    end do
+
+20  format(' *** ERROR IN ADJUST_FFT: ', &
+         'FFT grid size exceeded in direction', i3, &
+         ' The system is too big. Add larger FFT sizes in adjust_fft.')
+#endif
+
+  end subroutine adjust_fft
+!===============================================================
+end module fft_module
+#endif

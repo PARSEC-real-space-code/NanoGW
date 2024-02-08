@@ -1,0 +1,170 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Read the static potentials and calculate the static remainder in
+! self-energy. See appendix B of Tiago & Chelikowsky, PRB (2006).
+!
+! OUTPUT:
+!    sig%scsdiag : static correlation
+!    sig%sgsdiag : static vertex
+!    lfound : true if wpol0.dat was found and static remainder can
+!             be calculated, false otherwise
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zstatic_corr(nspin,nkpt,nrep,sig,gvec,kpt,nolda,lfound)
+
+  use typedefs
+  use mpi_module
+  implicit none
+#ifdef MPI
+  include 'mpif.h'
+#endif
+
+  ! arguments
+  integer, intent(in) :: &
+       nspin, &    ! number of spin channels
+       nkpt, &     ! number of k-points where self-energy is computed
+       nrep        ! number of irreducible representations
+  ! self-energy
+  type (siginfo), dimension(nspin,nkpt), intent(inout) :: sig
+  ! real-space grid
+  type (gspace), intent(in) :: gvec
+  ! k-points and wavefunctions
+  type (kptinfo), intent(in) :: kpt
+  ! true if LDA kernel is not used
+  logical, intent(in) :: nolda
+  ! see above
+  logical, intent(out) :: lfound
+
+  ! local variables
+  integer :: ii, jj, ik, jk, info, isp, ngrid, r_vec(3), rmin, rmax
+#ifdef CPLX
+  real(dp) :: vtmp(6)
+#endif
+  SCALAR :: vr_in, fr_in(nspin)
+  integer, allocatable :: rinv(:,:,:)
+  SCALAR, allocatable :: vr(:), fr(:,:)
+  integer, parameter :: itape = 34
+
+  !-------------------------------------------------------------------
+  ! Search for file wpol0.dat. If it exists, master PE reads static
+  ! potentials from it. If it does not exist, return to parent routine.
+  !
+  lfound = .true.
+  if (peinf%master) then
+     open(itape,file='wpol0.dat',form='formatted',status='old',iostat=info)
+     if (info /= 0) lfound = .false.
+  endif
+#ifdef MPI
+  call MPI_BCAST(lfound,1,MPI_LOGICAL,peinf%masterid,peinf%comm,info)
+#endif
+  if (.not. lfound) return
+
+  if (peinf%master) then
+     write(6,'(/,a,/)') ' Found wpol0.dat file. Calculating static correction '
+     rewind(itape)
+     read(itape,*) ngrid
+     rmin = minval(gvec%r)
+     rmax = maxval(gvec%r)
+     allocate(rinv(rmin:rmax,rmin:rmax,rmin:rmax))
+     rinv = 0
+     do jj = 1, gvec%nr
+        rinv(gvec%r(1,jj),gvec%r(2,jj),gvec%r(3,jj)) = jj
+     enddo
+     allocate(vr(gvec%nr))
+     vr = Zzero
+     allocate(fr(gvec%nr,nspin))
+     fr = Zzero
+     do jj = 1, ngrid
+#ifdef CPLX
+        read(itape,*) (r_vec(ii),ii=1,3), (vtmp(ii),ii=1,2*(nspin+1))
+        vr_in = cmplx(vtmp(1),vtmp(2))
+        fr_in(1) = cmplx(vtmp(3),vtmp(4))
+        fr_in(nspin) = cmplx(vtmp(1+nspin*2),vtmp(2+nspin*2))
+#else
+        read(itape,*) (r_vec(ii),ii=1,3), vr_in, (fr_in(ii),ii=1,nspin)
+#endif
+        if (maxval(r_vec) > rmax) cycle
+        if (minval(r_vec) < rmin) cycle
+        ii = rinv(r_vec(1),r_vec(2),r_vec(3))
+        if (ii == 0) cycle
+        vr(ii) = vr_in
+        fr(ii,:) = fr_in
+     enddo
+     close(itape)
+
+     write(6,'(/,a,/,a)') ' Reading static correction from file wpol0.dat.', &
+          '      r          rho        Wpol0_v          Wpol0_f'
+     do jj = 1, min(10,ngrid)
+        write(6,'(3i4,4f12.4)') gvec%r(1:3,jj), &
+             real(nspin,dp)*(kpt%rho(jj,1) + kpt%rho(jj,nspin))/two, &
+             real(vr(jj),dp), (real(fr(jj,ii),dp),ii=1,nspin)
+     enddo
+
+#ifdef PORPHYRIN
+     open(itape,file='wpol0_interp.dat',form='formatted',status='old')
+     write(6,'(/,a,/)') &
+          ' Found wpol0_interp.dat file. Calculating static correction '
+     rewind(itape)
+     read(itape,*) ngrid
+     do jj = 1, ngrid
+#ifdef CPLX
+        read(itape,*) (r_vec(ii),ii=1,3), (vtmp(ii),ii=1,2*(nspin+1))
+        vr_in = cmplx(vtmp(1),vtmp(2))
+        fr_in(1) = cmplx(vtmp(3),vtmp(4))
+        fr_in(nspin) = cmplx(vtmp(1+nspin*2),vtmp(2+nspin*2))
+#else
+        read(itape,*) (r_vec(ii),ii=1,3), vr_in, (fr_in(ii),ii=1,nspin)
+#endif
+        if (maxval(r_vec) > rmax) cycle
+        if (minval(r_vec) < rmin) cycle
+        ii = rinv(r_vec(1),r_vec(2),r_vec(3))
+        if (ii == 0) cycle
+        vr(ii) = vr(ii) + vr_in
+        fr(ii,:) = fr(ii,:) + fr_in
+     enddo
+     close(itape)
+
+     write(6,'(/,a,/,a)') ' Reading static correction from file wpol0.dat.', &
+          '      r          rho        Wpol0_v          Wpol0_f'
+     do jj = 1, min(10,ngrid)
+        write(6,'(3i4,4f12.4)') gvec%r(1:3,jj), &
+             real(nspin,dp)*(kpt%rho(jj,1) + kpt%rho(jj,nspin))/two, &
+             real(vr(jj),dp), (real(fr(jj,ii),dp),ii=1,nspin)
+     enddo
+#endif
+     write(6,*)
+
+     deallocate(rinv)
+     vr = vr*real(nrep,dp)
+     fr = fr*real(nrep,dp)
+     if (nolda) fr = Zzero
+  endif
+  if (.not. peinf%master) then
+     allocate(vr(gvec%nr))
+     allocate(fr(gvec%nr,nspin))
+  endif
+#ifdef MPI
+  call MPI_BCAST(vr,gvec%nr, &
+       MPI_DOUBLE_SCALAR,peinf%masterid,peinf%comm,info)
+  call MPI_BCAST(fr,gvec%nr*nspin, &
+       MPI_DOUBLE_SCALAR,peinf%masterid,peinf%comm,info)
+  call MPI_BARRIER(peinf%comm,info)
+#endif
+  !-------------------------------------------------------------------
+  ! Calculate static correction for each k-point and spin channel.
+  !
+  do ik = 1, nkpt
+     do isp = 1, nspin
+        jk = sig(isp,ik)%indxk
+        call Zstatic(sig(isp,ik),kpt%wfn(isp,jk),w_grp%mydim, &
+             vr(w_grp%offset+1),fr(w_grp%offset+1,isp))
+     enddo
+  enddo
+  deallocate(fr,vr)
+
+end subroutine Zstatic_corr
+!===================================================================

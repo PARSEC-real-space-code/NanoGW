@@ -1,0 +1,166 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Calculate TDLDA polarizability for all q-vectors in qpt list and
+! all representations. This is executed whenever the polarizability
+! is needed. Most of the actual work is done in subroutines:
+!    kernel : calculation of interation kernel
+!    Zdiag_pol : construction and diagonalization of the eigenvalue problem
+!
+! Arrays allocated, defined and deallocated internally:
+!   k_p%Zm
+!   pol%Zv
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zcalculate_tdlda(gvec,kpt,qpt,k_p,pol,nspin,chkpt, &
+     tamm_d,nolda,rpaonly,trip_flag,noxchange,trunc_c,xsum,epsinv,&
+     isdf_in )
+
+  use typedefs
+  use mpi_module
+  implicit none
+#ifdef MPI
+  include 'mpif.h'
+#endif
+
+  ! arguments
+  type (gspace), intent(in) :: gvec
+  type (kptinfo), intent(in) :: kpt
+  type (qptinfo), intent(in) :: qpt
+  type (kernelinfo), dimension(gvec%syms%ntrans,qpt%nk), intent(inout) :: k_p
+  type (polinfo), dimension(gvec%syms%ntrans,qpt%nk), intent(inout) :: pol
+  ! number of spins
+  integer, intent(in) :: nspin
+  ! checkpoint flag (see read_pol subroutine)
+  integer, intent(inout) :: chkpt
+  type (ISDF), intent(in) :: isdf_in
+  logical, intent(in) :: &
+       tamm_d, &    ! true if Tamm-Dancof approximation is used
+       nolda, &     ! true if LDA kernel is ignored
+       rpaonly, &   ! true if only RPA polarizability is calculated
+       trip_flag, & ! true if TDLDA is done for spin triplet excitations only
+       noxchange, & ! true if exchange kernel is not included in TDLDA
+       trunc_c      ! true if the long-wavelength part of the Coulomb
+                    ! interaction is removed (this is done typically only
+                    ! if we want the macroscopic dielectric function in a
+                    ! periodic system)
+  real(dp), intent(out) :: &
+       xsum, &      ! f-sum rule
+       epsinv       ! RPA inverse dielectric constant
+
+  ! local variables
+  ! true if kernel must be calculated, false otherwise
+  logical :: readflag
+  ! flag to determine the truncation of Coulomb interaction
+  logical :: notrunc
+  ! counters
+  integer :: irp, jrp, iq, ii
+#ifdef MPI
+  integer :: info
+#endif
+  real(dp) :: tsec(2)
+
+  !-------------------------------------------------------------------
+  ! Retrieve TDLDA eigenvectors.
+  !
+  ! Define checkpoint flag:
+  ! chkpt < 0 : ignore checkpointable data (files pol_diag.dat)
+  ! chkpt = 0 : no checkpointable data
+  !
+  call Zread_pol(pol,gvec%syms%ntrans,qpt%nk,kpt%wfn(1,1)%nstate,chkpt)
+  !-------------------------------------------------------------------
+  ! Go through all representations. For each one, calculate kernel matrix
+  ! elements needed for polarizability calculation and perform
+  ! the corresponding diagonalization.
+  ! Kernel matrix is distributed column-wise.
+  !
+  do iq = 1, qpt%nk
+     do jrp = 1, gvec%syms%ntrans/r_grp%num
+        irp = r_grp%g_rep(jrp)
+        if ( pol(irp,iq)%ntr == 0 ) cycle  ! if the number of transition corresponding to this representation is 0
+        readflag = .true.
+        if (chkpt >= irp + (iq-1)*gvec%syms%ntrans) readflag = .false.
+        !
+        ! Kernel evaluation
+        !
+        call stopwatch(r_grp%master,' Calling readmatrix kernel_p')
+        if (.not. rpaonly) then
+           call timacc(3,1,tsec)
+           ii = 1
+           if (trip_flag) ii = 3
+           if (noxchange) ii = 2
+           if (nolda) ii = 0
+           call Zkernel( gvec,kpt,k_p(irp,iq),irp,ii,nspin,qpt%fk(1,iq),'c',readflag,&
+              isdf_in ) 
+           call timacc(3,2,tsec)
+        endif
+        !
+        ! Diagonalization
+        !
+        if (pol(irp,iq)%ntr == 0) cycle  ! repeated line??
+        if (rpaonly) then
+           pol(irp,iq)%nn = pol(irp,iq)%ntr
+           do ii = 1, pol(irp,iq)%ntr
+              pol(irp,iq)%ostr(ii,:) = real(ii,dp)
+              pol(irp,iq)%eig(ii) = real(ii,dp)
+           enddo
+        else
+           if (readflag) then
+              ! Define the conditions for truncating the Coulomb kernel.
+              notrunc = .false.
+              if (gvec%per == 3 .and. qpt%zerok(iq) .and. &
+                   ( .not. noxchange) .and. (.not. trunc_c)) notrunc = .true.
+              call stopwatch(r_grp%master,' Calling diag_pol')
+              call timacc(4,1,tsec)
+              call Zdiag_pol(kpt,k_p(irp,iq),pol(irp,iq),irp,iq,nspin, &
+                   gvec%celvol,tamm_d,notrunc)
+              call timacc(4,2,tsec)
+              if (r_grp%num == 1) call Zwrite_pol(pol(irp,iq), &
+                   gvec%syms%ntrans,qpt%nk,irp,iq,kpt%wfn(1,1)%nstate)
+           endif
+        endif
+
+        if ((.not. rpaonly) .and. associated(k_p(irp,iq)%Zm)) &
+             deallocate(k_p(irp,iq)%Zm)
+        if (r_grp%master) call flush(6)
+        if (chkpt < irp + (iq-1)*gvec%syms%ntrans .and. r_grp%num == 1) &
+             chkpt = irp + (iq-1)*gvec%syms%ntrans
+     enddo
+  enddo
+
+  readflag = .true.
+
+  !-------------------------------------------------------------------
+  ! Check sum rule, both RPA (no correlation in polarizability) 
+  ! and LDA (exchange and LDA correlation in polarizability), and
+  ! print out oscillator strengths.
+  !
+  if (r_grp%num > 1) then ! why? the number of groups of r_grp is larger than 1??
+     do iq = 1, kpt%nk
+        do irp = 1, gvec%syms%ntrans
+           if (chkpt < irp + (iq-1)*gvec%syms%ntrans) &
+                call Zwrite_pol(pol(irp,iq), &
+                gvec%syms%ntrans,qpt%nk,irp,iq,kpt%wfn(1,1)%nstate)
+        enddo
+     enddo
+  endif
+  epsinv = one
+  if (peinf%master) then
+     do iq = 1, qpt%nk
+        if (qpt%zerok(iq)) call sum_rule(rpaonly,gvec%syms%ntrans,nspin, &
+             gvec%per,kpt,pol(:,iq),gvec%celvol,xsum,epsinv)
+     enddo
+  endif
+
+  if (peinf%master .and. rpaonly) call delete_file(68,'egenvalues_lda')
+
+#ifdef MPI
+  call MPI_BCAST(xsum,1,MPI_DOUBLE_PRECISION,peinf%masterid,peinf%comm,info)
+  call MPI_BCAST(epsinv,1,MPI_DOUBLE_PRECISION,peinf%masterid,peinf%comm,info)
+#endif
+
+end subroutine Zcalculate_tdlda
+!===================================================================

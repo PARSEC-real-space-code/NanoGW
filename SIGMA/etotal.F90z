@@ -1,0 +1,124 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Calculate the total energy of an electronic system. The total energy
+! is calculated in a many-body framework (see Eq. 9.36 of Fetter & Walecka,
+! "Quantum Theory of Many-Particle Systems", Dover Pub., 2002). It
+! differs from the DFT total energy because the DFT total energy has
+! an exchange-correlation energy that should be added (see for example
+! the Delta_E_xc term in Eq. 5.22 of W. E. Pickett, Comput. Phys. Rep.
+! 9, 117, 1989).
+!
+! All output is printed by master PE in standard output.
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zetotal(gvec,kpt,nspin)
+
+  use typedefs
+  use mpi_module
+  use psp_module
+  implicit none
+
+  ! arguments
+  ! real-space grid
+  type (gspace), intent(in) :: gvec
+  ! k-points and electron wavefunctions
+  type (kptinfo), intent(in) :: kpt
+  ! number of spin channels
+  integer, intent(in) :: nspin
+
+  ! local variables
+  integer :: ii, isp, mi, ik
+  real(dp) :: eeig, ekin, elocal, enloc, eion
+  ! Cartesian coordinates of k-vector
+  real(dp) :: kcart(3)
+  SCALAR, dimension(:,:), allocatable :: e_k, e_nl, e_loc
+
+  !-------------------------------------------------------------------
+  ! Calculate kinetic energy, local energy and non-local energy.
+  !
+  eeig = zero
+  ekin = zero
+  elocal = zero
+  enloc = zero
+  do ik = 1, kpt%nk
+     do isp = 1, nspin
+        if (minval(kpt%wfn(isp,ik)%map)== 0) cycle
+
+        mi = kpt%wfn(isp,ik)%nmem
+        write(6,*) " in etotal, mi = ", mi
+        allocate(e_k(mi,mi),stat=ii)
+        call alccheck('e_k','etotal',mi*mi,ii)
+        e_k = Zzero
+
+        allocate(e_loc(mi,mi),stat=ii)
+        call alccheck('e_loc','etotal',mi*mi,ii)
+        e_loc = Zzero
+
+        allocate(e_nl(mi,mi),stat=ii)
+        call alccheck('e_nl','etotal',mi*mi,ii)
+        e_nl = Zzero
+        ! Use rho and e_nl as dummy arrays in energy_mtxel,
+        ! just to save CPU memory.
+        call Zenergy_mtxel(gvec,kpt%wfn(isp,ik),kpt%rho(1,isp), &
+             kpt%fk(1,ik),e_k,e_nl,e_loc)
+        do ii = 1, kpt%wfn(isp,ik)%nmem
+           mi = kpt%wfn(isp,ik)%imap(ii)
+           eeig = eeig + kpt%wfn(isp,ik)%e0(mi) * &
+                kpt%wfn(isp,ik)%occ0(mi) * kpt%weight(ik)
+           ekin = ekin + real(e_k(ii,ii),dp) * &
+                kpt%wfn(isp,ik)%occ0(mi) * kpt%weight(ik)
+           elocal = elocal + real(e_loc(ii,ii),dp) * &
+                kpt%wfn(isp,ik)%occ0(mi) * kpt%weight(ik)
+        enddo
+        deallocate(e_k, e_loc)
+
+        e_nl = Zzero
+        call dmatvec3('N',gvec%bvec,kpt%fk(1,ik),kcart)
+        do ii = 1, type_num
+           call Zv_nloc(gvec,psp(ii),kpt%wfn(isp,ik),ii,kcart,e_nl)
+        enddo
+        do ii = 1, kpt%wfn(isp,ik)%nmem
+           enloc = enloc + real(e_nl(ii,ii),dp) * &
+                kpt%wfn(isp,ik)%occ0(kpt%wfn(isp,ik)%imap(ii)) * kpt%weight(ik)
+        enddo
+        deallocate(e_nl)
+
+     enddo
+  enddo
+  eeig = eeig * two / real(nspin,dp)
+  ekin = ekin * two / real(nspin,dp)
+  elocal = elocal * two / real(nspin,dp)
+  enloc = enloc * two / real(nspin,dp)
+
+  !-------------------------------------------------------------------
+  ! Calculate ion-ion energy and print data out.
+  !
+  if (peinf%master) then
+     call forceion(psp,eion)
+     if (gvec%per /= 0) then
+     write(6,*)
+        write(6,*) 'WARNING! Local pseudopotential energy is wrong in periodic systems'
+        elocal = zero
+        write(6,*) 'WARNING! Ion-ion pseudopotential energy is wrong in periodic systems'
+        eion = zero
+        write(6,*) 'WARNING! Total pseudopotential energy is wrong in periodic systems'
+     endif
+     write(6,*)
+     write(6,17) 'Eigenvalue Energy', eeig
+     write(6,17) 'Kinetic Energy', ekin
+     write(6,17) 'Local Pseudopotential Energy', elocal
+     write(6,17) 'Non-local Pseudopotential Energy', enloc
+     write(6,17) 'Ion-ion Energy', eion
+     write(6,17) 'Total Energy', &
+          half * ( eeig + ekin + elocal + enloc ) + eion
+     write(6,*) 'Total energy excludes Exc - Int_{Vxc*rho}/2 term.'
+     write(6,*)
+    17 format(a35,' = ',f20.10,' [Ry]')
+  endif
+
+end subroutine Zetotal
+!===================================================================

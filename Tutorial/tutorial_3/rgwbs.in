@@ -1,0 +1,11 @@
+
+truncate_coulomb
+
+begin scissors
+  1  1  4  -0.700  14.45  0.10
+end scissors
+
+begin qpoints
+  0.000  0.000  0.000  1.00   1
+end qpoints
+

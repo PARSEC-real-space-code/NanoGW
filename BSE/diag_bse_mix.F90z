@@ -1,0 +1,408 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Reconstruct and diagonalize the Bethe-Salpeter Hamiltonian.
+! For the moment, diagonalization is not distributed.
+!
+! With mixing, size of full Hamiltonian is nmat = 2*bsepol%ntr.
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zdiag_bse_mix(kpt,bsepol,writeig,nrep,nspin)
+
+  use typedefs
+  use mpi_module
+  implicit none
+#ifdef MPI
+  include 'mpif.h'
+#endif
+
+  ! k-points and electron wave-functions
+  type (kptinfo), intent(in) :: kpt
+  ! BSE polarizability
+  type (polinfo), intent(inout) :: bsepol(nrep)
+  ! true if BSE eigenvectors are written in file bse_diag.dat
+  logical, intent(in) :: writeig
+  ! number of representations (Abelian group) and number of spin channels
+  integer, intent(in) :: nrep, nspin
+
+  ! local variables
+  ! date tag
+  character (len=26) :: datelabel
+  ! representation tag
+  character (len=1) :: crep
+  ! number of computed eigenstates
+  integer :: ncomp
+  ! representations of eigenstates
+  integer, pointer :: irep(:)
+  ! energy eigenvalues, oscillator strengths
+  real(dp), pointer :: eig(:), ostr(:,:)
+
+  integer :: ii, jj, kk, iv, ic, ik, ivc, isp, neigv
+  integer :: ipe, diagpe, ncol, npol, nmat_diag, nmat, irp, jrp
+  integer :: itape, ierr
+  real(dp) :: rsum(3), zvalence
+  SCALAR :: occ_vc
+  complex(dpc) :: ostrsum(3)
+  integer, dimension(:), allocatable :: indxeig, indx
+  real(dp), dimension(:), allocatable :: eigv, work
+  SCALAR, dimension(:,:), allocatable :: tdummy, tdummy2
+  complex(dpc), dimension(:), allocatable :: eigz
+#ifdef MPI
+  integer :: info
+  integer, dimension(:), allocatable :: map1
+  integer :: status(MPI_STATUS_SIZE)
+#endif
+  ! unit number of bse_diag.dat file
+  integer, parameter :: iunit = 200
+
+  zvalence = zero
+  do ik = 1, kpt%nk
+     do isp = 1, nspin
+        zvalence = zvalence + sum(kpt%wfn(isp,ik)%occ1)
+     enddo
+  enddo 
+  !-------------------------------------------------------------------
+  ! Initialize arrays of eigenvalues, OS and output file.
+  !
+  ncomp = 0
+  nmat = sum(bsepol(:)%ntr)
+  allocate(eig(nmat))
+  allocate(ostr(nmat,3))
+  allocate(irep(nmat))
+  if (peinf%master .and. writeig) then
+     open(iunit,file='bse_diag.dat',form='unformatted')
+     rewind(iunit)
+     call get_date(datelabel)
+     write(iunit) datelabel
+#ifdef CPLX
+     ii = 2
+#else
+     ii = 1
+#endif
+     jj = 1
+     write(iunit) kpt%wfn(1,1)%nstate, nrep, jj, ii
+  endif
+
+  !-------------------------------------------------------------------
+  ! Outer loop over representations.
+  !
+  do jrp = 1, nrep/r_grp%num, r_grp%npes
+     do diagpe = 0, r_grp%npes - 1
+        if (jrp + diagpe > nrep/r_grp%num) exit
+        irp = r_grp%g_rep(jrp + diagpe)
+        if (bsepol(irp)%ntr == 0) cycle
+        ncol = bsepol(irp)%nn
+        npol = bsepol(irp)%ntr
+        nmat = ncol * r_grp%npes
+        nmat_diag = npol
+        allocate(tdummy2(2*nmat,2*ncol))
+        if (r_grp%inode == diagpe) then
+           allocate(tdummy(nmat_diag,nmat_diag))
+           tdummy = Zzero
+        endif
+
+        do kk = 0,r_grp%npes - 1
+           if (r_grp%inode == diagpe) then
+              if (r_grp%inode == kk) then
+                 tdummy2 = bsepol(irp)%Zv
+              else
+#ifdef MPI
+                 call MPI_RECV(tdummy2,4*nmat*ncol,MPI_DOUBLE_SCALAR, &
+                      kk,kk,r_grp%comm,status,info)
+#endif
+              endif
+              do jj = 1, ncol
+                 ii = jj + kk*ncol
+                 if (ii > npol) cycle
+                 tdummy(1:npol,ii) = tdummy2(1:npol,jj)
+              enddo
+           else
+              if (r_grp%inode == kk) then
+#ifdef MPI
+                 call MPI_SEND(bsepol(irp)%Zv,4*nmat*ncol, &
+                      MPI_DOUBLE_SCALAR,diagpe,kk,r_grp%comm,info)
+#endif
+              endif
+           endif
+#ifdef MPI
+           call MPI_BARRIER(r_grp%comm,info)
+#endif
+        enddo
+        deallocate(bsepol(irp)%Zv)
+        deallocate(tdummy2)
+        if (r_grp%inode == diagpe) then
+           allocate(bsepol(irp)%Zv(nmat_diag,nmat_diag))
+           bsepol(irp)%Zv = tdummy
+           deallocate(tdummy)
+        endif
+     enddo
+     !
+     ! Start diagonalization.
+     !
+     irp = r_grp%g_rep(jrp + r_grp%inode)
+     if (irp <= nrep) then
+        if ( bsepol(irp)%ntr == 0 ) then
+           bsepol(irp)%nn = 0
+           cycle
+        endif
+        nmat = bsepol(irp)%ntr
+        write(crep,'(i1)') irp
+
+#ifdef DEBUG
+        kk = 5400 + irp
+        open(kk,file='bsemat_'//crep//'.dat',form='unformatted')
+        do ii = 1, nmat
+           write(kk) (bsepol(irp)%Zv(ii,jj),jj=1,nmat)
+        enddo
+        close(kk)
+#endif
+        call Zeigensolver(.true.,0,1,0,nmat,nmat,bsepol(irp)%Zv,bsepol(irp)%eig,ierr)
+        if (ierr /= 0) call die(' ')
+
+  !-------------------------------------------------------------------
+  ! Include occupancy factors in eigenvectors and calculate oscillator 
+  ! strengths for all eigenstates.
+  !
+  ! The oscillator strength for eigenvalue i (i=1,nmat) and polarization
+  ! direction l (l=1,3) is defined as:
+  !
+  ! ostr(i,l) = 2 * eigval(i) * | sum_vc dipole(ivc,l) * 
+  !        [ eigreal(ivc,i) + eigreal(ivc+bse%nval*bse%ncond,i) ] |^2  
+  !
+        do ivc = 1,bsepol(irp)%ntr
+           iv = bsepol(irp)%tr(1,ivc)
+           ic = bsepol(irp)%tr(2,ivc)
+           ik = bsepol(irp)%tr(3,ivc)
+           isp = 1
+           if (ivc > bsepol(irp)%n_up) isp = 2
+!ccm Should have sqrt here ?
+           occ_vc = Zone * sqrt(kpt%wfn(isp,ik)%occ1(iv) - kpt%wfn(isp,ik)%occ1(ic))
+           bsepol(irp)%Zv(ivc,:) = bsepol(irp)%Zv(ivc,:) * occ_vc
+        enddo
+        do ii = 1, nmat
+           ostrsum = zero
+           do ivc = 1,bsepol(irp)%ntr
+              ostrsum = ostrsum + &
+                   bsepol(irp)%Zdipole(ivc,:) * bsepol(irp)%Zv(ivc,ii)
+           enddo
+           eig(ii + ncomp) = bsepol(irp)%eig(ii)
+           ostr(ii + ncomp,:) = abs(ostrsum)**2 * two * eig(ii + ncomp)
+           irep(ii + ncomp) = irp
+        enddo
+        ncomp = ncomp + nmat
+
+        if (writeig) then
+           itape = 300 + irp
+           open(unit=itape,file='diag_tmp_'//crep//'.dat',form='unformatted')
+           write(itape) irp,nmat,bsepol(irp)%ntr
+           write(itape) (bsepol(irp)%tr(:,jj),jj=1,bsepol(irp)%ntr)
+           write(itape) (bsepol(irp)%eig(jj),jj=1,nmat)
+           do ii = 1, nmat
+              write(itape) (bsepol(irp)%Zv(jj,ii),jj=1,nmat)
+           enddo
+           close(itape)
+        endif
+
+     endif
+
+     do ipe = 0, r_grp%npes - 1
+#ifdef MPI
+        call MPI_BARRIER(r_grp%comm,info)
+#endif
+        irp = r_grp%g_rep(jrp + ipe)
+        if (irp > nrep) cycle
+        if (r_grp%inode == ipe) then
+           nmat_diag = bsepol(irp)%ntr
+           write(6,'(/,a)') repeat('#',65)
+           write(6,*) ' Calculation of BSE eigenvectors for', &
+                ' representation ', irp, ' processor ', ipe
+           write(6,*) ' number of pair transitions = ', nmat_diag
+           write(6,'(a,/)') repeat('#',65)
+           write(6,*) ' Lowest eigenvalues for this representation (eV) : '
+           do ii = 1, min(3,nmat_diag)
+              write(6,*) bsepol(irp)%eig(ii)*ryd
+           enddo
+        endif
+        call flush(6)
+     enddo
+  enddo
+#ifdef MPI
+  call MPI_BARRIER(peinf%comm,info)
+#endif
+
+  !-------------------------------------------------------------------
+  ! Processors send information to master PE.
+  !
+#ifdef MPI
+  call MPI_ALLREDUCE(ncomp,ii,1,MPI_INTEGER,MPI_SUM, &
+       peinf%comm,info)
+  allocate(work(3*ii))
+  allocate(map1(3*ii))
+
+  do ipe = 0, peinf%npes - 1
+     kk = 10 + 10*ipe
+     if (peinf%masterid == ipe) cycle
+     if (peinf%master) then
+        kk = kk + 1
+        call MPI_RECV(ii,1,MPI_INTEGER, &
+             ipe,kk,peinf%comm,status,info)
+        kk = kk + 1
+        call MPI_RECV(map1,ii,MPI_INTEGER, &
+             ipe,kk,peinf%comm,status,info)
+        irep(ncomp+1:ncomp+ii) = map1(1:ii)
+        kk = kk + 1
+        call MPI_RECV(work,ii,MPI_DOUBLE_PRECISION, &
+             ipe,kk,peinf%comm,status,info)
+        call dcopy(ii,work(1),1,eig(ncomp+1),1)
+        kk = kk + 1
+        call MPI_RECV(work,ii,MPI_DOUBLE_PRECISION, &
+             ipe,kk,peinf%comm,status,info)
+        call dcopy(ii,work(1),1,ostr(ncomp+1,1),1)
+        kk = kk + 1
+        call MPI_RECV(work,ii,MPI_DOUBLE_PRECISION, &
+             ipe,kk,peinf%comm,status,info)
+        call dcopy(ii,work(1),1,ostr(ncomp+1,2),1)
+        kk = kk + 1
+        call MPI_RECV(work,ii,MPI_DOUBLE_PRECISION, &
+             ipe,kk,peinf%comm,status,info)
+        call dcopy(ii,work(1),1,ostr(ncomp+1,3),1)
+        ncomp = ncomp + ii
+     endif
+     if (peinf%inode == ipe) then
+        kk = kk + 1
+        call MPI_SEND(ncomp,1,MPI_INTEGER, &
+             peinf%masterid,kk,peinf%comm,info)
+        kk = kk + 1
+        call MPI_SEND(irep,ncomp,MPI_INTEGER, &
+             peinf%masterid,kk,peinf%comm,info)
+        kk = kk + 1
+        call MPI_SEND(eig,ncomp,MPI_DOUBLE_PRECISION, &
+             peinf%masterid,kk,peinf%comm,info)
+        kk = kk + 1
+        call MPI_SEND(ostr(1,1),ncomp,MPI_DOUBLE_PRECISION, &
+             peinf%masterid,kk,peinf%comm,info)
+        kk = kk + 1
+        call MPI_SEND(ostr(1,2),ncomp,MPI_DOUBLE_PRECISION, &
+             peinf%masterid,kk,peinf%comm,info)
+        kk = kk + 1
+        call MPI_SEND(ostr(1,3),ncomp,MPI_DOUBLE_PRECISION, &
+             peinf%masterid,kk,peinf%comm,info)
+     endif
+  enddo
+  deallocate(work,map1)
+  call MPI_BARRIER(peinf%comm,info)
+#endif
+
+  !-------------------------------------------------------------------
+  ! From now on, only master PE collects and prints out info.
+  if (peinf%master) then
+     !
+     ! Write out eigenvectors if needed.
+     !
+     if (writeig) then
+        do irp = 1, nrep
+           if (bsepol(irp)%ntr == 0) cycle
+           itape = 300 + irp
+           write(crep,'(i1)') irp
+           open(unit=itape,file='diag_tmp_'//crep//'.dat',form='unformatted',status='old')
+           read(itape) ii,nmat
+           ii = 1
+           write(iunit) irp,ii,nmat,bsepol(irp)%ntr,bsepol(irp)%n_up
+           allocate(work(nmat))
+           allocate(eigz(nmat))
+           read(itape)
+           write(iunit) (bsepol(irp)%tr(:,jj),jj=1,bsepol(irp)%ntr)
+           read(itape) (work(jj),jj=1,nmat)
+           write(iunit) (work(jj),jj=1,nmat)
+           do ii = 1, nmat
+              read(itape) (work(jj),jj=1,nmat)
+              write(iunit) (work(jj),jj=1,nmat)
+           enddo
+           close(itape,status='delete')
+           deallocate(work,eigz)
+        enddo
+     endif
+     close(iunit)
+     !
+     ! Select eigenvalues with positive real part and sort them.
+     !
+     jj = 0
+     do ii = 1, ncomp
+        if (eig(ii) > 0) jj = jj + 1
+     enddo
+     neigv = jj
+     allocate(indxeig(neigv))
+     allocate(eigv(neigv))
+     jj = 0
+     do ii = 1, ncomp
+        if (eig(ii) > 0) then
+           jj = jj + 1
+           eigv(jj) = eig(ii)
+           indxeig(jj) = ii
+        endif
+     enddo
+     allocate(indx(neigv))
+     call quicksort(neigv,eigv,indx)
+     !
+     ! Print value of oscillator strength sum rule.
+     !
+     rsum = zero
+     do jj = 1, neigv
+        rsum = rsum + ostr(indxeig(jj),:)
+     enddo
+     write(6,'(/,a)') repeat('-',65)
+     write(6,'(/,a)') ' Checking oscillator strength sum rule '
+     write(6,'(a)') ' Ratio between numerical and exact values : '
+     write(6,'(25x,a)') '   Field polarization '
+     write(6,'(25x,a)') '  x  ----  y  ----  z  ---- average'
+     write(6,'(a,3f9.4,f12.4,/)') '      BSE Sum Rule  =', &
+          rsum/zvalence, sum(rsum)/zvalence/three
+     write(6,'(a,/)') repeat('-',65)
+     !
+     ! Print value of static polarizability.
+     !
+     rsum = zero
+     do jj = 1, neigv
+        rsum = rsum + four*ostr(indxeig(jj),:) / eigv(jj) / eigv(jj)
+     enddo
+     rsum = rsum / real(kpt%nk,dp)
+     write(6,'(a)') ' Static polarizability (a.u.) '
+     write(6,'(30x,a)') '   Field polarization '
+     write(6,'(30x,a)') '  x  ----  y  ----  z  ---- average'
+     write(6,'(a,3f9.4,f12.4,/)') '     BSE Polarizability =  ', &
+          rsum, sum(rsum)/three
+     write(6,'(a,/)') repeat('-',65)
+     !
+     ! Print out eigenvalues.
+     !
+     write(6,*) ' Lowest eigenvalues from BSE, all representations'
+     write(6,*) 'Order      Energy (eV)  Representation'
+     do ii = 1, min(10,neigv)
+        write(6,'(i5,f16.6,5x,i5)') ii, eigv(indx(ii))*ryd, &
+             irep(indxeig(indx(ii)))
+     enddo
+     write(6,*)
+     !
+     ! Write out eigenvalues_bse file.
+     !
+     open(unit=14,file='eigenvalues_bse',form='formatted')
+     write(14,*) neigv
+     do ii = 1, neigv
+        write(14,'(f12.8,2x,g16.8,2x,g16.8,2x,g16.8,i4)') eigv(indx(ii))*ryd, &
+             ((ostr(indxeig(indx(ii)),jj)),jj=1,3), &
+             irep(indxeig(indx(ii)))
+     enddo
+     close(14)
+     deallocate(indxeig,eigv,indx)
+  endif
+  deallocate(eig,ostr,irep)
+
+#ifdef MPI
+  call MPI_BARRIER(peinf%comm,info)
+#endif
+
+end subroutine Zdiag_bse_mix
+!===================================================================

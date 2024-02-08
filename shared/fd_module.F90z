@@ -1,0 +1,586 @@
+#include "../shared/mycomplex.h"
+!===============================================================
+!
+! Module for finite differences. This is a self-contained module
+! to set up the finite difference data and calculate gradients
+! and laplacians of functions on the grid.
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!---------------------------------------------------------------
+#ifndef CPLX
+module fd_module
+
+  use myconstants
+  use typedefs
+
+  public
+
+  type finite_difference
+     ! total number of grid points in irreducible wedge, equal to gvec%nr
+     integer :: nwedge
+     ! number of neighbors used on one side in numerical derivative
+     integer :: norder
+     ! inverse of the normalized lattice vectors matrix.
+     ! neighbor points to each point belonging to a computing PE;
+     ! this index array indicates the position, in the 1-d array, 
+     ! of the ith neighbor of point j (i from 1 to norder*3, because
+     ! there are three directions, j from 1 to ndim). used for
+     ! calculating derivatives; notice that neibs points to the
+     ! index in irreducible wedge, not full grid!
+     integer, dimension (:,:), pointer :: neibs
+     ! index array indicating the symmetry operation needed to
+     ! bring this neighor point back to the irreducible wedge
+     ! NOTE: tneibs should be used whenever generic functions are
+     ! evaluated at a neighbor point, with the exception of totally
+     ! symmetric functions (like charge density, potentials etc.);
+     ! that is because totally symmetric functions have character one
+     ! (i.e., they do gain phase factors upon a symmetry operation)
+     integer, dimension (:,:), pointer :: tneibs
+     ! total number of directions for calculating derivatives (including x, y, z):
+     integer :: lap_dir_num
+     ! direction value stored in lap_dir(3). Index meaning is 1 - uv 
+     ! direction, 2 uw direction, 3 vw direction. Value meaning:
+     ! 0 direction is not used, 1 u+v direction is used, -1 u-v
+     ! direction is used.
+     integer, dimension(6) :: lap_dir
+     ! step size for each direction
+     real(dp), dimension(6) :: lap_dir_step
+     ! an array with the pointers of the 3 nearest neighbors that are used
+     integer, dimension(6,3) :: lap_neig
+     ! laplacian coefficients values for different directions
+     real(dp), dimension(6) :: b_lap
+     ! normalized reciprocal lattice vectors
+     real(dp), dimension(3,3) :: bvec_norm
+     ! coefficients for the finite difference expansion
+     real(dp), dimension (:,:), pointer :: coe1, coe2
+  end type finite_difference
+
+  ! finite difference data
+  type (finite_difference) :: fd
+
+contains
+
+  !===============================================================
+  !
+  !  Define finite difference data.
+  !
+  !---------------------------------------------------------------
+  subroutine fd_setup(gvec,kr)
+
+    use typedefs
+    implicit none
+
+    ! arguments
+    type (gspace), intent(in):: gvec
+    ! Coordinates of grid points in real space: rr_i = (shift + kr_i)*h
+    integer, intent(in) :: kr(3,gvec%nr*gvec%syms%ntrans)
+
+    ! local variables
+    integer :: nxmin, nxmax, nymin, nymax, nzmin, nzmax, &
+         mxmin, mxmax, mymin, mymax, mzmin, mzmax
+    !  counters
+    integer :: ii, jj, kk, iwrap, neib, ishell, indx(12), ndim
+    real(dp) :: xtmp
+    ! 3d to 1d conversion table for grid point indexing - gives the
+    ! 1d index based on the 3-d position (in h units, relative to the
+    ! origin). Returns value of ndim+1 if point is outside the boundary sphere
+    ! indexg(i,j,k) = ndim+1 for points outside the current boundary sphere
+    ! indexg(i,j,k) = 1 to ndim for points inside the current boundary sphere
+    integer, dimension (:,:,:), allocatable :: indexg
+    ! Temporary array for Fornberg coefficients
+    real(dp), allocatable :: coef(:)
+
+    do ii = 1, 3
+       xtmp = sqrt(sum(gvec%avec(:,ii)**2))
+       fd%bvec_norm(ii,:) = gvec%avec(:,ii)/xtmp
+    enddo
+    call mtrxin(fd%bvec_norm,xtmp,ii)
+    if (ii /= 0) call die('ERROR in mtrxin. Stop')
+
+    fd%nwedge = gvec%nr
+    ndim = gvec%nr * gvec%syms%ntrans
+
+    !---------------------------------------------------------------
+    ! Build the index of grid points with appropriate boundary conditions.
+    !
+    mxmax = maxval(kr(1,:)) + fd%norder
+    mxmin = minval(kr(1,:)) - fd%norder
+    mymax = maxval(kr(2,:)) + fd%norder
+    mymin = minval(kr(2,:)) - fd%norder
+    mzmax = maxval(kr(3,:)) + fd%norder
+    mzmin = minval(kr(3,:)) - fd%norder
+    allocate (indexg (mxmin:mxmax,mymin:mymax,mzmin:mzmax))
+    nxmax = maxval(kr(1,:))
+    nxmin = minval(kr(1,:))
+    nymax = maxval(kr(2,:))
+    nymin = minval(kr(2,:))
+    nzmax = maxval(kr(3,:))
+    nzmin = minval(kr(3,:))
+    indexg = 0
+    do jj = 1, ndim
+       indexg(kr(1,jj),kr(2,jj),kr(3,jj)) = jj
+    enddo
+
+    if (gvec%per >= 1) then
+       iwrap = -2*nxmin
+       do ii = nxmin - fd%norder, nxmin - 1
+          do jj = nymin, nymax
+             do kk = nzmin, nzmax
+                indexg(ii,jj,kk) = indexg(ii+iwrap,jj,kk)
+             enddo
+          enddo
+       enddo
+       do ii = nxmax + 1, nxmax + fd%norder
+          do jj = nymin, nymax
+             do kk = nzmin, nzmax
+                indexg(ii,jj,kk) = indexg(ii-iwrap,jj,kk)
+             enddo
+          enddo
+       enddo
+    endif
+    if (gvec%per >= 2) then
+       iwrap = -2*nymin
+       do ii = nxmin, nxmax
+          do jj = nymin - fd%norder, nymin - 1
+             do kk = nzmin, nzmax
+                indexg(ii,jj,kk) = indexg(ii,jj+iwrap,kk)
+             enddo
+          enddo
+       enddo
+       do ii = nxmin, nxmax
+          do jj = nymax + 1, nymax + fd%norder
+             do kk = nzmin, nzmax
+                indexg(ii,jj,kk) = indexg(ii,jj-iwrap,kk)
+             enddo
+          enddo
+       enddo
+    endif
+    if (gvec%per >= 3) then
+       iwrap = -2*nzmin
+       do ii = nxmin, nxmax
+          do jj = nymin, nymax
+             do kk = nzmin - fd%norder, nzmin - 1
+                indexg(ii,jj,kk) = indexg(ii,jj,kk+iwrap)
+             enddo
+          enddo
+       enddo
+       do ii = nxmin, nxmax
+          do jj = nymin, nymax
+             do kk = nzmax + 1, nzmax + fd%norder
+                indexg(ii,jj,kk) = indexg(ii,jj,kk-iwrap)
+             enddo
+          enddo
+       enddo
+    endif
+    !---------------------------------------------------------------
+    ! Set the 3d->1d index, indexg, explicitly to nwedge+1 (it was zero
+    ! before) for all points outside the boundary sphere.
+    ! Some compilers may have problems handling the bounds of indexg. We
+    ! should avoid the "where" statement..
+    !
+    do kk = mzmin, mzmax
+       do jj = mymin, mymax
+          do ii = mxmin, mxmax
+             if (indexg(ii,jj,kk) == 0) indexg(ii,jj,kk) = ndim + 1
+          enddo
+       enddo
+    enddo
+
+    !---------------------------------------------------------------
+    ! Determine all points that are neighbor to each grid point, and
+    ! keep track of its equivalent in the irreducible wedge.
+    !
+    allocate (fd%neibs(2*fd%lap_dir_num*fd%norder,ndim))
+    allocate(fd%tneibs(2*fd%lap_dir_num*fd%norder,ndim))
+    do ii = 1, ndim
+       neib = 0
+       do ishell = 1, fd%norder
+          jj = 1
+          do kk = 1, fd%lap_dir_num 
+             indx(jj) = indexg( &
+                  kr(1,ii)-ishell*fd%lap_neig(kk,1), &
+                  kr(2,ii)-ishell*fd%lap_neig(kk,2), &
+                  kr(3,ii)-ishell*fd%lap_neig(kk,3))
+             indx(jj+1) = indexg( &
+                  kr(1,ii)+ishell*fd%lap_neig(kk,1), &
+                  kr(2,ii)+ishell*fd%lap_neig(kk,2), &
+                  kr(3,ii)+ishell*fd%lap_neig(kk,3))
+             jj = jj + 2
+          enddo
+          do jj = 1, 2*fd%lap_dir_num
+             fd%neibs(neib+jj,ii) = gvec%rindex(indx(jj))
+             fd%tneibs(neib+jj,ii) = gvec%rtrans(indx(jj))
+          enddo
+          neib = neib + 2*fd%lap_dir_num
+       enddo
+    enddo
+    do ii = 1, ndim
+       do jj = 1, 2 * fd%lap_dir_num * fd%norder
+          if (fd%neibs(jj,ii) > gvec%nr) fd%neibs(jj,ii) = gvec%nr + 1
+       enddo
+    enddo
+
+    deallocate(indexg)
+    !---------------------------------------------------------------
+    !  Get coefficients for numerical first derivative based on the 
+    !  order specified by the user.
+    !
+    allocate(coef(-fd%norder:fd%norder))
+    call fornberg(1,fd%norder,coef)
+
+    allocate(fd%coe1(-fd%norder:fd%norder,3))
+    do ii = 1, 3
+       fd%coe1(:,ii) = coef/gvec%step(ii)
+    end do
+
+    !---------------------------------------------------------------
+    !  Get coefficients for numerical second derivative based on the 
+    !  order specified by the user.
+    !
+    call fornberg(2,fd%norder,coef)
+
+    allocate(fd%coe2(-fd%norder:fd%norder,fd%lap_dir_num))
+    do ii = 1, fd%lap_dir_num
+       fd%coe2(:,ii) = -fd%b_lap(ii)*coef/(fd%lap_dir_step(ii)**2)
+    end do
+
+    deallocate(coef)
+
+  end subroutine fd_setup
+  !===============================================================
+  !
+  !  Copyright (C) 2005 Finite Difference Research Group
+  !  This file is part of parsec, http://www.ices.utexas.edu/parsec/
+  !
+  !  Coefficients for the first & second order numerical derivative
+  !  under the centered finite difference scheme.
+  !  Bengt Fornberg,  Exxon Res. & Eng. Co., NJ 08801, 'bfornbe@erenj.com'
+  !  David M. Sloan,  Dept. of Mathematics, U. of Strathclyde,
+  !  Glasgow G1 1HX, Scotland,  'd.sloan@strath.ac.uk'
+  !  Acta Numerica 94,  Cambridge Univ. Press (1994)
+  !
+  !---------------------------------------------------------------
+  subroutine fornberg(iddd,norder,coe)
+
+    use myconstants
+    implicit none
+
+    ! arguments
+    !  order of expansion of derivative. 
+    !  it is the number of neighbors used ON ONE SIDE.
+    !  the maximum order implemented is 20.
+    integer, intent(in) :: norder
+    !  iddd - order of the derivative (iddd = 1 or 2)
+    integer, intent(in) :: iddd
+
+    !  coe - coefficients for the derivative
+    real(dp), intent(out) :: coe(-norder:norder)
+
+    ! local variables
+    !  counters 
+    integer :: ii
+    !---------------------------------------------------------------
+    !
+    !  First order derivative
+    !
+    if(iddd == 1) then
+
+       select case (norder)
+       case (1)
+          coe(1) =  0.50000000000000D+00
+       case (2)
+          coe(1) =  2.d0/3.d0
+          coe(2) = -1.d0/12.d0
+       case (3)
+          coe(1) =  3.d0/4.d0
+          coe(2) = -3.d0/20.d0
+          coe(3) =  1.d0/60.d0
+       case (4)   
+          coe(1) =  4.d0/5.d0
+          coe(2) = -1.d0/5.d0
+          coe(3) =  4.d0/105.d0
+          coe(4) = -1.d0/280.d0
+       case (5)     
+          coe(1) =  0.8333333333D+00
+          coe(2) = -0.2380952381D+00
+          coe(3) =  0.5952380952D-01
+          coe(4) = -0.9920634921D-02
+          coe(5) =  0.7936507937D-03
+       case (6)    
+          coe(1) =  0.8571428571D+00
+          coe(2) = -0.2678571429D+00
+          coe(3) =  0.7936507937D-01
+          coe(4) = -0.1785714286D-01
+          coe(5) =  0.2597402597D-02
+          coe(6) = -0.1803751804D-03
+       case (7)    
+          coe(1) =  0.8750000000D+00
+          coe(2) = -0.2916666667D+00
+          coe(3) =  0.9722222222D-01
+          coe(4) = -0.2651515152D-01
+          coe(5) =  0.5303030303D-02
+          coe(6) = -0.6798756799D-03
+          coe(7) =  0.4162504163D-04
+       case (8)    
+          coe(1) =  0.8888888889D+00
+          coe(2) = -0.3111111111D+00
+          coe(3) =  0.1131313131D+00
+          coe(4) = -0.3535353535D-01
+          coe(5) =  0.8702408702D-02
+          coe(6) = -0.1554001554D-02
+          coe(7) =  0.1776001776D-03
+          coe(8) = -0.9712509713D-05
+       case (9)      
+          coe(1) =  0.9000000000D+00
+          coe(2) = -0.3272727273D+00
+          coe(3) =  0.1272727273D+00
+          coe(4) = -0.4405594406D-01
+          coe(5) =  0.1258741259D-01
+          coe(6) = -0.2797202797D-02
+          coe(7) =  0.4495504496D-03
+          coe(8) = -0.4627725216D-04
+          coe(9) =  0.2285296403D-05
+       case (10)    
+          coe(1) =  0.9090909091D+00
+          coe(2) = -0.3409090909D+00
+          coe(3) =  0.1398601399D+00
+          coe(4) = -0.5244755245D-01
+          coe(5) =  0.1678321678D-01
+          coe(6) = -0.4370629371D-02
+          coe(7) =  0.8814714697D-03
+          coe(8) = -0.1285479227D-03
+          coe(9) =  0.1202787580D-04
+          coe(10)= -0.5412544112D-06
+       end select
+
+       coe(0) = 0.d0
+       do ii = 1,norder
+          coe(-ii) = -coe(ii)
+       enddo
+       !
+       !  Second order derivative
+       !
+    else if (iddd == 2) then
+
+       select case (norder)
+       case (1)
+          coe(0) = -0.20000000000000D+01
+          coe(1) =  0.10000000000000D+01
+       case (2) 
+          coe(0) = -0.25000000000000D+01
+          coe(1) =  0.13333333333333D+01
+          coe(2) = -0.83333333333333D-01
+       case (3)
+          coe(0) = -0.27222222222222D+01
+          coe(1) =  0.15000000000000D+01
+          coe(2) = -0.15000000000000D+00
+          coe(3) =  0.11111111111111D-01
+       case (4)
+          coe(0) = -0.28472222222222D+01
+          coe(1) =  0.16000000000000D+01
+          coe(2) = -0.20000000000000D+00
+          coe(3) =  0.25396825396825D-01
+          coe(4) = -0.17857142857143D-02
+       case (5)
+          coe(0) = -0.29272222222222D+01
+          coe(1) =  0.16666666666667D+01
+          coe(2) = -0.23809523809524D+00
+          coe(3) =  0.39682539682540D-01
+          coe(4) = -0.49603174603175D-02
+          coe(5) =  0.31746031746032D-03
+       case (6)
+          coe(0) = -0.29827777777778D+01
+          coe(1) =  0.17142857142857D+01
+          coe(2) = -0.26785714285714D+00
+          coe(3) =  0.52910052910053D-01
+          coe(4) = -0.89285714285714D-02
+          coe(5) =  0.10389610389610D-02
+          coe(6) = -0.60125060125060D-04
+       case (7)
+          coe(0) = -0.30235941043084D+01
+          coe(1) =  0.17500000000000D+01
+          coe(2) = -0.29166666666667D+00
+          coe(3) =  0.64814814814815D-01
+          coe(4) = -0.13257575757576D-01
+          coe(5) =  0.21212121212121D-02
+          coe(6) = -0.22662522662523D-03
+          coe(7) =  0.11892869035726D-04
+       case (8)
+          coe(0) = -0.30548441043084D+01
+          coe(1) =  0.17777777777778D+01
+          coe(2) = -0.31111111111111D+00
+          coe(3) =  0.75420875420875D-01
+          coe(4) = -0.17676767676768D-01
+          coe(5) =  0.34809634809635D-02
+          coe(6) = -0.51800051800052D-03
+          coe(7) =  0.50742907885765D-04
+          coe(8) = -0.24281274281274D-05
+       case (9)
+          coe(0) = -0.30795354623331D+01
+          coe(1) =  0.18000000000000D+01
+          coe(2) = -0.32727272727273D+00
+          coe(3) =  0.84848484848485D-01
+          coe(4) = -0.22027972027972D-01
+          coe(5) =  0.50349650349650D-02
+          coe(6) = -0.93240093240093D-03
+          coe(7) =  0.12844298558584D-03
+          coe(8) = -0.11569313039901D-04
+          coe(9) =  0.50784364509855D-06
+       case (10)
+          coe(0) = -0.30995354623331D+01
+          coe(1) =  0.18181818181818D+01
+          coe(2) = -0.34090909090909D+00
+          coe(3) =  0.93240093240093D-01
+          coe(4) = -0.26223776223776D-01
+          coe(5) =  0.67132867132867D-02
+          coe(6) = -0.14568764568765D-02
+          coe(7) =  0.25184899134479D-03
+          coe(8) = -0.32136980666392D-04
+          coe(9) =  0.26728612899924D-05
+          coe(10)= -0.10825088224469D-06
+       end select
+
+       do ii = 1,norder
+          coe(-ii) = coe(ii)
+       end do
+
+    else
+       write(6,*) ' ERROR: invalid derivative order, iddd = ', iddd
+       write(6,*) ' STOP in FORNBERG '
+       call die(' ')
+    endif
+
+  end subroutine fornberg
+#endif
+  !===================================================================
+  !
+  ! Calculates the gradient of a function specified on the real-space grid
+  ! using finite differences. Since a generic function and its
+  ! gradient do not always belong to the same irreducible representation,
+  ! the output gradient is calculated on the full grid, not only the
+  ! irreducible wedge.
+  !
+  ! INPUT:
+  !   irp : irreducible representation of f(r), 1 for fully symmetric function.
+  !   given_func : function f(r) on the real-space grid
+  !
+  ! OUTPUT:
+  !   gradf : Gradient[ f(r) ] on the real-space grid
+  !
+  !-------------------------------------------------------------------
+  subroutine Zget_grad_fd(syms,given_func,gradf,irp) 
+
+    use typedefs
+    implicit none
+
+    ! arguments
+    type (symmetries), intent(in) :: syms
+    SCALAR, dimension (fd%nwedge), intent(in) :: given_func
+    SCALAR, dimension (3,fd%nwedge*syms%ntrans), intent(out) :: gradf
+    integer, intent(in) :: irp
+
+    ! local variables
+    ! counters
+    integer :: ii, jj, kk, ish, charac(syms%ntrans)
+    SCALAR :: tmpvec(3)
+    ! function array with one extra point
+    SCALAR :: func(fd%nwedge+1)
+
+    ! ---------------------------------------------------------------
+    ! We need an extra point in the function for which it equals 0.
+    ! It is needed because neibs holds value  between 1 to nwedge+1.
+    ! The given function is assumed to to be 0 in index nwedge+1.
+    !
+    call Zcopy(fd%nwedge,given_func(1),1,func(1),1)
+    func(fd%nwedge+1) = Zzero
+
+    charac = syms%chi(irp,:)
+    gradf = Zzero
+
+    ! Loop over points in the full grid.
+    do ii = 1, fd%nwedge*syms%ntrans
+       tmpvec = Zzero
+       do ish = 0, fd%norder - 1
+          do jj = 1, 3
+             kk = 2 * jj - 1 + ish * fd%lap_dir_num * 2
+             tmpvec(jj) = tmpvec(jj) + fd%coe1(ish+1,jj) * &
+                  (func( fd%neibs(kk+1,ii) )*charac(fd%tneibs(kk+1,ii)) - &
+                  func( fd%neibs(kk,ii) )*charac(fd%tneibs(kk,ii)))
+          enddo
+       enddo
+       if (fd%lap_dir_num > 3) then
+          call Zmatvec3('N',fd%bvec_norm,tmpvec,gradf(1,ii))
+       else
+          gradf(1:3,ii) = tmpvec
+       endif
+    enddo
+
+  end subroutine Zget_grad_fd
+  !===============================================================
+  !
+  ! Calculate the negative of the laplacian of a given functions using
+  ! finite differences. The FD order is assumed positive. Both input
+  ! function and its laplacian are defined in the irreducible wedge
+  ! only.
+  !
+  ! INPUT:
+  !   irp : irreducible representation of f(r), 1 for fully symmetric function.
+  !   given_func : function f(r) on the real-space grid
+  !
+  ! OUTPUT:
+  !   laplf : -Laplacian[ f(r) ] on the real-space grid
+  !
+  !-------------------------------------------------------------------
+  subroutine Zget_lap_fd(syms,given_func,laplf,irp)
+
+    use typedefs
+    implicit none
+
+    ! arguments
+    type (symmetries), intent(in) :: syms
+    SCALAR, intent(in) :: given_func(fd%nwedge)
+    SCALAR, intent(out) :: laplf(fd%nwedge)
+    integer, intent(in) :: irp
+
+    ! local variables
+    ! counters
+    integer :: ii, jj, kk, ish, charac(syms%ntrans)
+    SCALAR :: tmp
+    ! function array with one extra point
+    SCALAR :: func(fd%nwedge+1)
+
+    !-------------------------------------------------------------------
+    !  Set wave function outside the domain be zero.
+    !  The index for points outside the domain is nwedge+1.
+    !
+    call Zcopy(fd%nwedge,given_func,1,func,1)
+    func(fd%nwedge+1) = Zzero
+
+    charac = syms%chi(irp,:)
+
+    !  Diagonal (local) part.
+    tmp = Zone*sum(fd%coe2(0,1:fd%lap_dir_num))
+    call Zcopy(fd%nwedge,func(1),1,laplf(1),1)
+    call Zscal(fd%nwedge,tmp,laplf(1),1)
+
+    !  Non-local part.
+    do ii = 1, fd%nwedge
+       tmp = laplf(ii)
+       do ish = 0, fd%norder - 1
+          do jj = 1, fd%lap_dir_num
+             kk = 2 * jj - 1 + ish * fd%lap_dir_num * 2
+             tmp = tmp + fd%coe2(ish+1,jj)* &
+                  (func( fd%neibs(kk,ii) )*charac(fd%tneibs(kk,ii)) + &
+                  func( fd%neibs(kk+1,ii) )*charac(fd%tneibs(kk+1,ii)))
+          enddo
+       enddo
+       laplf(ii) = tmp
+    enddo
+
+  end subroutine Zget_lap_fd
+  !===============================================================
+#ifdef CPLX
+end module fd_module
+#endif

@@ -1,0 +1,74 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Compute conjg(pot_l) * pot_r / E. This operation is performed
+! several times during a self-energy calculation. See for example
+! Eq. 24, 30 of Tiago & Chelikowsky, PRB 73, 205334
+!
+!
+! INPUT:
+!    nn : number of polarizability poles
+!    nen : number of energy values
+!    eni : energy values
+!    esign : sign in denominator
+!    ecut : Lorentzian cutoff
+!    ecut2 = ecut*ecut
+!    occfac : occupancy of orbitals
+!    eig : polarizability eigenvalues
+!    pot_r : V^1 potential
+!    pot_l : V^2 potential
+!
+! OUTPUT:
+!    sum0 : final sum
+!
+!   sum0(1,i) = sum_(s=1,nn) conjg(pot_l(s)) * pot_r(s) * occfac *
+!        [ eni(i) + eig(s) ] / [ { eni(i) + eig(s) }^2 + ecut2 ]
+!
+!   sum0(2,i) = sum_(s=1,nn) conjg(pot_l(s)) * pot_r(s) * occfac *
+!        ecut * occfac / [ { eni(i) + eig(s) }^2 + ecut2 ]
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zcontract_en(nn,nen,eni,esign,ecut,ecut2,occfac,eig,pot_r,pot_l,sum0)
+  use myconstants
+  implicit none
+
+  ! arguments
+  integer, intent(in) :: nn, nen
+  real(dp), intent(in) :: eni(nen), esign, ecut2, ecut, occfac
+  real(dp), intent(in) :: eig(nn)
+  SCALAR, intent(in) :: pot_r(nn), pot_l(nn)
+  SCALAR, intent(inout) :: sum0(2,nen)
+
+  ! local variables
+  integer :: jj, ien
+  SCALAR :: edenr(nen), edeni(nen), pot_prod(nn), ecutsgn, zoccfac
+
+  if (nn <= 0) return
+
+  ecutsgn = Zone * ecut * esign
+  zoccfac = Zone * occfac
+  call dscal(nn,esign,eig,1)
+  call Zcopy(nn,pot_l,1,pot_prod,1)
+  pot_prod = MYCONJG(pot_prod)
+  call Zmultiply_vec(nn,pot_r,pot_prod)
+  ! pot_prod = zoccfac*pot_l(1:nn)*pot_r(1:nn)
+  call Zscal(nn,zoccfac,pot_prod,1)
+  do jj = 1, nn
+     edenr = Zone*( eni + eig(jj) )
+     edenr = edenr**2 + ecut2
+     do ien = 1, nen
+        edeni(ien) = ecutsgn/edenr(ien)
+        edenr(ien) = (eni(ien) + eig(jj))/edenr(ien)
+     enddo
+     ! sum0(1,1:nen) = sum0(1,1:nen) + pot_prod(jj)*edenr(1:nen)
+     ! sum0(2,1:nen) = sum0(2,1:nen) + pot_prod(jj)*edenr(1:nen)
+     call Zaxpy(nen,pot_prod(jj),edenr,1,sum0(1,1),2)
+     call Zaxpy(nen,pot_prod(jj),edeni,1,sum0(2,1),2)
+  enddo
+  call dscal(nn,esign,eig,1)
+
+end subroutine Zcontract_en
+!===================================================================

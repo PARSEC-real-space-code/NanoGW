@@ -1,0 +1,349 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! For each non-Abelian group "igr", calculate the product table. Also,
+! calculate the projections and representations of all electronic
+! orbitals. If the representation of some orbital cannot be recognized,
+! (e.g., because the projections are too different from 1 or 0) then
+! this representation is assigned "0".
+! Some checksums are printed out. Ideally, they should be always
+! equal to one. In practice, they are not because of grid
+! discretization.
+!
+! INPUT:
+!
+! OUTPUT:
+!   nrep : number of representations in this group
+!   r_prod : product table
+!   kpt%wfn(:,:)%jrep(igr,:) : representation of each electronic orbital
+!   kpt%wfn(:,:)%proj(:,igr) : projections of each electronic orbital on each representation
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zproj_calc(syms,gvec,kpt,nspin,igr,outfile,imax,nrep,r_prod)
+
+  use typedefs
+  use mpi_module
+  use psp_module
+  implicit none
+
+  ! arguments
+  type (symmetries), intent(in) :: syms
+  type (gspace), intent(in) :: gvec
+  type (kptinfo), intent(inout) :: kpt
+  ! nspin : number of spins
+  ! igr : index of current symmetry group
+  ! outfile : number of output file eig_rep.dat
+  ! imax : maximum size of r_prod
+  integer, intent(in) :: nspin, igr, outfile, imax
+  ! nrep : number of representations in this group
+  ! r_prod : character table, only slice r_prod(1:nrep,1:nrep,1:nrep) is
+  !          referenced
+  integer, intent(out) :: nrep, r_prod(imax,imax,imax)
+
+  ! local variables
+  integer, parameter :: grfile = 75  ! file with symmetry operations
+  real, parameter :: &
+        tol_p = 5.d-1, &    ! tolerance in the determination of representations
+        tol_r = 1.d-4       ! tolerance in the checking of characters
+  ! temporary structure to hold this symmetry group
+  type (symmetries) :: sym1
+  ! error message
+  character (len=800) :: lastwords
+  ! counters and temporary scalars
+  integer :: ii, jj, ipe, i_pe, isp, irp, ik, itmp(3), jmax(3), itrans, &
+       jtrans, iat, ity
+  real(dp) :: r_rot(3), rsum
+  SCALAR :: zsum
+  integer, allocatable :: nclass(:), jtmp(:), invmap(:,:,:,:), rotmap(:,:,:,:)
+  real(dp), allocatable :: chi(:,:), proj(:,:), ratom(:,:,:)
+  SCALAR, allocatable :: w_distr(:,:), wfn_loc(:)
+
+  if (peinf%master) write(6,'(//,a,a,a,/)') &
+       ' Building representations of electronic orbitals for group ', &
+       trim(syms%grfilename(igr)), ' :'
+
+  !-------------------------------------------------------------------
+  ! Read rotation matrices and characters for the sym1 group.
+  !
+  open(grfile,file=trim(syms%grfilename(igr)),status='old',iostat=ii)
+  if (ii /= 0) then
+     write(6,*) ' ERROR: file ', trim(syms%grfilename(igr)), &
+          ' for group # ', igr, ' not found.'
+     call die('stop.')
+  endif
+  read(grfile,*) sym1%ntrans
+  allocate(sym1%trans(3,3,sym1%ntrans))
+  allocate(nclass(sym1%ntrans))
+  do jtrans = 1, sym1%ntrans
+     read(grfile,*) nclass(jtrans),((sym1%trans(jj,ii,jtrans),ii=1,3),jj=1,3)
+  enddo
+  read(grfile,*) nrep
+  allocate(chi(nrep,nrep))
+  do irp = 1, nrep
+     read(grfile,*) rsum, (chi(irp,ii),ii=1,nrep)
+  enddo
+  close(grfile)
+
+  !-------------------------------------------------------------------
+  ! Calculate product table and print it out.
+  !
+  allocate(jtmp(nrep))
+  jtmp = 0
+  do jtrans = 1, sym1%ntrans
+     jtmp(nclass(jtrans)) = jtmp(nclass(jtrans)) + 1
+  enddo
+
+  if (peinf%master) then
+     write(outfile,*) ' Group ', trim(syms%grfilename(igr)), &
+          ', number of representations and character table'
+     write(outfile,*) nrep
+     write(outfile,*) 0, (jtmp(ii),ii=1,nrep)
+     do irp = 1, nrep
+        write(outfile,*) irp, (chi(irp,ii),ii=1,nrep)
+     enddo
+     write(outfile,*) ' Product table, repr_1 * repr_2 = sum_repr'
+  endif
+  deallocate(jtmp)
+  r_prod = 0
+  do ii = 1, nrep
+     do jj = 1, nrep
+        do irp = 1, nrep
+           rsum = zero
+           do jtrans = 1, sym1%ntrans
+              rsum = rsum + chi(ii,nclass(jtrans)) * &
+                   chi(jj,nclass(jtrans)) * chi(irp,nclass(jtrans))
+           enddo
+           r_prod(ii,jj,irp) = nint(rsum / real(sym1%ntrans),dp)
+        enddo
+        rsum = zero
+        do irp = 1, nrep
+           rsum = rsum + chi(irp,1) * real(r_prod(ii,jj,irp),dp)
+        enddo
+        if (abs(rsum - chi(ii,1)*chi(jj,1)) > tol_r) then
+           if (peinf%master) then
+              write(6,*) ' ERROR! Product table is incorrect.'
+              write(6,*) ii, jj, rsum
+              write(6,*) r_prod(ii,jj,1:nrep)
+           endif
+           call die(' Stop.')
+        endif
+        if (peinf%master) write(outfile,'(16i4)') &
+             ii, jj, (r_prod(ii,jj,irp),irp=1,nrep)
+     enddo
+  enddo
+
+  !-------------------------------------------------------------------
+  ! Make sure the set of symmetry operations does not move atoms.
+  !
+  jj = maxval(psp(:)%natmi)
+  allocate(ratom(type_num,jj,3))
+  ratom(:,:,:) = zero
+  iat = 0
+  do ity = 1, type_num
+     do jj = 1, psp(ity)%natmi
+        iat = iat + 1
+        ratom(ity,jj,:) = psp(ity)%ratm(:,jj)
+     enddo
+  enddo
+
+  iat = 0
+  do ity = 1, type_num
+     do jj = 1, psp(ity)%natmi
+        iat = iat + 1
+        do jtrans = 1, sym1%ntrans
+           !
+           !                  -1
+           ! Find ratom = mtrx    * (ratom - tnp)
+           ! Set isp = 0 when a match is found.
+           ! Stop if no match is found.
+           !
+           isp = 1
+           do ii = 1, psp(ity)%natmi
+              r_rot = ratom(ity,jj,:)
+              call dmatvec3('N',sym1%trans(1,1,jtrans),r_rot,r_rot)
+              r_rot = r_rot - ratom(ity,ii,:)
+              rsum = sqrt( dot_product(r_rot,r_rot) )
+              if (rsum < tol_r) then
+                 isp = 0
+                 exit
+              endif
+           enddo
+           if (isp /= 0) then
+              if (peinf%master) then
+                 write(6,*) 'ERROR: unable to find equivalent of atom'
+                 write(6,*) 'at position ', ratom(ity,jj,:)
+                 write(6,*) 'symmetry operation ', jtrans
+                 write(6,*) 'Either this is not a valid symmetry operation or '
+                 write(6,*) 'parameter tol_r is too small in charac_group.F90z.'
+              endif
+              call die(' Stop.')
+           endif
+        enddo
+     enddo
+  enddo
+  deallocate(ratom)
+
+  !-------------------------------------------------------------------
+  ! Define maps for the symmetry operations in sym1. Print out some checksums.
+  !
+  jmax = maxval(gvec%r,dim=2) + 1
+  allocate(invmap(-jmax(1):jmax(1),-jmax(2):jmax(2),-jmax(3):jmax(3),2))
+  invmap = 0
+  do jj = 1, gvec%nr
+     do irp = 1, syms%ntrans
+        call unfold(gvec%r(1,jj),syms%trans(1,1,irp),gvec%shift(1),itmp(1))
+        invmap(itmp(1),itmp(2),itmp(3),1) = jj
+        invmap(itmp(1),itmp(2),itmp(3),2) = irp
+     enddo
+  enddo
+  if (peinf%master) then
+     write(6,*) ' Check sums one = ',1+minval(invmap), &
+          maxval(invmap*one)/(gvec%nr*one)
+     write(6,'(4g18.8)') &
+          sum(invmap(:,:,:,1)*one)/(gvec%nr*half*(gvec%nr+one)*syms%ntrans), &
+          sum(invmap(:,:,:,2)*one)/(gvec%nr*half*(syms%ntrans+one)*syms%ntrans)
+  endif
+  allocate(rotmap(gvec%nr,syms%ntrans,2,sym1%ntrans))
+  rotmap = 0
+  rsum = zero
+  do jj = 1, gvec%nr
+     do jtrans = 1, sym1%ntrans
+        do itrans = 1, syms%ntrans
+           call unfold(gvec%r(1,jj),syms%trans(1,1,itrans),gvec%shift(1),itmp(1))
+           do ii = 1, 3
+              r_rot(ii) = (itmp(ii) + gvec%shift(ii))*gvec%step(ii)
+           enddo
+           call dmatvec3('N',sym1%trans(1,1,jtrans),r_rot,r_rot)
+           do ii = 1, 3
+              itmp(ii) = anint(r_rot(ii) / gvec%step(ii) - gvec%shift(ii))
+           enddo
+           do ii = 1, 3
+              rsum = rsum + ((itmp(ii) + gvec%shift(ii))*gvec%step(ii) &
+                   - r_rot(ii))**2
+           enddo
+           if (itmp(1) > jmax(1) .or. itmp(1) < -jmax(1) .or. &
+                itmp(2) > jmax(2) .or. itmp(2) < -jmax(2) .or. &
+                itmp(3) > jmax(3) .or. itmp(3) < -jmax(3)) then
+              cycle
+           endif
+           rotmap(jj,itrans,1,jtrans) = invmap(itmp(1),itmp(2),itmp(3),1)
+           rotmap(jj,itrans,2,jtrans) = invmap(itmp(1),itmp(2),itmp(3),2)
+        enddo
+     enddo
+  enddo
+  if (peinf%master) then
+     write(6,*) ' Check sums one = ', 1+minval(rotmap), &
+          maxval(rotmap*one)/(gvec%nr*one)
+     write(6,'(4g18.8)') (sum(rotmap(:,:,1,ii)*one)/ &
+          (gvec%nr*half*(gvec%nr+one)*syms%ntrans), &
+          sum(rotmap(:,:,2,ii)*one)/(gvec%nr*half*(syms%ntrans+one)* &
+          syms%ntrans),ii=1,sym1%ntrans)
+  endif
+  deallocate(invmap)
+  do jtrans = 1, sym1%ntrans
+     ii = 0
+     do jj = 1, gvec%nr
+        do itrans = 1, syms%ntrans
+           if (rotmap(jj,itrans,1,jtrans) < 1) ii = ii + 1
+        enddo
+     enddo
+     if (ii /= 0 .and. peinf%master) &
+          write(6,*) ' Warning, symmetry operation # ', &
+          jtrans, ' moves ', ii, ' points to the outside of grid.'
+  enddo
+  deallocate(sym1%trans)
+     
+  !-------------------------------------------------------------------
+  ! Identify representations of the orbitals in the sym1 group.
+  !
+  allocate(w_distr(w_grp%ldn,w_grp%npes),stat=ii)
+  call alccheck('w_distr','charac_group',w_grp%ldn*w_grp%npes,ii)
+  w_distr = Zzero
+  allocate(wfn_loc(gvec%nr),stat=ii)
+  call alccheck('wfn_loc','charac_group',gvec%nr,ii)
+
+  do ik = 1, kpt%nk
+     do isp = 1, nspin
+        allocate(proj(nrep,kpt%wfn(isp,ik)%nstate))
+        proj = zero
+        if (peinf%master) write(6,*)
+        if (gvec%per > 0 .and. peinf%master) write(6,*) &
+             ' k-point ', kpt%fk(:,ik)
+        if (nspin == 2 .and. peinf%master) write(6,*) ' spin component ', isp
+        kpt%wfn(isp,ik)%jrep(igr,:) = 0
+        if (peinf%master) write(6,*) 'Orbital   Eigenvalue [eV]  ', &
+             'Representations    Projections'
+        do i_pe = 1, kpt%wfn(isp,ik)%nmem, peinf%npes
+           do ipe = 0, w_grp%npes - 1
+              ii = w_grp%npes * w_grp%mygr + i_pe + ipe
+              if (ii > kpt%wfn(isp,ik)%nmem) cycle
+              if (kpt%wfn(isp,ik)%imap(ii) == 0) then
+                 write(lastwords,*) ' ERROR in energy_mtxel: could not ', &
+                      'find wavefunction ', ii, ' in memory! '
+                 call die(lastwords)
+              endif
+              call Zcopy(w_grp%mydim,kpt%wfn(isp,ik)%Zwf(1,ii),1, &
+                   w_distr(1,ipe+1),1)
+           enddo
+           call Zgather(1,w_distr,wfn_loc)
+           ii = w_grp%npes * w_grp%mygr + i_pe + w_grp%inode
+           if (ii <= kpt%wfn(isp,ik)%nmem) then
+              
+              do irp = 1, nrep
+                 zsum = Zzero
+                 do jtrans = 1, sym1%ntrans
+                    do jj = 1, gvec%nr
+                       do itrans = 1, syms%ntrans
+                          if (rotmap(jj,itrans,1,jtrans) < 1) cycle
+                          zsum = zsum + chi(irp,1) * &
+                               chi(irp,nclass(jtrans)) * wfn_loc(jj) * &
+                               wfn_loc(rotmap(jj,itrans,1,jtrans)) * &
+                               syms%chi(kpt%wfn(isp,ik)%jrep(0,ii),itrans) * &
+                               syms%chi(kpt%wfn(isp,ik)%jrep(0,ii), &
+                               rotmap(jj,itrans,2,jtrans))
+                       enddo
+                    enddo
+                 enddo
+                 proj(irp,ii) = real(zsum,dp) / real(sym1%ntrans,dp)
+              enddo
+           endif
+           call dpsum(nrep*kpt%wfn(isp,ik)%nstate,peinf%npes,peinf%comm,proj)
+           do ii = i_pe, i_pe + peinf%npes - 1
+              if (ii > kpt%wfn(isp,ik)%nmem) cycle
+              do irp = 1, nrep
+                 if (abs(one - proj(irp,ii)) < tol_p) &
+                      kpt%wfn(isp,ik)%jrep(igr,ii) = irp
+              enddo
+           enddo
+           if (peinf%master) then
+              do ii = i_pe, i_pe + peinf%npes - 1
+                 if (ii > kpt%wfn(isp,ik)%nmem) cycle
+                 irp = kpt%wfn(isp,ik)%jrep(igr,ii)
+                 kpt%wfn(isp,ik)%proj(ii,igr) = proj(irp,ii)
+                 if (peinf%master) write(6,'(i4,f16.4,2i10,2x,40f12.5)') ii, &
+                      kpt%wfn(isp,ik)%e0(ii)*ryd, &
+                      kpt%wfn(isp,ik)%jrep(0,ii), irp, proj(:,ii)
+              enddo
+           endif
+        enddo
+        deallocate(proj)
+        call dpsum(kpt%wfn(isp,ik)%nstate,peinf%npes,peinf%comm, &
+             kpt%wfn(isp,ik)%proj(1,igr))
+
+        if (minval(kpt%wfn(isp,ik)%jrep(igr,:)) == 0 .and. peinf%master) &
+             write(6,*) 'WARNING! Unrecognized representations in group ', &
+             igr, ' spin ', isp
+     enddo
+  enddo
+
+  deallocate(rotmap)
+  deallocate(nclass)
+  deallocate(chi)
+  deallocate(w_distr)
+  deallocate(wfn_loc)
+
+end subroutine Zproj_calc
+!===================================================================

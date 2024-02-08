@@ -1,0 +1,22 @@
+ 
+# (real) atomic number of elements
+begin atomic_numbers
+C 6
+H 1
+end atomic_numbers
+
+# Calculate BLIP up to which orbital in parsec.dat?
+#maximum_orbital 18
+
+# Rotate the high-energy orbitals so that they have high amplitude
+# in the vicinity of atom sites
+#number_localized_orbitals 40
+
+# Change the grid spacing if necessary, factor = (new spacing)/(old spacing)
+#fft_expansion_factor 2
+
+# Input extra point groups
+begin Point_Group_Tables
+   D6h
+end Point_Group_Tables
+

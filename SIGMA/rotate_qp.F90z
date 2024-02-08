@@ -1,0 +1,506 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Rotate DFT orbitals. Quantities modified in this subroutine:
+! kpt%rho
+! wfn(:)%e1 = wfn(:)%e0
+! wfn(:)%occ1 = wfn(:)%occ0
+! wfn(:)%irep
+! wfn(:)%jrep
+! wfn(:)%wf
+! wfn(:)%cmapi
+! sig(:)%sig_mat = sig(:)%vxcdiag sig(:)%vxcoffd (allocated and deallocated internally)
+! sig(:)%map
+!
+! New orbitals may have ordering different from old orbitals. We
+! keep the indexing by following this rule:
+!
+!     wfn(:)%map_old( j ) = indx ( wfn(:)%map_new( i ) )
+!
+!  where i is some arbitrary orbital in the new set and j is the
+!  corresponding orbital in the old set. We transfer indx to the
+!  parent routine by using wfn(:)%cmapi:
+!
+!      wfn(:)%cmapi(i) = invmap( inv_indx( map( i ) ) )    if map(i) /= 0
+!      wfn(:)%cmapi(i) = i                                 otherwise
+!
+! If (verbose == .true.), write out new files:
+!     sigma_mtxel_qp.dat : Sigma_new - Sigma_old operator
+!     delta_hartree.dat  : V_new - V_old operator
+!     qp_mtxel.dat       : rotation matrix from old to new wavefunctions
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!---------------------------------------------------------------
+subroutine Zrotate_qp(nspin,nkpt,nrep,sig,gvec,kpt,q_p,verbose,iter)
+
+  use typedefs
+  use mpi_module
+  use fft_module
+  implicit none
+#ifdef MPI
+  include 'mpif.h'
+#endif
+
+  ! arguments
+  integer, intent(in) :: &
+       nspin, &    ! number of spin channels
+       nkpt, &     ! number of k-points where self-energy is computed
+       nrep        ! number of irreducible representations
+  ! self-energy for the current spin channel and current k-point
+  type (siginfo), dimension(nspin,nkpt), intent(inout) :: sig
+  ! real-space grid
+  type (gspace), intent(inout) :: gvec
+  ! k-points and wavefunctions
+  type (kptinfo), intent(inout) :: kpt
+  ! quasi-particle data
+  type(qpinfo), dimension(nrep,nspin,nkpt), intent(in) :: q_p
+  ! output flag
+  logical, intent(in) :: verbose
+  ! iteration counter
+  integer, intent(in) :: iter
+
+  ! other variables
+  character (len=100) :: file_name
+  character (len=300) :: lastwords
+  real(dp), parameter :: TOL_E = 1.d-3
+
+  integer :: ii, i1, i2, ik, jk, jj, isig, icol, irow, jcol, jrow, isp, irp, ns
+#ifdef MPI
+  integer :: info
+#endif
+  real(dp) :: xsum, qdummy(3)
+  integer, dimension(:), allocatable :: indx, inv_indx, invmap
+  integer, dimension(:,:), allocatable :: itmp
+  real(dp), dimension(:), allocatable :: rtmp, rho_qp, delta_rho, &
+       w_eqp, delta_v, delta_diag
+  complex(dpc), allocatable :: u_rot(:,:), ztmp(:)
+  SCALAR, dimension(:,:), allocatable :: wfn_lda
+  ! external functions
+  real(dp), external :: ddot
+
+  !---------------------------------------------------------------
+  !  Prepare output files.
+  !
+  if (verbose .and. peinf%master) then
+     open(25,file='qp_mtxel.dat',form='formatted')
+     write(25,*) nspin,((kpt%wfn(isp,sig(isp,ik)%indxk)%nstate, &
+          isp=1,nspin),ik=1,nkpt)
+  endif
+
+  allocate(delta_rho(gvec%nr))
+  delta_rho = zero
+  do isp = 1, nspin
+     allocate(rho_qp(gvec%nr))
+     rho_qp = zero
+     do ik = 1, nkpt
+        jk = sig(isp,ik)%indxk
+        ns = kpt%wfn(isp,jk)%nmem
+        allocate(invmap(kpt%wfn(isp,jk)%nmem))
+        do ii = 1, kpt%wfn(isp,jk)%nstate
+           if (kpt%wfn(isp,jk)%map(ii) /= 0) invmap(kpt%wfn(isp,jk)%map(ii)) = ii
+        enddo
+        !
+        ! Gather and write new energy eigenvalues and QP rotation matrix.
+        !
+        allocate(w_eqp(ns))
+        allocate(u_rot(ns,ns))
+        u_rot = zzero
+        do irp = 1, nrep
+           do jcol = 1, q_p(irp,isp,ik)%neig
+              icol = q_p(irp,isp,ik)%jrep(jcol)
+              w_eqp(icol) = q_p(irp,isp,ik)%eqp(jcol)
+              do jrow = 1, q_p(irp,isp,ik)%neig
+                 irow = q_p(irp,isp,ik)%jrep(jrow)
+                 u_rot(irow,icol) = q_p(irp,isp,ik)%vqp(jrow,jcol)
+              enddo
+           enddo
+        enddo
+        if (verbose .and. peinf%master) then
+           do ii = 1, ns
+              write(25,*) w_eqp(ii), ii
+           enddo
+           do ii = 1, ns
+              do jj = 1, ns
+                 write(25,*) u_rot(jj,ii), jj, ii
+              enddo
+           enddo
+        endif
+        !
+        ! It could be that QP levels do not have the same ordering as DFT
+        ! levels. We should sort them and update the eigenvalues in wfn
+        ! structure. Notice that irep array is resorted but occ array is
+        ! not resorted. For the moment, skip sorting.
+        !
+        allocate(indx(ns))
+!        call quicksort(ns,w_eqp,indx)
+        do ii = 1, ns
+           indx(ii) = ii
+        enddo
+        do ii = 1, ns
+           kpt%wfn(isp,jk)%e0(invmap(ii)) = w_eqp(indx(ii)) / ryd
+           kpt%wfn(isp,jk)%e1(invmap(ii)) = w_eqp(indx(ii)) / ryd
+        enddo
+        deallocate(w_eqp)
+        do ii = 1, kpt%wfn(isp,jk)%nstate
+           kpt%wfn(isp,jk)%cmapi(ii) = ii
+        enddo
+        allocate(inv_indx(ns))
+        do ii = 1, ns
+           inv_indx(indx(ii)) = ii
+        enddo
+        do ii = 1, ns
+           kpt%wfn(isp,jk)%cmapi(invmap(ii)) = invmap(inv_indx(ii))
+        enddo
+
+        allocate(itmp(kpt%wfn(isp,jk)%nstate,1))
+        itmp(:,1) = kpt%wfn(isp,jk)%irep
+        do ii = 1, ns
+           kpt%wfn(isp,jk)%irep(invmap(ii)) = itmp(invmap(indx(ii)),1)
+        enddo
+        deallocate(itmp)
+        allocate(rtmp(kpt%wfn(isp,jk)%nstate))
+        rtmp = kpt%wfn(isp,jk)%occ1
+        allocate(itmp(0:gvec%syms%ngr,kpt%wfn(isp,jk)%nstate))
+        itmp = kpt%wfn(isp,jk)%jrep
+        do ii = 1, ns
+           kpt%wfn(isp,jk)%occ0(invmap(ii)) = rtmp(invmap(indx(ii)))
+           kpt%wfn(isp,jk)%occ1(invmap(ii)) = rtmp(invmap(indx(ii)))
+           kpt%wfn(isp,jk)%jrep(:,invmap(ii)) = itmp(:,invmap(indx(ii)))
+        enddo
+        deallocate(itmp, rtmp)
+        !
+        ! Reconstruct rotation matrix. Apply the same sorting from eigenvalues.
+        !
+        u_rot = zzero
+        do irp = 1, nrep
+           do jcol = 1, q_p(irp,isp,ik)%neig
+              icol = inv_indx(q_p(irp,isp,ik)%jrep(jcol))
+              do jrow = 1, q_p(irp,isp,ik)%neig
+                 irow = q_p(irp,isp,ik)%jrep(jrow)
+                 u_rot(irow,icol) = q_p(irp,isp,ik)%vqp(jrow,jcol)
+              enddo
+           enddo
+        enddo
+        deallocate(indx)
+        deallocate(inv_indx)
+        !
+        ! Update sigma map.
+        !
+        call inverse_map(kpt%wfn(isp,jk)%nstate,kpt%wfn(isp,jk)%cmapi, &
+             sig(isp,ik)%nmap,sig(isp,ik)%map)
+        !
+        ! Perform basis rotation on the self-energy matrix. Use rtmp
+        ! as scratch array.
+        !
+        allocate(sig(isp,ik)%sig_mat(ns,ns,2))
+        sig(isp,ik)%sig_mat = zzero
+        do irp = 1, nrep
+           do jcol = 1, q_p(irp,isp,ik)%neig
+              icol = q_p(irp,isp,ik)%jrep(jcol)
+              sig(isp,ik)%sig_mat(icol,icol,2) = q_p(irp,isp,ik)%sigmai(jcol)
+              do jrow = 1, q_p(irp,isp,ik)%neig
+                 irow = q_p(irp,isp,ik)%jrep(jrow)
+                 sig(isp,ik)%sig_mat(irow,icol,1) = q_p(irp,isp,ik)%sigmaqp(jrow,jcol) - &
+                      q_p(irp,isp,ik)%hqp(jrow,jcol)
+              enddo
+           enddo
+        enddo
+        ! Is sig_mat hermitian ?
+        do icol = 1, ns
+           do irow = 1, icol - 1
+              if (abs(sig(isp,ik)%sig_mat(irow,icol,1) - &
+                   MYCONJG(sig(isp,ik)%sig_mat(icol,irow,1))) > TOL_E) then
+                 write(lastwords,*) ' ERROR: self-energy correction matrix ', &
+                      'is not hermitian! ', irow, icol, isp, &
+                      sig(isp,ik)%sig_mat(irow,icol,1), sig(isp,ik)%sig_mat(icol,irow,1)
+                 call die(lastwords)
+              endif
+           enddo
+        enddo
+
+        allocate(ztmp(ns*ns))
+        call zgemm('N','N',ns,ns,ns,zone,sig(isp,ik)%sig_mat(1,1,1),ns, &
+             u_rot,ns,zzero,ztmp,ns)
+        call zgemm('C','N',ns,ns,ns,zone,u_rot,ns, &
+             ztmp,ns,zzero,sig(isp,ik)%sig_mat(1,1,1),ns)
+        call zgemm('N','N',ns,ns,ns,zone,sig(isp,ik)%sig_mat(1,1,2),ns, &
+             u_rot,ns,zzero,ztmp,ns)
+        call zgemm('C','N',ns,ns,ns,zone,u_rot,ns, &
+             ztmp,ns,zzero,sig(isp,ik)%sig_mat(1,1,2),ns)
+        deallocate(ztmp)
+        !
+        ! Perform the basis rotation. After it is done, store the new
+        ! wavefunctions in structure wfn.
+        !
+        allocate(wfn_lda(w_grp%ldn,ns))
+        wfn_lda = kpt%wfn(isp,jk)%Zwf
+#ifdef CPLX
+        call Zgemm('n','n',w_grp%ldn,ns,ns,Zone,wfn_lda,w_grp%ldn, &
+             u_rot,ns,Zzero,kpt%wfn(isp,jk)%Zwf,w_grp%ldn)
+#else
+        allocate(rtmp(ns*ns))
+        allocate(ztmp(ns*ns))
+        call zcopy(ns*ns,u_rot,1,ztmp,1)
+        rtmp = real(ztmp,dp)
+        deallocate(ztmp)
+        call Zgemm('n','n',w_grp%ldn,ns,ns,Zone,wfn_lda,w_grp%ldn, &
+             rtmp,ns,Zzero,kpt%wfn(isp,jk)%Zwf,w_grp%ldn)
+        deallocate(rtmp)
+#endif
+        deallocate(wfn_lda)
+        !
+        ! Calculate the new electron density.
+        !
+        do ii = 1, ns
+           do jj = 1, w_grp%mydim
+              rho_qp(jj + w_grp%offset) = rho_qp(jj + w_grp%offset) + &
+                   abs(kpt%wfn(isp,jk)%Zwf(jj,ii))**2 * &
+                   kpt%wfn(isp,jk)%occ0(invmap(ii))
+           enddo
+        enddo
+        deallocate(invmap)
+        deallocate(u_rot)
+     enddo
+     xsum = two / gvec%hcub / real(nspin*nkpt,dp)
+     call dscal(gvec%nr,xsum,rho_qp,1)
+     call dpsum(gvec%nr,w_grp%npes,w_grp%comm,rho_qp)
+
+     if (peinf%master) then
+        allocate(rtmp(gvec%nr))
+        call dcopy(gvec%nr,rho_qp,1,rtmp,1)
+        call daxpy(gvec%nr,mone,kpt%rho(1,isp),1,rtmp,1)
+        call daxpy(gvec%nr,one,rtmp,1,delta_rho,1)
+        xsum = ddot(gvec%nr,rtmp,1,rtmp,1)
+        xsum = sqrt( xsum / real(gvec%nr,dp) )
+        write(6,'(a,i2)') ' Spin ',isp
+        write(6,'(a,a,/,g20.10,a)') &
+             ' Maximum difference between input and', &
+             ' output densities : ', maxval(abs(rtmp)), ' a.u.^-3'
+        write(6,'(a,a,/,g20.10,a)') &
+             ' Standard deviation of the difference between', &
+             ' densities : ', xsum, ' a.u.^-3'
+        write(6,'(a,g20.10)') ' Old integrated charge = ', &
+             sum(kpt%rho(1:gvec%nr,isp)) * real(nrep,dp) * gvec%hcub
+        write(6,'(a,g20.10,/)') ' New integrated charge = ', &
+             sum(rho_qp) * real(nrep,dp) * gvec%hcub
+        deallocate(rtmp)
+     endif
+     call dcopy(gvec%nr,rho_qp,1,kpt%rho(1,isp),1)
+     deallocate(rho_qp)
+
+  enddo
+  !
+  ! Since the electron density has changed, we must update the
+  ! Hartree potential:
+  !
+  !  V_new(r) - V_old(r) = int_dr' delta_rho(r') * e^2/|r - r'|
+  !
+  !  with      delta_rho(r) = rho_new(r) - rho_old(r)
+  !
+#ifdef MPI
+  call MPI_BCAST(delta_rho,gvec%nr,MPI_DOUBLE_PRECISION, &
+       peinf%masterid,peinf%comm,info)
+#endif
+  call dinitialize_FFT(peinf%inode,fft_box)
+  qdummy = zero
+  if (gvec%per == 1) then
+     call dcreate_coul_1D(peinf%inode,peinf%npes,peinf%comm,qdummy(1),gvec,fft_box)
+  elseif (gvec%per == 2) then
+     call dcreate_coul_2D(gvec%bdot,qdummy(1),fft_box)
+  else
+     call dcreate_coul_0D(gvec%bdot,qdummy,fft_box)
+  endif
+  call dpoisson(gvec,delta_rho,1)
+  call dfinalize_FFT(peinf%inode,fft_box)
+  !
+  ! Subtract the update in Hartree potential from the self-energy:
+  !
+  !   Sigma -> Sigma - V_new + V_old
+  !
+  ! We subtract the update because, in a subsequent SCGW iteration, we
+  ! will need to subtract the old self-energy as well:
+  !
+  ! Sigma_new - Sigma_old -> Sigma_new - [ Sigma_old  - V_new + V_old ]
+  !                        = Sigma_new + V_new - Sigma_old - V_old
+  !
+  allocate(rtmp(w_grp%mydim))
+  allocate(ztmp(w_grp%mydim))
+  if (verbose .and. peinf%master) &
+       open(78,file='delta_hartree.dat',form='formatted')
+  do isp = 1, nspin
+     do ik = 1, nkpt
+        jk = sig(isp,ik)%indxk
+        ns = kpt%wfn(isp,jk)%nmem
+        allocate(invmap(kpt%wfn(isp,jk)%nmem))
+        do ii = 1, kpt%wfn(isp,jk)%nstate
+           if (kpt%wfn(isp,jk)%map(ii) /= 0) invmap(kpt%wfn(isp,jk)%map(ii)) = ii
+        enddo
+        allocate(delta_v(ns))
+        delta_v = zero
+        allocate(delta_diag(ns))
+        delta_diag = zero
+        do ii = 1, ns
+#ifdef CPLX
+           call Zcopy(w_grp%mydim,kpt%wfn(isp,jk)%Zwf(1,ii),1,ztmp,1)
+           call Zmultiply_vec(w_grp%mydim,kpt%wfn(isp,jk)%Zwf(1,ii),ztmp)
+           rtmp = real(ztmp,dp)
+#else
+           call Zcopy(w_grp%mydim,kpt%wfn(isp,jk)%Zwf(1,ii),1,rtmp,1)
+           call Zmultiply_vec(w_grp%mydim,kpt%wfn(isp,jk)%Zwf(1,ii),rtmp)
+#endif
+           delta_v(ii) = ddot(w_grp%mydim,delta_rho(1+w_grp%offset),1,rtmp,1) &
+                * real(nrep,dp) * ryd
+        enddo
+        call dpsum(ns,w_grp%npes,w_grp%comm,delta_v)
+        delta_diag = delta_v
+        do ii = 1, ns
+           sig(isp,ik)%sig_mat(ii,ii,1) = sig(isp,ik)%sig_mat(ii,ii,1) - &
+                zone*delta_v(ii)
+        enddo
+        if (verbose .and. peinf%master) then
+           do ii = 1, ns
+              write(78,*) invmap(ii), invmap(ii), isp, delta_v(ii)
+           enddo
+        endif
+        do ii = 1, ns
+           delta_v = zero
+           do jj = ii + 1, ns
+              if (kpt%wfn(isp,jk)%irep(invmap(ii)) == &
+                   kpt%wfn(isp,jk)%irep(invmap(jj))) then
+#ifdef CPLX
+                 call Zcopy(w_grp%mydim,kpt%wfn(isp,jk)%Zwf(1,ii),1,ztmp,1)
+                 call Zmultiply_vec(w_grp%mydim,kpt%wfn(isp,jk)%Zwf(1,jj),ztmp)
+                 rtmp = real(ztmp,dp)
+#else
+                 call Zcopy(w_grp%mydim,kpt%wfn(isp,jk)%Zwf(1,ii),1,rtmp,1)
+                 call Zmultiply_vec(w_grp%mydim,kpt%wfn(isp,jk)%Zwf(1,jj),rtmp)
+#endif
+                 delta_v(jj) = ddot(w_grp%mydim,delta_rho(1+w_grp%offset), &
+                      1,rtmp,1) * real(nrep,dp) * ryd
+              endif
+           enddo
+           call dpsum(ns,w_grp%npes,w_grp%comm,delta_v)
+           do jj = ii + 1, ns
+              sig(isp,ik)%sig_mat(ii,jj,1) = sig(isp,ik)%sig_mat(ii,jj,1) - &
+                   zone*delta_v(jj)
+              sig(isp,ik)%sig_mat(jj,ii,1) = sig(isp,ik)%sig_mat(jj,ii,1) - &
+                   zone*delta_v(jj)
+           enddo
+           if (verbose .and. peinf%master) then
+              do jj = ii + 1, ns
+                 write(78,*) invmap(ii), invmap(jj), isp, delta_v(jj)
+              enddo
+           endif
+        enddo
+
+        do isig = 1, sig(isp,ik)%ndiag
+           irow = kpt%wfn(isp,jk)%map(sig(isp,ik)%map(sig(isp,ik)%diag(isig)))
+           sig(isp,ik)%sigmai(sig(isp,ik)%diag(isig)) = &
+                real(sig(isp,ik)%sig_mat(irow,irow,2),dp) / ryd
+        enddo
+        do isig = 1, sig(isp,ik)%ndiag_s
+           irow = kpt%wfn(isp,jk)%map(sig(isp,ik)%map(sig(isp,ik)%diag(isig)))
+           sig(isp,ik)%vxcdiag(isig) = sig(isp,ik)%sig_mat(irow,irow,1) / ryd
+        enddo
+        do isig = 1, sig(isp,ik)%noffd_s
+           irow = kpt%wfn(isp,jk)%map(sig(isp,ik)%map(sig(isp,ik)%off1(isig)))
+           icol = kpt%wfn(isp,jk)%map(sig(isp,ik)%map(sig(isp,ik)%off2(isig)))
+           sig(isp,ik)%vxcoffd(isig) = sig(isp,ik)%sig_mat(irow,icol,1) / ryd
+        enddo
+        !
+        ! Print new eigenvalues.
+        !
+        if (peinf%master) then
+           if (sig(isp,ik)%ndiag_s > 0) then
+              if (nspin == 1) then 
+                 write(file_name,'(a,i3.3,a,i4.4)') 'eqp_', ik, '_', iter
+              else
+                 if (isp == 1) then
+                    write(file_name,'(a,i3.3,a,i4.4)') 'eqp_up_', ik, '_', iter
+                 else
+                    write(file_name,'(a,i3.3,a,i4.4)') 'eqp_down_', ik, '_', iter
+                 endif
+              endif
+              open(36,file=file_name,form='formatted',status='unknown')
+              write(36,'(a)') '# OUTPUT ENERGY EIGENVALUES (eV) :'
+              write(36,'(2a)') '    #  rep     occ        ', &
+                   'E_0     V_xc + delta_Vh    delta_Vh       Im{Sigma}'
+              do isig = 1, sig(isp,ik)%ndiag_s
+                 ii = sig(isp,ik)%map(sig(isp,ik)%diag(isig))
+                 irow = kpt%wfn(isp,jk)%map(ii)
+                 write(36,'(2i5,2f10.3,3f15.3)') ii,kpt%wfn(isp,jk)%irep(ii), &
+                      kpt%wfn(isp,jk)%occ0(ii),kpt%wfn(isp,jk)%e0(ii)*ryd, &
+                      real(sig(isp,ik)%vxcdiag(isig),dp)*ryd,delta_diag(irow), &
+                      sig(isp,ik)%sigmai(sig(isp,ik)%diag(isig))*ryd
+              enddo
+              write(36,*)
+              close(36)
+           endif
+        endif
+        deallocate(delta_v, delta_diag, invmap)
+     enddo
+  enddo
+  !
+  ! Fix sigmai if it is too large or too small.
+  !
+  do isp = 1, nspin
+     do ik = 1, nkpt
+        jk = sig(isp,ik)%indxk
+        do isig = 1, sig(isp,ik)%nmap
+           ii = sig(isp,ik)%map(isig)
+           sig(isp,ik)%sigmai(isig) = abs(sig(isp,ik)%sigmai(isig))
+           if (sig(isp,ik)%sigmai(isig) > half) sig(isp,ik)%sigmai(isig) = half
+           if (sig(isp,ik)%sigmai(isig) < 0.05d0) sig(isp,ik)%sigmai(isig) = 0.05d0
+        enddo
+     enddo
+  enddo
+
+  if (verbose .and. peinf%master) close(78)
+  deallocate(rtmp, delta_rho, ztmp)
+  !
+  ! Print self-energy matrix.
+  !
+  if (verbose .and. peinf%master) then
+     open(23,file='sigma_mtxel_qp.dat',form='formatted')
+     do isp = 1, nspin
+        do ik = 1, nkpt
+           jk = sig(isp,ik)%indxk
+           allocate(invmap(kpt%wfn(isp,jk)%nmem))
+           invmap = 0
+           do ii = 1, kpt%wfn(isp,jk)%nstate
+              if (kpt%wfn(isp,jk)%map(ii) /= 0) invmap(kpt%wfn(isp,jk)%map(ii)) = ii
+           enddo
+           do ii = 1, kpt%wfn(isp,jk)%nstate
+              if (kpt%wfn(isp,jk)%map(ii) == 0) cycle
+              write(23,'(2i3,2i6,2f16.8)') jk, isp, invmap(ii), &
+                   invmap(ii), real(sig(isp,ik)%sig_mat(ii,ii,1),dp),  &
+                   aimag(sig(isp,ik)%sig_mat(ii,ii,1))
+           enddo
+           do i1 = 1, kpt%wfn(isp,jk)%nstate
+              if (kpt%wfn(isp,jk)%map(i1) == 0) cycle
+              do i2 = 1, i1 - 1
+                 if (kpt%wfn(isp,jk)%map(i2) == 0) cycle
+                 write(23,'(2i3,2i6,2f16.8)') jk, isp, invmap(i1), &
+                      invmap(i2), real(sig(isp,ik)%sig_mat(i1,i2,1),dp),  &
+                      aimag(sig(isp,ik)%sig_mat(i1,i2,1))
+                 write(23,'(2i3,2i6,2f16.8)') jk, isp, invmap(i2), &
+                      invmap(i1), real(sig(isp,ik)%sig_mat(i2,i1,1),dp),  &
+                      aimag(sig(isp,ik)%sig_mat(i2,i1,1))
+              enddo
+           enddo
+           deallocate(invmap)
+        enddo
+     enddo
+     close(23)
+     close(25)
+  endif
+  do isp = 1, nspin
+     do ik = 1, nkpt
+        deallocate(sig(isp,ik)%sig_mat)
+     enddo
+  enddo
+
+end subroutine Zrotate_qp
+!===================================================================

@@ -1,0 +1,44 @@
+
+output_all_states .true.
+
+Boundary_Sphere_Radius:  16.00
+Grid_Spacing:  0.30
+
+eigensolver diagla 
+ 
+States_Num:  30
+
+Atom_Types_Num:  2
+
+coordinate_unit cartesian_ang
+ 
+#------------ new atom type ---------------- 
+Atom_Type: C
+Local_Component: p
+ 
+begin Atom_Coord
+       0.0000       1.3970        0.0000
+       1.2098       0.6985        0.0000
+       1.2098      -0.6985        0.0000
+       0.0000      -1.3970        0.0000
+      -1.2098      -0.6985        0.0000
+      -1.2098       0.6985        0.0000
+end Atom_Coord
+ 
+#------------ end of atom type ------------- 
+ 
+#------------ new atom type ---------------- 
+Atom_Type: H
+Local_Component: s
+ 
+begin Atom_Coord
+       0.0000       2.4810        0.0000
+       2.1486       1.2405        0.0000
+       2.1486      -1.2405        0.0000
+       0.0000      -2.4810        0.0000
+      -2.1486      -1.2405        0.0000
+      -2.1486       1.2405        0.0000
+end Atom_Coord
+ 
+#------------ end of atom type ------------- 
+ 

@@ -1,0 +1,790 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Interface routine for the LAPACK/ScaLAPACK eigensolvers, generalised
+! parallel hermitian eigenvalue solvers. Receives shared hamiltonian
+! with columns distributed among PEs so that PE0 has columns 1 to
+! nblock, PE1 has columns nblock+1 to 2*nblock, and so on. Internally,
+! it redistributes the hamiltonian to blacs layout, then calls
+! LAPACK/ScaLAPACK and finally collects all the eigenvectors onto all
+! PEs. For more details of the ScaLAPACK routines and data layouts see
+! http://www.netlib.org/scalapack/scalapack_home.html.
+!
+! At output, the hamiltonian is destroyied and replaced by
+! eigenvectors in the same layout as the input matrix. Eigenvalues are
+! returned in array egv.
+!
+! To save memory S(program) -> ZG(scala) 
+!                H(program) -> S(scala) 
+! -> means transformation to scala layout
+! call pcheevx/pssyevx 
+!                eigenvecs put in H(scala) -> ZG(program)
+!
+! distributed solver variables (block cyclic blacs layout):
+!           nbl = blocksize
+!           nprow = processor grid row
+!           npcol = processor grid column
+!
+! INPUT:
+!        shs : hamiltonian, column-wise distributed over PEs (local)
+!
+! OUTPUT:
+!        shs : eigenvectors, column-wise distributed over PEs (local)
+!        egv : eigenvalues (global)
+!
+! Based on pssyevx_inter/pcheevx_inter, written by Andrew Canning 
+! NERSC/LBNL 1998.
+!
+! Revised version by Murilo Tiago, U. Minnesota 2004.
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zeigensolver(verbose,inode,npes,comm,nblock,nmat,shs,egv,ierr)
+
+  use myconstants
+  implicit none
+
+#ifdef MPI
+  include "mpif.h"
+#endif
+
+  ! arguments
+  ! output flag
+  logical, intent(in) :: verbose
+  ! rank of current PE, number of PEs, communicator
+  integer, intent(in) :: inode, npes, comm
+  ! nblock = number of columns of shs stored locally
+  ! nmat = number of columns/rows in the full matrix
+  integer, intent(in) :: nblock, nmat
+  SCALAR, intent(inout) :: shs(nmat,nblock)
+  real(dp), intent(inout) :: egv(nmat)
+  ! error flag
+  integer, intent(inout) :: ierr
+
+  ! local variables
+#ifdef MPI
+  ! scalapack and blacks arrays
+  integer :: nbl, nprow, npcol, myprow, mypcol, icntxt
+  integer :: nbc, nbce, nbr, lda, locsize, nn, nnp, np0, mq0
+  integer :: clustersize, liwork, nzfound
+  integer :: idiff, ibc, ngr, ibr, ic, ir, izero, i, nq0
+  integer :: idum, nbc_max, nbr_max, numbl_max, iproc_n, &
+       num_max, ir_low, ilen, icom, j
+  integer :: desca(9)
+  real(dp) :: orfac
+
+  ! scalapack functions and arrays
+  integer :: nod_g(nmat), icol(nmat)
+  integer, external :: iceil, numroc
+  integer :: mpistatus(MPI_STATUS_SIZE)
+#endif
+
+  ! other variables
+  integer :: ii, jj, kk, ilow, iup, lwork, nfound, info
+  real(dp) :: abstol, ellow, elup
+
+#ifdef CPLX
+  integer :: lrwork
+  real(dp), allocatable :: rwork(:)
+#endif
+  SCALAR, allocatable :: work(:), egs(:,:)
+#ifdef MPI
+  SCALAR, allocatable :: shs_bl(:), egs_bl(:)
+  real(dp), allocatable :: gap(:)
+  integer, allocatable :: numr(:), nums(:)
+  ! index arrays for mpi  : H matrix
+  integer, allocatable :: indr(:,:), inds(:,:), iaddr(:,:), &
+       iadds_r(:,:), iadds_c(:,:), iadds_d(:,:)
+  ! index arrays for mpi : S matrix
+  integer, allocatable :: numre(:), numse(:)
+  integer, allocatable :: indre(:,:), indse(:,:), iaddre(:,:), &
+       iaddse_r(:,:), iaddse_c(:,:), iaddse_d(:,:), iclustr(:)
+#endif
+  integer, allocatable :: iwork(:), ifail(:)
+#ifdef NOSCALA
+  logical :: iammaster
+  integer :: masterid
+#endif
+#ifdef USEESSL_diag
+  SCALAR, allocatable :: hupper(:)
+#endif
+  
+  integer :: ip
+
+  ! -- print out the matrix need to be diagonalized --
+  !write(*, *) " Print out matrix to be diagonalized : "
+  !do ip = 0, npes
+  !  if(inode .eq. ip) then
+  !    write(*,'(a,i5)') "inode =", ip
+  !    do ii = 1, nmat
+  !      write(*,'(i5)', advance='no') ii
+  !      do jj = 1, nblock
+  !        write(*,'(f10.5)', advance='no')  shs(ii,jj)
+  !      enddo
+  !      write(*,'()')
+  !    enddo
+  !  endif
+  !  call MPI_BARRIER(comm,info)
+  !enddo
+
+  !-------------------------------------------------------------------
+  !  If running with single PE, use the serial subroutines. Otherwise,
+  !  do the distributed job.
+  !
+  ierr = 0
+  if (npes == 1) then
+     if (nmat /= nblock) then
+        write(6,*) ' Hamiltonian matrix does not seem to be square!'
+        write(6,*) ' the program stops...'
+        ierr = 1
+        return
+     endif
+     lwork = 10*nmat
+     allocate(work(lwork))
+#ifdef USEESSL_diag
+     allocate(hupper(nmat*(nmat+1)/2))
+     kk = 1
+     do jj = 1, nmat
+        do ii = 1, jj
+           hupper(kk) =  shs(ii,jj)
+           kk = kk + 1
+        enddo
+     enddo
+#ifdef CPLX
+     call zhpev(21,hupper,egv,shs,nmat,nmat,work,lwork)
+#else
+     call dspev(21,hupper,egv,shs,nmat,nmat,work,lwork)
+#endif
+     deallocate(hupper)
+#else
+     abstol = zero
+     allocate(ifail(nmat))
+     allocate(iwork(5*nmat))
+     allocate(egs(nmat,nmat))
+     ilow = 1
+     iup = nmat
+#ifdef CPLX
+     allocate(rwork(7*nmat))
+     call zheevx('V','A','U',nmat,shs,nmat,ellow,elup,ilow,iup, &
+          abstol,nfound,egv,egs,nmat,work,8*nmat,rwork,iwork,ifail,info)
+     deallocate(rwork)
+#else
+     call dsyevx('V','A','U',nmat,shs,nmat,ellow,elup,ilow,iup, &
+          abstol,nfound,egv,egs,nmat,work,10*nmat,iwork,ifail,info)
+#endif
+     if (info < 0) then
+        write(6,*) ' error in input parameters for cheevx/ssyevx'
+        write(6,*) ' info = ', info
+        ierr = 2
+        return
+     endif
+
+     if (info > 0) then
+        write(6,*) 'convergence problems in cheevx/ssyevx'
+        write(6,*) ' info = ', info
+        write(6,*) 'The following eigenvector(s) failed to converge:'
+        write(6,*) ' ifail = ', ifail
+        ierr = 3
+        return
+     endif
+
+     shs = egs
+     deallocate(egs)
+     deallocate(iwork)
+     deallocate(ifail)
+#endif
+     deallocate(work)
+     !
+     ! Done, exit subroutine.
+     return
+  endif
+
+  !-------------------------------------------------------------------
+  ! The rest of this routine is only if the # of processors is not 1, which
+  ! means we must be running MPI (the code below assumes it actually).
+  !
+#ifdef MPI
+
+#ifdef NOSCALA
+  !-------------------------------------------------------------------
+  ! If ScaLAPACK is not available, send the full matrix to one processor
+  ! and let it do diagonalization.
+  !
+  masterid = 0
+  if (masterid == inode) then
+     iammaster = .true.
+  else
+     iammaster = .false.
+  endif
+
+  if (iammaster) then
+     allocate(egs(nmat,nmat))
+     egs = Zzero
+  endif
+  !
+  ! Master PE saves its slice of matrix to array egs.
+  !
+  if (iammaster) then
+     do jj = 1, nblock
+        kk = jj + inode*nblock
+        if (kk > nmat) cycle
+        egs(:,kk) = shs(:,jj)
+     enddo
+  endif
+  !
+  ! Other PEs (except master) send their slices to master PE.
+  !
+  do ii = 0, npes - 1
+     if (ii == masterid) cycle
+     if (ii == inode) then
+        call MPI_SEND(shs,nmat*nblock,MPI_DOUBLE_SCALAR, &
+             masterid,ii,comm,info)
+     else
+        if (iammaster) then
+           call MPI_RECV(shs,nmat*nblock,MPI_DOUBLE_SCALAR, &
+                ii,ii,comm,mpistatus,info)
+           do jj = 1, nblock
+              kk = jj + ii*nblock
+              if (kk > nmat) cycle
+              egs(:,kk) = shs(:,jj)
+           enddo
+        endif
+     endif
+  enddo
+  !
+  ! Single-processor diagonalization.
+  !
+  if (iammaster) then
+     lwork = 10*nmat
+     allocate(work(lwork))
+#ifdef USEESSL_diag
+     allocate(hupper(nmat*(nmat+1)/2))
+     kk = 1
+     do jj = 1, nmat
+        do ii = 1, jj
+           hupper(kk) =  egs(ii,jj)
+           kk = kk + 1
+        enddo
+     enddo
+#ifdef CPLX
+     call zhpev(21,hupper,egv,egs,nmat,nmat,work,lwork)
+#else
+     call dspev(21,hupper,egv,egs,nmat,nmat,work,lwork)
+#endif
+     deallocate(hupper)
+#else
+     abstol = zero
+     allocate(ifail(nmat))
+     allocate(iwork(5*nmat))
+     ilow = 1
+     iup = nmat
+#ifdef CPLX
+     allocate(rwork(7*nmat))
+     call zheevx('V','A','U',nmat,egs,nmat,ellow,elup,ilow,iup, &
+          abstol,nfound,egv,egs,nmat,work,8*nmat,rwork,iwork,ifail,info)
+     deallocate(rwork)
+#else
+     call dsyevx('V','A','U',nmat,egs,nmat,ellow,elup,ilow,iup, &
+          abstol,nfound,egv,egs,nmat,work,10*nmat,iwork,ifail,info)
+#endif
+     if (info < 0) then
+        write(6,*) ' error in input parameters for cheevx/ssyevx'
+        write(6,*) ' info = ', info
+        ierr = 2
+     endif
+
+     if (info > 0) then
+        write(6,*) 'convergence problems in cheevx/ssyevx'
+        write(6,*) ' info = ', info
+        write(6,*) 'The following eigenvector(s) failed to converge:'
+        write(6,*) ' ifail = ', ifail
+        ierr = 3
+     endif
+
+     deallocate(iwork)
+     deallocate(ifail)
+#endif
+     deallocate(work)
+  endif
+  !
+  ! Distribute eigenvectors and eigenvalues.
+  !
+  call MPI_BCAST(ierr,1,MPI_INTEGER,masterid,comm,info)
+  if (ierr /= 0) return
+
+  call MPI_BCAST(egv,nmat,MPI_DOUBLE_SCALAR,masterid,comm,info)
+
+  do ii = 0, npes - 1
+     if (ii == masterid) cycle
+     if (iammaster) then
+        shs = Zzero
+        do jj = 1, nblock
+           kk = jj + ii*nblock
+           if (kk > nmat) cycle
+           shs(:,jj) = egs(:,kk)
+        enddo
+        call MPI_SEND(shs,nmat*nblock,MPI_DOUBLE_SCALAR, &
+             ii,ii+npes,comm,info)
+     else
+        if (ii == inode) then
+           call MPI_RECV(shs,nmat*nblock,MPI_DOUBLE_SCALAR, &
+                masterid,ii+npes,comm,mpistatus,info)
+        endif
+     endif
+  enddo
+
+  if (iammaster) then
+     do jj = 1, nblock
+        kk = jj + masterid*nblock
+        if (kk > nmat) cycle
+        shs(:,jj) = egs(:,kk)
+     enddo
+     deallocate(egs)
+  endif
+
+#else
+  !
+  ! Calculate node index array for communications.
+  ! 
+  do ii = 1, npes
+     idum = (ii-1)*nblock
+     do kk = 1,nblock
+        idum = idum + 1 
+        nod_g(idum) = ii-1  
+     enddo
+  enddo
+
+  do ii = 1, npes
+     idum = (ii-1)*nblock
+     do kk = 1,nblock
+        idum = idum + 1
+        icol(idum) = kk
+     enddo
+  enddo
+  !
+  ! Choose scalapack layout. Block cyclic.
+  ! The layout has a grid with nprow rows and npcol columns such that
+  ! nprow*npcol = npes. Block size (nbl) is as close to 32 as possible.
+  ! The goal is to get a processor grid which is as close to "square" as
+  ! possible and with optimum block size (that is where the magic number
+  ! 32 comes about). This nprow*npcol grid is used to partition the
+  ! Hamiltonian matrix. For more, see the scalapack documentation
+  !
+  nprow = int(sqrt(real(npes)+1e-6))
+  do ii = nprow, 1, -1
+     if (mod(npes,ii) == 0) exit
+  end do
+  nprow = ii
+  npcol = npes/nprow
+  nbl = min(32, nmat/(max(nprow,npcol)))
+  nbl = max(nbl,1)
+
+  ! Determine where myproc is in proc grid.
+  icntxt = comm
+  call blacs_gridinit(icntxt,'c',nprow, npcol)
+  call blacs_gridinfo(icntxt, nprow, npcol, myprow, mypcol)
+
+  if (verbose) write(6,10) nprow, npcol,nbl
+10  format(' SCALAPACK PROCESSOR GRID ',i3,' x ',i3,' BLOCKSIZE ',i3)
+
+  if (myprow == -1) then
+     write(6,*) '*** start_vectors: BLACS ERROR on proc', inode
+     ierr = 4
+     return
+  endif
+  !
+  ! Determine number of blocks per processor in the column/row
+  ! and array sizes and maximums as well for allocations.
+  !
+  nbc = nmat/(nbl*npcol)
+  if (mod(nmat,(nbl*npcol)) > mypcol*nbl) nbc=nbc+1
+  nbr = nmat/(nbl*nprow)
+  if (mod(nmat,(nbl*nprow)) > myprow*nbl) nbr=nbr+1
+  call MPI_ALLREDUCE(nbc,nbc_max,1,MPI_INTEGER,MPI_MAX,comm,info)
+  call MPI_ALLREDUCE(nbr,nbr_max,1,MPI_INTEGER,MPI_MAX,comm,info)
+  numbl_max = nbc_max*nbr_max
+
+  allocate(shs_bl(numbl_max*nbl*nbl),stat=info)
+  call alccheck('shs_bl','eigensolver',numbl_max*nbl*nbl,info)
+  shs_bl = Zzero
+
+  nbce = nmat/(nbl*npcol)
+  if (mod(nmat,(nbl*npcol)) > mypcol*nbl) nbce = nbce + 1
+
+  allocate(egs_bl(numbl_max*nbl*nbl),stat=info)
+  call alccheck('egs_bl','eigensolver',numbl_max*nbl*nbl,info)
+  egs_bl = Zzero
+  !
+  ! Calculate work array sizes etc for pcheevx/pssyevx.
+  ! Assume no more than 20 eigenvalues in any one cluster.
+  ! If more pcheevx/pssyevx will abort. If more then more memory is
+  ! required for the orthogonlaisation ie more work space.
+  ! amc: nmat set to nv for work space calculation size.
+  !      It seems to be a problem in pcheevx/pssyevx with setting it to nmat.
+  !
+  clustersize = 50
+  izero = 0
+  locsize = nbl*nbl*nbc*nbr
+  nn = max(nmat,nbl,2)
+  nnp = max(nmat,nprow*npcol+1,4)
+  np0 = numroc(nn,nbl,0,0,nprow)
+  mq0 = numroc(max(nmat,nbl,2),nbl,0,0,npcol)
+#ifdef CPLX
+  !  Use nq0 for lwork to be consistent with pcheevx, man pages wrong.
+  nq0 = numroc(nn,nbl,0,0,npcol)
+  lwork = nmat + (np0+nq0+nbl)*nbl
+  lrwork = 4*nmat+max(5*nn,np0*mq0)+iceil(nmat,nprow*npcol)*nn + &
+         (clustersize-1)*nmat
+#else
+  lwork = 5*nmat+max(5*nn,np0*mq0+2*nbl*nbl) + &
+       iceil(nmat,nprow*npcol)*nn+(clustersize-1)*nmat
+#endif
+  liwork = 6*nnp
+  !
+  ! Calculate sizes for index arrays for mpi comms. : h matrix
+  ! for s matrix, use the same num_max (requires little additional memory).
+  !
+  allocate(numr(npes))
+
+  numr = 0
+  do ibc = 0, nbc - 1           ! loop over column blocks
+     do ic = (ibc*npcol+mypcol)*nbl + 1, &
+          min((ibc*npcol+mypcol)*nbl+nbl,nmat) ! loop over cols
+        iproc_n = nod_g(ic)
+        do ibr = 0, nbr - 1    ! loop over row blocks
+           numr(iproc_n+1) = numr(iproc_n+1) + 1
+        end do
+     end do
+  end do
+  !
+  ! Get max of numr.
+  !
+  idum = 0
+  do i = 1, npes
+     if (numr(i) > idum) idum = numr(i)
+  enddo
+  
+  call MPI_ALLREDUCE(idum,num_max,1,MPI_INTEGER,MPI_MAX,comm,info)
+  !
+  ! Check amount of memory needed for allocations.
+  !
+  if (verbose) then
+     ellow = liwork+nmat+2*nprow*npcol+4*npes+12*num_max*npes
+     jj = nmat+nprow*npcol
+     i = 2*numbl_max*nbl*nbl+lwork
+#ifdef CPLX
+     i = 2*i
+#endif
+     ellow = ellow*four + jj*eight + i*eight
+     write(6,'(a,f10.2,a)') ' Memory needed for diagonalization = ', &
+          ellow/1048576.d0, ' MB'
+  endif
+  !
+  ! Allocate index arrays for communications for remapping to scalapack layout.
+  !
+  allocate(nums(npes))
+  allocate(indr(num_max,npes))
+  allocate(inds(num_max,npes))
+  allocate(iaddr(num_max,npes))
+  allocate(iadds_r(num_max,npes))
+  allocate(iadds_c(num_max,npes))
+  allocate(iadds_d(num_max,npes))
+
+  allocate(numre(npes))
+  allocate(numse(npes))
+  allocate(indre(num_max,npes))
+  allocate(indse(num_max,npes))
+  allocate(iaddre(num_max,npes))
+  allocate(iaddse_r(num_max,npes))
+  allocate(iaddse_c(num_max,npes))
+  allocate(iaddse_d(num_max,npes))
+  !
+  ! Remap state distributed s and h to block-block blacs distribution
+  ! in  zg and s.
+  ! Calculate index matrices first for communications.
+  !
+  indr = 0
+  numr = 0
+
+  idiff = 0
+  do ibc = 0, nbc - 1           ! loop over column blocks
+     do ic = (ibc*npcol+mypcol)*nbl + 1, &
+          min((ibc*npcol+mypcol)*nbl+nbl,nmat) ! loop over cols
+        ngr = 0
+        iproc_n = nod_g(ic) 
+        do ibr = 0, nbr - 1    ! loop over row blocks
+           ir_low = (ibr*nprow+myprow)*nbl+1
+           ilen = min((ibr*nprow+myprow)*nbl+nbl,nmat)-ir_low+1
+           ngr = ngr + ilen
+           numr(iproc_n+1) = numr(iproc_n+1) + 1
+
+           indr(numr(iproc_n+1),iproc_n+1) = ilen
+           iaddr(numr(iproc_n+1),iproc_n+1) = idiff+1
+           iadds_r(numr(iproc_n+1),iproc_n+1) = ir_low
+           iadds_c(numr(iproc_n+1),iproc_n+1) = icol(ic)
+
+           idiff = idiff + ilen
+        end do
+     end do
+  end do
+
+  indre = 0
+  numre = 0
+
+  idiff = 0
+  do ibc = 0, nbce - 1           ! loop over column blocks
+     do ic = (ibc*npcol+mypcol)*nbl + 1, &
+          min((ibc*npcol+mypcol)*nbl+nbl,nmat) ! loop over cols
+        iproc_n = nod_g(ic)
+        do ibr = 0, nbr - 1    ! loop over row blocks
+           ir_low = (ibr*nprow+myprow)*nbl+1
+           ilen = min((ibr*nprow+myprow)*nbl+nbl,nmat)-ir_low+1
+           numre(iproc_n+1) = numre(iproc_n+1) + 1
+
+           indre(numre(iproc_n+1),iproc_n+1) = ilen
+           iaddre(numre(iproc_n+1),iproc_n+1) = idiff+1
+           iaddse_r(numre(iproc_n+1),iproc_n+1) = ir_low
+           iaddse_c(numre(iproc_n+1),iproc_n+1) = icol(ic)
+
+           idiff = idiff + ilen
+        end do
+     end do
+  end do
+  !
+  ! Communicate sending indexes etc to sending processors.
+  ! 
+  do i = 1, npes
+     call MPI_ISEND(numr(i),1,MPI_INTEGER,i-1,inode, &
+          comm,icom,info)
+  enddo
+  do i = 1, npes
+     call MPI_RECV(nums(i),1,MPI_INTEGER,i-1,i-1, &
+          comm,mpistatus,info)
+  enddo
+  call MPI_BARRIER(comm,info)
+  do i = 1, npes
+     call MPI_ISEND(indr(1,i),numr(i),MPI_INTEGER,i-1,inode, &
+          comm,icom,info)
+  enddo
+  do i = 1, npes
+     call MPI_RECV(inds(1,i),nums(i),MPI_INTEGER,i-1,i-1, &
+          comm,mpistatus,info)
+  enddo
+  call MPI_BARRIER(comm,info)
+  do i = 1, npes
+     call MPI_ISEND(iadds_r(1,i),numr(i),MPI_INTEGER,i-1,inode, &
+          comm,icom,info)
+  enddo
+  do i = 1, npes
+     call MPI_RECV(iadds_d(1,i),nums(i),MPI_INTEGER,i-1,i-1, &
+          comm,mpistatus,info)
+  enddo
+  call MPI_BARRIER(comm,info)
+  do i = 1, npes
+     call MPI_ISEND(iadds_c(1,i),numr(i),MPI_INTEGER,i-1,inode, &
+          comm,icom,info)
+  enddo
+  do i = 1, npes
+     call MPI_RECV(iadds_r(1,i),nums(i),MPI_INTEGER,i-1,i-1, &
+          comm,mpistatus,info)
+  enddo
+  call MPI_BARRIER(comm,info)
+
+  do i = 1, npes
+     call MPI_ISEND(numre(i),1,MPI_INTEGER,i-1,inode, &
+          comm,icom,info)
+  enddo
+  do i = 1, npes
+     call MPI_RECV(numse(i),1,MPI_INTEGER,i-1,i-1, &
+          comm,mpistatus,info)
+  enddo
+  call MPI_BARRIER(comm,info)
+  do i = 1, npes
+     call MPI_ISEND(indre(1,i),numre(i),MPI_INTEGER,i-1,inode, &
+          comm,icom,info)
+  enddo
+  do i = 1, npes
+     call MPI_RECV(indse(1,i),numse(i),MPI_INTEGER,i-1,i-1, &
+          comm,mpistatus,info)
+  enddo
+  call MPI_BARRIER(comm,info)
+  do i = 1, npes
+     call MPI_ISEND(iaddse_r(1,i),numre(i),MPI_INTEGER,i-1,inode, &
+          comm,icom,info)
+  enddo
+  do i = 1, npes
+     call MPI_RECV(iaddse_d(1,i),numse(i),MPI_INTEGER,i-1,i-1, &
+          comm,mpistatus,info)
+  enddo
+  call MPI_BARRIER(comm,info)
+  do i = 1, npes
+     call MPI_ISEND(iaddse_c(1,i),numre(i),MPI_INTEGER,i-1,inode, &
+          comm,icom,info)
+  enddo
+  do i = 1, npes
+     call MPI_RECV(iaddse_r(1,i),numse(i),MPI_INTEGER,i-1,i-1, &
+          comm,mpistatus,info)
+  enddo
+  call MPI_BARRIER(comm,info)
+  !
+  ! Now communicate the data.
+  !
+  do j = 1, num_max
+    
+     call MPI_BARRIER(comm,info)
+
+     do i = 1, npes
+        if (inode == i - 1) cycle
+        if (j <= nums(i)) then 
+           call MPI_SEND(shs(iadds_d(j,i),iadds_r(j,i)),inds(j,i), &
+                MPI_DOUBLE_SCALAR,i-1,nums(i)+j,comm,info)
+        endif
+     enddo
+
+     call MPI_BARRIER(comm,info)
+
+     do i = 1, npes
+        if (inode == i - 1) cycle
+        if (j <= numr(i)) then 
+           call MPI_RECV(shs_bl(iaddr(j,i)),indr(j,i), &
+                MPI_DOUBLE_SCALAR,i-1,numr(i)+j,comm,mpistatus,info)
+        endif
+     enddo
+
+     if (j <= numr(inode+1)) call Zcopy(inds(j,inode+1), &
+          shs(iadds_d(j,inode+1),iadds_r(j,inode+1)),1, &
+          shs_bl(iaddr(j,inode+1)),1)
+
+  enddo
+
+  call MPI_BARRIER(comm,info)
+
+  call descinit(desca,nmat,nmat,nbl,nbl,0,0,icntxt,ngr,info)
+  !
+  ! Allocate scratch arrays.
+  !
+  allocate(work(lwork),stat=info)
+  call alccheck('work','eigensolver',lwork,info)
+#ifdef CPLX
+  allocate(rwork(lrwork),stat=info)
+  call alccheck('rwork','eigensolver',lrwork,info)
+  if (info /= 0) then
+     write(6,*) 'Can not allocate rwork in eigensolver'
+     ierr = 9
+     return
+  endif
+#endif
+  allocate(iwork(liwork),stat=info)
+  call alccheck('iwork','eigensolver',liwork,info)
+  allocate(iclustr(2*nprow*npcol))
+  allocate(gap(nprow*npcol))
+  allocate(ifail(nmat))
+
+  if (verbose) write(6,*) ' Scalapack: using upper triangle matrix'
+  abstol =  zero
+  orfac = 5d-7
+  ilow = 1
+  iup = nmat
+#ifdef CPLX
+  call pzheevx('V','A','U', &
+#else
+  call pdsyevx('V','A','U', &
+#endif
+       nmat,shs_bl,1,1,desca,ellow,elup,ilow,iup,abstol,nfound, &
+       nzfound,egv,orfac,egs_bl,1,1,desca,work,lwork, &
+#ifdef CPLX
+       rwork, lrwork, &
+#endif
+       iwork,liwork,ifail,iclustr,gap,info)
+
+  if (info < 0) then
+     write(6,*) ' error in parameters for pcheevx/pssyevx ', info
+     ierr = 9
+     return
+  endif
+
+  if (verbose) write(6,*) ' Sharing eigenvectors'
+  if (info > 0) then
+     write(6,*) ' convergence or memory problems in pcheevx/pssyevx'
+     write(6,*) ' info = ', info
+     if (verbose) then
+        write(6,*) ' iclustr = ', iclustr
+        write(6,*) ' gap = ', gap
+     endif
+     ierr = 10
+     return
+  endif
+
+  call MPI_BARRIER(comm,info)
+  !
+  ! Copy eigenvector layout from scalapack layout back to program layout.
+  !
+  do j = 1, num_max
+
+     call MPI_BARRIER(comm,info)
+
+     do i = 1, npes
+        if (inode == i - 1) cycle
+        if (j <= numre(i)) then
+           call MPI_SEND(egs_bl(iaddre(j,i)),indre(j,i), &
+                MPI_DOUBLE_SCALAR,i-1,numre(i)+j,comm,info)
+        endif
+     enddo
+
+     call MPI_BARRIER(comm,info)
+
+     do i = 1, npes
+        if (inode == i - 1) cycle
+        if (j <= numse(i)) then
+           call MPI_RECV(shs(iaddse_d(j,i),iaddse_r(j,i)),indse(j,i), &
+                MPI_DOUBLE_SCALAR,i-1,numse(i)+j,comm,mpistatus,info)
+        endif
+     enddo
+
+     if (j <= numre(inode+1)) call Zcopy(indre(j,inode+1), &
+          egs_bl(iaddre(j,inode+1)),1,shs(iaddse_d(j,inode+1), &
+          iaddse_r(j,inode+1)),1)
+
+  enddo
+
+  call MPI_BARRIER(comm,info)
+
+  call blacs_gridexit(icntxt)
+
+  deallocate(ifail)
+  deallocate(gap)
+  deallocate(iclustr)
+  deallocate(iwork)
+#ifdef CPLX
+  deallocate(rwork)
+#endif
+  deallocate(work)
+  deallocate(iaddse_d)
+  deallocate(iaddse_c)
+  deallocate(iaddse_r)
+  deallocate(iaddre)
+  deallocate(indse)
+  deallocate(indre)
+  deallocate(numse)
+  deallocate(numre)
+  deallocate(iadds_d)
+  deallocate(iadds_c)
+  deallocate(iadds_r)
+  deallocate(iaddr)
+  deallocate(inds)
+  deallocate(indr)
+  deallocate(nums)
+  deallocate(numr)
+  deallocate(egs_bl)
+  deallocate(shs_bl)
+
+  if (verbose) write(6,*) ' diagonalization done'
+
+#endif
+
+#endif
+
+end subroutine Zeigensolver
+!===================================================================

@@ -1,0 +1,31 @@
+
+Boundary_Sphere_Radius:  5.0 ang
+Grid_Spacing:  0.35 ang
+
+output_all_states .true.
+
+States_Num:  80
+
+eigensolver diagla
+
+coordinate_unit cartesian_ang
+
+Atom_Types_Num:  2
+
+Atom_Type: Si
+Local_Component: p
+
+begin Atom_Coord
+ 0.00  0.00  0.00
+end Atom_Coord
+ 
+Atom_Type: H
+Local_Component: s
+ 
+begin Atom_Coord
+   0.8612   0.8612   0.8612
+  -0.8612  -0.8612   0.8612
+  -0.8612   0.8612  -0.8612
+   0.8612  -0.8612  -0.8612
+end Atom_Coord
+ 

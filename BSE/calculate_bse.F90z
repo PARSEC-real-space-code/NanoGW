@@ -1,0 +1,617 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Calculate and diagonalize the BSE
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zcalculate_bse(gvec,kpt,qpt,q_bse,bsepol_in,k_p,k_vv,k_cc, &
+     k_vc,k_x,pol,bsepol,nolda,tamm_d,trip_flag,trunc_c,writeig, &
+     mix_flag,noxchange,snorm,hf,nspin,ecutb2,eref,isdf_in)
+
+  use typedefs
+  use mpi_module
+  implicit none
+#ifdef MPI
+  include 'mpif.h'
+#endif
+
+  ! arguments
+  ! real-space grid
+  type (gspace), intent(inout) :: gvec
+  ! k-points, q-space in TDLDA, q-space in BSE
+  type (kptinfo), intent(inout) :: kpt
+  type (qptinfo), intent(inout) :: qpt, q_bse
+  ! temporary data space for BSE polarizability
+  type (polinfo), dimension(2), intent(inout) :: bsepol_in
+  type (kernelinfo), dimension(gvec%syms%ntrans,qpt%nk), intent(inout) :: &
+       k_p, &        ! kernel for TDLDA
+       k_vv, &       ! kernel for vv part of screened direct
+       k_cc          ! kernel for cc part of screened direct
+  type (kernelinfo), dimension(gvec%syms%ntrans), intent(inout) :: &
+       k_vc, &       ! kernel for mixing (AB) part of BSE
+       k_x           ! exchange kernel
+  ! TDLDA polarizability
+  type (polinfo), dimension(gvec%syms%ntrans,qpt%nk), intent(inout) :: pol
+  ! BSE polarizability
+  type (polinfo), dimension(gvec%syms%ntrans), intent(inout) :: bsepol
+
+  logical, intent(in) :: &
+       nolda, &      ! true if LDA kernel is not used
+       tamm_d, &     ! true if Tamm-Dancof approximation is used
+       trip_flag, &  ! true if BSE is solved for triplet excitations only
+       trunc_c, &    ! true if the long-wavelength part of the Coulomb
+                     ! interaction is removed
+       writeig, &    ! true if BSE eigenvectors are printed in file bse_diag.dat
+       mix_flag, &   ! true if Tamm-Dancof approximation is not used
+       noxchange, &    ! true if exchange part of kernel is ignored
+       snorm, &      ! true if sum rule is renormalized
+       hf            ! true if BSE is solved within the Hartree-Fock approximation
+  ! number of spin channels
+  integer, intent(in) :: nspin
+  real(dp), intent(in) :: &
+       ecutb2, &     ! resolution in energy denominators
+       eref          ! energy reference at which the direct kernel is calculated
+
+  ! local variables
+  integer :: ii, ic, iv, icp, ivp, irp, jrp, isp_c, isp_r, isp, &
+       info, nmat, ncol, ik, jk, iq, icol, pcol, irow, chkpt
+  real(dp) :: tsec(2), tmp, xsum, epsinv
+  SCALAR :: k_long
+  SCALAR, dimension(:,:), allocatable :: pot_c, pot_f, pot_c1, pot_f1
+  type (ISDF), intent(in) :: isdf_in
+
+  !-------------------------------------------------------------------
+  ! Skip the calculation of polarizability if Hartree-Fock is used.
+  !
+  if (hf) then
+     epsinv = one
+     chkpt = 0
+     goto 15
+  endif
+
+  !-------------------------------------------------------------------
+  ! Calculate TDLDA polarizability and rescale sum rule if necessary.
+  !
+  call Zcalculate_tdlda(gvec,kpt,qpt,k_p,pol,nspin,chkpt, &
+       tamm_d,nolda,.false.,.false.,.false.,.false.,xsum,epsinv,isdf_in)
+  if (.not. snorm) xsum = one
+
+  !-------------------------------------------------------------------
+  ! Initialize Hamiltonian for all representations and look for bse_chkpt.dat.
+  !
+15 continue
+  do irp = 1, gvec%syms%ntrans
+     if ( bsepol(irp)%ntr == 0 ) then
+        k_vc(irp)%nn = 0
+        bsepol(irp)%nn = 0
+     else
+        ncol = bsepol(irp)%ntr / r_grp%npes
+        if (bsepol(irp)%ntr > ncol * r_grp%npes) ncol = ncol + 1
+        nmat = ncol * r_grp%npes
+        bsepol(irp)%nn = ncol
+        allocate(bsepol(irp)%Zv(nmat * 2,ncol * 2))
+        bsepol(irp)%Zv = Zzero
+     endif
+  enddo
+
+  call Zread_bse(gvec%syms%ntrans,chkpt,bsepol)
+
+  !-------------------------------------------------------------------
+  ! Add quasiparticle part.
+  !
+  call stopwatch(r_grp%master,'Calling quasiparticle')
+  do ik = 1, kpt%nk
+     do isp = 1, nspin
+        call quasiparticle(kpt%wfn(isp,ik),bsepol_in(isp),peinf%master,isp,ik)
+     enddo
+  enddo
+
+  do jrp = 1, gvec%syms%ntrans/r_grp%num
+     irp = r_grp%g_rep(jrp)
+     if ( bsepol(irp)%ntr == 0 ) cycle
+     if (chkpt >= irp + qpt%nk*gvec%syms%ntrans) cycle
+
+     ncol = bsepol(irp)%nn
+     nmat = ncol * r_grp%npes
+     !
+     ! Add quasiparticle part, from bse%hqpvv, bse%hqpcc (spin diagonal).
+     !
+     do pcol = 1, ncol
+        icol = pcol + r_grp%inode*ncol
+        if ( icol > bsepol(irp)%ntr ) cycle
+        isp_c = 1
+        if ( icol > bsepol(irp)%n_up ) isp_c = 2
+        ik = bsepol(irp)%tr(3,icol)
+        iv = kpt%wfn(isp_c,ik)%vmapi(bsepol(irp)%tr(1,icol))
+        ic = kpt%wfn(isp_c,ik)%cmapi(bsepol(irp)%tr(2,icol))
+        do irow = 1, bsepol(irp)%ntr
+           isp_r = 1
+           if ( irow > bsepol(irp)%n_up ) isp_r = 2
+           jk = bsepol(irp)%tr(3,irow)
+           ! Quasiparticle part is k-point diagonal
+           if (jk /= ik) cycle
+           ivp = kpt%wfn(isp_r,jk)%vmapi(bsepol(irp)%tr(1,irow))
+           icp = kpt%wfn(isp_r,jk)%cmapi(bsepol(irp)%tr(2,irow))
+           if ( iv == ivp .and. isp_c == isp_r ) then
+              tmp = zero
+              do ii = 1, bsepol_in(isp_c)%ncond
+                 tmp = tmp + kpt%wfn(isp_c,ik)%eqpc(ii) * &
+                      kpt%wfn(isp_c,ik)%hqpcc(ic,ii) * &
+                      kpt%wfn(isp_c,ik)%hqpcc(icp,ii)
+              enddo
+              bsepol(irp)%Zv(irow,pcol) = bsepol(irp)%Zv(irow,pcol) + tmp
+           endif
+           if ( ic == icp .and. isp_c == isp_r ) then
+              tmp = zero
+              do ii = 1, bsepol_in(isp_c)%nval
+                 tmp = tmp + kpt%wfn(isp_c,ik)%eqpv(ii) * &
+                      kpt%wfn(isp_c,ik)%hqpvv(iv,ii) * &
+                      kpt%wfn(isp_c,ik)%hqpvv(ivp,ii)
+              enddo
+              bsepol(irp)%Zv(irow,pcol) = bsepol(irp)%Zv(irow,pcol) - tmp
+           endif
+        enddo
+     enddo
+
+     do pcol = 1, ncol
+        icol = pcol + r_grp%inode*ncol
+        if ( icol > bsepol(irp)%ntr ) cycle
+        isp_c = 1
+        if ( icol > bsepol(irp)%n_up ) isp_c = 2
+        ik = bsepol(irp)%tr(3,icol)
+        iv = kpt%wfn(isp_c,1)%vmapi(bsepol(irp)%tr(1,icol))
+        ic = kpt%wfn(isp_c,1)%cmapi(bsepol(irp)%tr(2,icol))
+        do irow = 1, bsepol(irp)%ntr
+           isp_r = 1
+           if ( irow > bsepol(irp)%n_up ) isp_r = 2
+           jk = bsepol(irp)%tr(3,irow)
+           if (jk /= ik) cycle
+           ivp = kpt%wfn(isp_r,ik)%vmapi(bsepol(irp)%tr(1,irow))
+           icp = kpt%wfn(isp_r,ik)%cmapi(bsepol(irp)%tr(2,irow))
+           if ( iv == ivp .and. isp_c == isp_r ) then
+              tmp = zero
+              do ii = 1, bsepol_in(isp_c)%ncond
+                 tmp = tmp + kpt%wfn(isp_c,ik)%eqpc(ii) * &
+                      kpt%wfn(isp_c,ik)%hqpcc(ic,ii) * &
+                      kpt%wfn(isp_c,ik)%hqpcc(icp,ii)
+              enddo
+              bsepol(irp)%Zv(irow+nmat,pcol+ncol) = &
+                   bsepol(irp)%Zv(irow+nmat,pcol+ncol) - tmp
+           endif
+           if ( ic == icp .and. isp_c == isp_r ) then
+              tmp = zero
+              do ii = 1, bsepol_in(isp_c)%nval
+                 tmp = tmp + kpt%wfn(isp_c,ik)%eqpv(ii) * &
+                      kpt%wfn(isp_c,ik)%hqpvv(iv,ii) * &
+                      kpt%wfn(isp_c,ik)%hqpvv(ivp,ii)
+              enddo
+              bsepol(irp)%Zv(irow+nmat,pcol+ncol) = &
+                   bsepol(irp)%Zv(irow+nmat,pcol+ncol) + tmp
+           endif
+        enddo
+     enddo
+     ! call Zsave_pol(bsepol(irp),9100,irp,1) ! W.Gao: for debug use
+     chkpt = irp + qpt%nk*gvec%syms%ntrans
+  enddo
+
+  !-------------------------------------------------------------------
+  ! Add exchange.
+  !
+  do jrp = 1, gvec%syms%ntrans/r_grp%num
+     irp = r_grp%g_rep(jrp)
+     if ( bsepol(irp)%ntr == 0 ) cycle
+     if (chkpt >= irp + (qpt%nk + 1)*gvec%syms%ntrans) cycle
+
+     ncol = bsepol(irp)%nn
+     nmat = ncol * r_grp%npes
+     if ( k_vc(irp)%ncol * k_vc(irp)%nrow == 0 ) cycle
+     !
+     ! Read K_vc kernel, Coulomb part only.
+     ! Column-wise distribution.
+     !
+     if (r_grp%master) write(6,'(/,a,/,a,i2,/)') repeat('-',65), &
+          ' Calculation of Bare Exchange for representation ', irp
+     call stopwatch(r_grp%master,' Starting readmatrix kernel_vc')
+     call timacc(3,1,tsec)
+     call Zkernel(gvec,kpt,k_vc(irp),irp,0,nspin,q_bse%fk(1,1),'c',.true.,isdf_in)
+     call timacc(3,2,tsec)
+     !
+     ! Add exchange vcvc (from kernel_vc) of Bethe-Salpeter Hamiltonian.
+     !
+     call stopwatch(r_grp%master,'Calling exchange_b')
+     call timacc(6,1,tsec)
+     call Zexchange_b(kpt,k_vc(irp),bsepol(irp), &
+          trip_flag,mix_flag,noxchange,nspin)
+     deallocate(k_vc(irp)%Zm)
+     call timacc(6,2,tsec)
+     !
+     ! If the cluster is inside a periodic environment, must remove the
+     ! long-wavelength part of Coulomb interaction. Use dipole matrix
+     ! elements:
+     ! kernel_long(i1,i2,i3,i4) = ( 4*pi * e^2 / V_cell ) * (spin sum)
+     !                            conjg( dipole(i1,i2) ) * dipole(i3,i4)
+     ! Additional factor of 3 below comes from the angular average.
+     !
+     if (gvec%per == 3 .and. q_bse%zerok(1) .and. (.not. noxchange) .and. trunc_c) then
+        if (r_grp%master) write(6,'(/,a,/,a,/,a,/)') repeat('*',65), &
+             ' WARNING!!!! Removing the long-wavelength exchange.', &
+             repeat('*',65)
+
+        do pcol = 1, ncol
+           icol = pcol + r_grp%inode*ncol
+           if (icol > bsepol(irp)%ntr) cycle
+           do irow = 1, bsepol(irp)%ntr
+              k_long = Zzero
+              do ii = 1, gvec%per
+                 k_long = k_long + MYCONJG(bsepol(irp)%Zdipole(irow,ii)) * &
+                      bsepol(irp)%Zdipole(icol,ii)
+              enddo
+              k_long = k_long  * eight * pi / (gvec%celvol * kpt%nk) * &
+                   two / real(nspin,dp) / real(gvec%per,dp)
+              bsepol(irp)%Zv(irow,pcol) = bsepol(irp)%Zv(irow,pcol) - k_long
+              bsepol(irp)%Zv(irow + nmat,pcol + ncol) = &
+                   bsepol(irp)%Zv(irow + nmat,pcol + ncol) - k_long
+           enddo
+        enddo
+     endif
+
+     chkpt = irp + (qpt%nk + 1)*gvec%syms%ntrans
+     if (r_grp%num == 1) call Zwrite_bse(gvec%syms%ntrans,chkpt,bsepol)
+     !call Zsave_pol(bsepol(irp),9200,irp,1)  ! W.Gao: for debug use
+  enddo
+  if (chkpt <= (qpt%nk + 2)*gvec%syms%ntrans) then
+     chkpt = (qpt%nk + 2)*gvec%syms%ntrans
+     if (r_grp%num > 1) call Zwrite_bse(gvec%syms%ntrans,chkpt,bsepol)
+  endif
+
+  !-------------------------------------------------------------------
+  ! Add direct_bare kernel in Bethe-Salpeter Hamiltonian. This kernel has
+  ! parts from all representations. Must collect contributions.
+  !
+  if (chkpt < (qpt%nk + 3)*gvec%syms%ntrans) then
+     do irp = 1, gvec%syms%ntrans
+        if ( bsepol(irp)%ntr == 0 .or. r_grp%mygr /= r_grp%rep_g(irp) ) cycle
+        if ( k_x(irp)%ncol * k_x(irp)%nrow == 0 ) cycle
+        if (r_grp%master) write(6,'(/,a,/,2a,i2,/)') repeat('-',65), &
+             ' Calculation of Direct_bare kernel of BSE ', &
+             ' Hamiltonian for representation ', irp
+        !
+        ! Read K_x kernel, Coulomb part only.
+        ! Column-wise distribution.
+        !
+        call stopwatch(r_grp%master,' Starting readmatrix kernel_x')
+        call timacc(3,1,tsec)
+        call Zkernel(gvec,kpt,k_x(irp),irp,0,nspin,q_bse%fk(1,1),'c',.true.,isdf_in)
+        call timacc(3,2,tsec)
+     enddo
+#ifdef MPI
+     call MPI_BARRIER(peinf%comm,info)
+#endif
+     !
+     ! Add bare direct (from kernel_x) of Bethe-Salpeter Hamiltonian.
+     !
+     call stopwatch(r_grp%master,'Calling direct_b')
+     call timacc(7,1,tsec)
+     call Zdirect_b(gvec%syms%ntrans,kpt%nk,k_x,bsepol)
+     call timacc(7,2,tsec)
+     do irp = 1, gvec%syms%ntrans
+        if ( bsepol(irp)%ntr == 0 ) cycle
+        if (r_grp%mygr /= r_grp%rep_g(irp)) then
+           bsepol(irp)%Zv = Zzero
+        else
+           if ( k_x(irp)%ncol * k_x(irp)%nrow /= 0 ) deallocate(k_x(irp)%Zm)
+        endif
+     enddo
+     !
+     ! If periodic system, include by hand the long wavelength contribution
+     ! of Coulomb kernel. Should update only diagonal part.
+     !
+     do irp = 1, gvec%syms%ntrans
+        if ( bsepol(irp)%ntr == 0 .or. r_grp%mygr /= r_grp%rep_g(irp) ) cycle
+        if (.not. q_bse%zerok(1)) cycle
+        if (gvec%per < 3) cycle
+        nmat = bsepol(irp)%nn * r_grp%npes
+        ncol = bsepol(irp)%nn
+        do pcol = 1, ncol
+           irow = pcol + r_grp%inode*ncol
+           if ( irow > bsepol(irp)%ntr ) cycle
+           bsepol(irp)%Zv(irow,pcol) = &
+                bsepol(irp)%Zv(irow,pcol) - gvec%long * epsinv
+           if (mix_flag) then
+              irow = irow + nmat
+              bsepol(irp)%Zv(irow,pcol+ncol) = &
+                   bsepol(irp)%Zv(irow,pcol+ncol) - gvec%long * epsinv
+           endif
+        enddo
+
+        !call Zsave_pol(bsepol(irp),9300,irp,1) ! W.Gao: for debug use
+     enddo
+     chkpt = (qpt%nk + 3)*gvec%syms%ntrans
+     call Zwrite_bse(gvec%syms%ntrans,chkpt,bsepol)
+  endif
+  !
+  ! Skip the calculation of correlation and vertex if Hartree-Fock is used.
+  !
+  if (hf) goto 35
+
+  !
+  ! Reopen file with polarizability eigenstates.
+  !
+  if (r_grp%master) then
+     open(50,file='pol_diag.dat',form='unformatted')
+     rewind(50)
+     read(50)
+     read(50)
+  endif
+  !-------------------------------------------------------------------
+  ! Add direct_screened kernel in Bethe-Salpeter Hamiltonian. This kernel has
+  ! parts from all representations. Must collect contributions.
+  !
+  do iq = 1, qpt%nk
+     do jrp = 1, gvec%syms%ntrans/r_grp%num
+        irp = r_grp%g_rep(jrp)
+
+        if ( (bsepol(irp)%ntr == 0) &
+             .or. (chkpt >= irp + (qpt%nk + iq + 2)*gvec%syms%ntrans) ) cycle
+
+        if (r_grp%master) write(6,'(/,a,/,2a,i2,/)') repeat('-',65), &
+             ' Calculation of Direct_screened kernel of BSE', &
+             ' Hamiltonian for representation ', irp
+
+        if ( pol(irp,iq)%ntr == 0 ) cycle
+        if ( k_vv(irp,iq)%ncol == 0 ) cycle
+        if ( k_cc(irp,iq)%ncol == 0 ) cycle
+
+        call Zget_pol(pol(irp,iq),50,gvec%syms%ntrans,qpt%nk,irp,iq,k_p(irp,iq)%nn)
+        !
+        ! Calculate K_vcvv kernel.
+        ! Row-wise distribution.
+        !
+        call stopwatch(r_grp%master,' Starting readmatrix kernel_vv c')
+        call timacc(3,1,tsec)
+        call Zkernel(gvec,kpt,k_vv(irp,iq),irp,0,nspin,qpt%fk(1,iq),'r',.true.,isdf_in)
+        call timacc(3,2,tsec)
+        !
+        ! Calculate potential fluctuation from exchange (Coulomb) kernel:
+        ! pot_c (v',v'';m) = sum_(v,c) kernel_c (v',v'';v,c) * vpol (v,c;m)
+        ! pot_c is distributed in the last index among PEs.
+        !
+        allocate(pot_c(pol(irp,iq)%nn,k_vv(irp,iq)%ncol),stat=info)
+        call alccheck('pot_c','bse',pol(irp,iq)%nn*k_vv(irp,iq)%ncol,info)
+        call stopwatch(r_grp%master,'Calling potential pot_c vcvv')
+        call timacc(5,1,tsec)
+        call Zpotential(pol(irp,iq)%ntr,pol(irp,iq)%nn,pol(irp,iq)%Ztv, &
+             k_vv(irp,iq)%ncol,k_vv(irp,iq)%Zm,pot_c)
+        deallocate(k_vv(irp,iq)%Zm)
+        call timacc(5,2,tsec)
+        !
+        ! Calculate potential fluctuation from tdlda kernel:
+        ! pot_f (m;v',v'') = sum_(v,c) kernel_f (v',v'';v,c) * vpol (v,c;m)
+        ! pot_f is distributed in the last index among PEs.
+        !
+        allocate(pot_f(pol(irp,iq)%nn,k_vv(irp,iq)%ncol),stat=info)
+        call alccheck('pot_f','bse',pol(irp,iq)%nn*k_vv(irp,iq)%ncol,info)
+        pot_f = Zzero
+        if (.not. nolda) then
+           call stopwatch(r_grp%master,' Starting readmatrix kernel_vv f')
+           call timacc(3,1,tsec)
+           call Zkernel(gvec,kpt,k_vv(irp,iq),irp,2,nspin,qpt%fk(1,iq),'r',.true.,isdf_in)
+           call timacc(3,2,tsec)
+           call stopwatch(r_grp%master,'Calling potential pot_f vcvv')
+           call timacc(5,1,tsec)
+           call Zpotential(pol(irp,iq)%ntr,pol(irp,iq)%nn,pol(irp,iq)%Ztv, &
+                   k_vv(irp,iq)%ncol,k_vv(irp,iq)%Zm,pot_f)
+           deallocate(k_vv(irp,iq)%Zm)
+           call timacc(5,2,tsec)
+        endif
+
+        if ( .not. pol(irp,iq)%ltv ) &
+             call Zget_pol(pol(irp,iq),50,gvec%syms%ntrans,qpt%nk,irp,iq,k_p(irp,iq)%nn)
+        !
+        ! Calculate K_vccc kernel.
+        ! Row-wise distribution.
+        !
+        call stopwatch(r_grp%master,' Starting readmatrix kernel_cc c')
+        call timacc(3,1,tsec)
+        call Zkernel(gvec,kpt,k_cc(irp,iq),irp,0,nspin,qpt%fk(1,iq),'r',.true.,isdf_in)
+        call timacc(3,2,tsec)
+        !
+        ! Calculate potential fluctuation from exchange (Coulomb) kernel:
+        ! pot_c1 (c',c'';m) = sum_(v,c) kernel_c (c',c'';v,c) * vpol (v,c;m)
+        !  pot_c1 is distributed in the last index among PEs.
+        !
+        allocate(pot_c1(pol(irp,iq)%nn,k_cc(irp,iq)%ncol),stat=info)
+        call alccheck('pot_c1','bse',pol(irp,iq)%nn*k_cc(irp,iq)%ncol,info)
+        call stopwatch(r_grp%master,'Calling potential pot_c1 vccc')
+        call timacc(5,1,tsec)
+        call Zpotential(pol(irp,iq)%ntr,pol(irp,iq)%nn,pol(irp,iq)%Ztv, &
+             k_cc(irp,iq)%ncol,k_cc(irp,iq)%Zm,pot_c1)
+        deallocate(k_cc(irp,iq)%Zm)
+        call timacc(5,2,tsec)
+        !
+        ! Calculate potential fluctuation from tdlda kernel:
+        ! pot_f1 (c',c'';m) = sum_(v,c) kernel_f (c',c'';v,c) * vpol (v,c;m)
+        !  pot_f1 is distributed in the last index among PEs.
+        !
+        allocate(pot_f1(pol(irp,iq)%nn,k_cc(irp,iq)%ncol),stat=info)
+        call alccheck('pot_f1','bse',pol(irp,iq)%nn*k_cc(irp,iq)%ncol,info)
+        pot_f1 = Zzero
+        if (.not. nolda) then
+           call stopwatch(r_grp%master,' Starting readmatrix kernel_cc f')
+           call timacc(3,1,tsec)
+           call Zkernel(gvec,kpt,k_cc(irp,iq),irp,2,nspin,qpt%fk(1,iq),'r',.true.,isdf_in)
+           call timacc(3,2,tsec)
+           call stopwatch(r_grp%master,'Calling potential pot_f1 vccc')
+           call timacc(5,1,tsec)
+           call Zpotential(pol(irp,iq)%ntr,pol(irp,iq)%nn,pol(irp,iq)%Ztv, &
+                k_cc(irp,iq)%ncol,k_cc(irp,iq)%Zm,pot_f1)
+           call timacc(5,2,tsec)
+        endif
+
+        if (eref <= zero) xsum = zero
+        !-------------------------------------------------------------------
+        !  Calculate direct screened part in K^AA, K^BB.
+        !
+        call stopwatch(r_grp%master,'Calling direct_s')
+        call timacc(8,1,tsec)
+        call Zdirect_s(kpt,pol(irp,iq),bsepol,k_cc(irp,iq),k_vv(irp,iq), &
+             gvec%syms%ntrans,nspin,eref,ecutb2,xsum,pot_c,pot_f,pot_c1,pot_f1)
+        call timacc(8,2,tsec)
+        if (allocated(pot_c)) deallocate(pot_c)
+        if (allocated(pot_f)) deallocate(pot_f)
+        if (allocated(pot_c1)) deallocate(pot_c1)
+        if (allocated(pot_f1)) deallocate(pot_f1)
+        if (pol(irp,iq)%ltv) then
+           deallocate(pol(irp,iq)%Ztv)
+           pol(irp,iq)%ltv = .false.
+        endif
+
+        if (r_grp%num == 1) then
+           chkpt = irp + (qpt%nk + iq + 2)*gvec%syms%ntrans
+           call Zwrite_bse(gvec%syms%ntrans,chkpt,bsepol)
+           !do ii = 1, gvec%syms%ntrans
+           !   call Zsave_pol(bsepol(ii),9400,ii,1) ! W.Gao: for debug use
+           !enddo
+        endif
+     enddo
+  enddo
+
+  if (r_grp%num > 1 .and. chkpt < (2*qpt%nk + 4)*gvec%syms%ntrans) then
+     chkpt = (2*qpt%nk + 4)*gvec%syms%ntrans
+#ifdef MPI
+     call Zgroup_reduce_bse(gvec%syms%ntrans,bsepol)
+#endif
+     call Zwrite_bse(gvec%syms%ntrans,chkpt,bsepol)
+     !do irp = 1, gvec%syms%ntrans
+     !   call Zsave_pol(bsepol(irp),9400,irp,1) ! W.Gao: for debug use
+     !enddo
+  endif
+
+  !-------------------------------------------------------------------
+  ! Add mixing kernel in Bethe-Salpeter Hamiltonian. This kernel has
+  ! parts from all representations. Must collect contributions.
+  !
+  if (.not. mix_flag ) goto 35
+
+  !
+  ! Reopen file with polarizability eigenstates.
+  !
+  if (r_grp%master) then
+     rewind(50)
+     read(50)
+     read(50)
+  endif
+  do jrp = 1, gvec%syms%ntrans/r_grp%num
+     irp = r_grp%g_rep(jrp)
+
+     if ( bsepol(irp)%ntr == 0 .or. &
+          chkpt >= irp + (2*qpt%nk + 4)*gvec%syms%ntrans ) cycle
+
+     if (r_grp%master) write(6,'(/,a,/,2a,i2,/)') repeat('-',65), &
+          ' Calculation of mixing kernel of BSE ', &
+          ' Hamiltonian for representation ', irp
+
+     if ( pol(irp,iq)%ntr == 0 ) cycle
+     if ( k_vc(irp)%ncol * k_vc(irp)%nrow == 0 ) cycle
+
+     !
+     ! Reduce polarization kernel to the subspace needed for the
+     ! direct part of the Bethe-Salpeter Hamiltonian. We need to
+     ! change the maps of the first indices (vc) in original kernel
+     ! and we do this by using a temporary array.
+     !
+     k_p(irp,1)%ncol = k_vc(irp)%ncol
+     deallocate(k_p(irp,1)%col)
+     allocate(k_p(irp,1)%col(4,k_p(irp,1)%ncol))
+     k_p(irp,1)%col = k_vc(irp)%col
+     call stopwatch(r_grp%master,' Starting readmatrix kernel_p reduced c')
+     call timacc(3,1,tsec)
+     call Zkernel(gvec,kpt,k_p(irp,1),irp,0,nspin,q_bse%fk(1,1),'r',.true.,isdf_in)
+     call timacc(3,2,tsec)
+     if ( .not. pol(irp,1)%ltv ) &
+          call Zget_pol(pol(irp,1),50,gvec%syms%ntrans,1,irp,1,k_p(irp,1)%nn)
+     !
+     ! Calculate potential fluctuation from exchange (Coulomb) kernel:
+     ! pot_c (v',c';m) = sum_(v,c) kernel_c (v',c';v,c) * vpol (v,c;m)
+     ! pot_c is distributed in the last index among PEs.
+     !
+     allocate(pot_c(pol(irp,1)%nn,k_p(irp,1)%ncol),stat=info)
+     call alccheck('pot_c','bse',pol(irp,1)%nn*k_p(irp,1)%ncol,info)
+     call stopwatch(r_grp%master,'Calling potential pot_c vcvc ')
+     call timacc(5,1,tsec)
+     call Zpotential(pol(irp,1)%ntr,pol(irp,1)%nn,pol(irp,1)%Ztv, &
+          k_p(irp,1)%ncol,k_p(irp,1)%Zm,pot_c)
+     deallocate(k_p(irp,1)%Zm)
+     call timacc(5,2,tsec)
+     !
+     ! Calculate potential fluctuation from tdlda kernel:
+     ! pot_f (m;v',c') = sum_(v,c) kernel_f (v',c';v,c) * vpol (v,c;m)
+     ! pot_f is distributed in the last index among PEs.
+     !
+     allocate(pot_f(pol(irp,1)%nn,k_p(irp,1)%ncol),stat=info)
+     call alccheck('pot_f','bse',pol(irp,1)%nn*k_p(irp,1)%ncol,info)
+     pot_f = Zzero
+     if (.not. nolda) then
+        call stopwatch(r_grp%master,' Starting readmatrix kernel_p reduced f')
+        call timacc(3,1,tsec)
+        call Zkernel(gvec,kpt,k_p(irp,1),irp,2,nspin,q_bse%fk(1,1),'r',.true.,isdf_in)
+        call timacc(3,2,tsec)
+        call stopwatch(r_grp%master,'Calling potential pot_f vcvc ')
+        call timacc(5,1,tsec)
+        call Zpotential(pol(irp,1)%ntr,pol(irp,1)%nn,pol(irp,1)%Ztv, &
+             k_p(irp,1)%ncol,k_p(irp,1)%Zm,pot_f)
+        deallocate(k_p(irp,1)%Zm)
+        call timacc(5,2,tsec)
+     endif
+
+     !-------------------------------------------------------------------
+     !  Calculate direct screened part in K^AB, K^BA.
+     !
+     call stopwatch(r_grp%master,'Calling direct_vc')
+     call timacc(9,1,tsec)
+     call Zdirect_mix(kpt,k_p(irp,1),pol,bsepol(irp), &
+          nspin,eref,ecutb2,xsum,pot_c,pot_f)
+     call timacc(9,2,tsec)
+     if (allocated(pot_c)) deallocate(pot_c)
+     if (allocated(pot_f)) deallocate(pot_f)
+
+     if (pol(irp,1)%ltv) then
+        deallocate(pol(irp,1)%Ztv)
+        pol(irp,1)%ltv = .false.
+     endif
+
+     if (r_grp%num == 1) then
+        chkpt = irp + (2*qpt%nk + 4)*gvec%syms%ntrans
+        call Zwrite_bse(gvec%syms%ntrans,chkpt,bsepol)
+        !do ii = 1, gvec%syms%ntrans
+        !   call Zsave_pol(bsepol(ii),9500,ii,1) ! W.Gao: for debug use
+        !enddo
+     endif
+
+  enddo
+  if (r_grp%num > 1 .and. chkpt < (2*qpt%nk + 6)*gvec%syms%ntrans) then
+     chkpt = (2*qpt%nk + 6)*gvec%syms%ntrans
+     call Zwrite_bse(gvec%syms%ntrans,chkpt,bsepol)
+     !do ii = 1, gvec%syms%ntrans
+     !   call Zsave_pol(bsepol(ii),9500,ii,1) ! W.Gao: for debug use
+     !enddo
+  endif
+
+35 continue
+
+  !-------------------------------------------------------------------
+  ! Bethe-Salpeter Hamiltonian is calculated. Now, diagonalize it.
+  !
+  call timacc(10,1,tsec)
+  if ( mix_flag ) then
+     call Zdiag_bse_mix(kpt,bsepol,writeig,gvec%syms%ntrans,nspin)
+  else
+     call Zdiag_bse(kpt,bsepol,writeig,gvec%syms%ntrans,nspin)
+  endif
+  call timacc(10,2,tsec)
+
+end subroutine Zcalculate_bse
+!===================================================================

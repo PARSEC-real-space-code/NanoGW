@@ -1,0 +1,8 @@
+
+no_lda_kernel
+
+begin scissors
+  1  1  7  -4.100  0.00  0.00
+  1  8  1000   3.200  0.00  0.00
+end scissors
+

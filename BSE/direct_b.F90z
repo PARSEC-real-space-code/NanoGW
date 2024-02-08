@@ -1,0 +1,186 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Calculates the bare direct kernel and includes that in the
+! BSE Hamiltonian. Output is updated Hamiltonian bsepol(:)%v. The
+! bare direct kernel is the K^x term in Eq. 37 of Tiago & Chelikowsky,
+! PRB (2006).
+!
+! INPUT:
+!    bsepol%v : input BSE Hamiltonian (local, column-distributed)
+!
+! OUTPUT:
+!    bsepol%v : BSE Hamiltonian with added direct bare interaction
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zdirect_b(nrep,nkpt,kernel_x,bsepol)
+
+  use typedefs
+  use mpi_module
+  implicit none
+#ifdef MPI
+  include 'mpif.h'
+#endif
+
+  ! arguments
+  ! number of representations and number of k-points
+  integer, intent(in) :: nrep, nkpt
+  ! BSE polarizability
+  type (polinfo), intent(inout) :: bsepol(nrep)
+  ! Direct (bare Coulomb) kernel
+  type (kernelinfo), intent(in) :: kernel_x(nrep)
+
+  ! local variables
+  logical :: lflagc, lflagv
+  integer :: iv, ic, ik, ivp, icp, ikp, icc, ivv, irow, pcc, icol, pcol, &
+       isp_r, isp_c, ispb_r, ispb_c, ipe, jpe, irp, jrp, info, nmat, ncol
+  SCALAR, allocatable :: tmp_vvcc(:,:)
+
+  do jrp = 1, nrep
+     if ( kernel_x(jrp)%ncol * kernel_x(jrp)%nrow == 0 ) cycle
+     if ( kernel_x(jrp)%nrow == 0 ) cycle
+     jpe = r_grp%map(r_grp%masterid+1,r_grp%rep_g(jrp)+1)
+#ifdef MPI
+     call MPI_BCAST(kernel_x(jrp)%nn,1,MPI_INTEGER,jpe,peinf%comm,info)
+#endif
+     allocate(tmp_vvcc(kernel_x(jrp)%nrow,kernel_x(jrp)%nn),stat=info)
+     call alccheck('tmp_vvcc','direct_b',kernel_x(jrp)%nrow*kernel_x(jrp)%nn,info)
+
+     !-------------------------------------------------------------------
+     ! Each processor broadcasts the Coulomb kernel it has and let the
+     ! other PEs select which matrix elements they need.
+     !
+     do ipe = 0, r_grp%npes - 1
+        jpe = r_grp%map(ipe+1,r_grp%rep_g(jrp)+1)
+        nmat = kernel_x(jrp)%nrow*kernel_x(jrp)%nn
+        if (nmat == 0) cycle
+        if (jpe == peinf%inode) call Zcopy(nmat,kernel_x(jrp)%Zm,1,tmp_vvcc,1)
+#ifdef MPI
+        call MPI_BCAST(tmp_vvcc,nmat,MPI_DOUBLE_SCALAR,jpe,peinf%comm,info)
+#endif
+        do irp = 1, nrep
+           ncol = bsepol(irp)%nn
+           nmat = bsepol(irp)%nn * r_grp%npes
+           !-------------------------------------------------------------------
+           ! Work first with K^AA part.
+           !
+           do icol = 1, bsepol(irp)%ntr
+              ivp = bsepol(irp)%tr(1,icol)
+              icp = bsepol(irp)%tr(2,icol)
+              ikp = bsepol(irp)%tr(3,icol)
+
+              pcol = icol - r_grp%inode*ncol
+              if (pcol < 1 .or. pcol > ncol) cycle
+              isp_c = 1
+              if (icol > bsepol(irp)%n_up) isp_c = 2
+
+              do irow = 1, bsepol(irp)%ntr
+                 iv = bsepol(irp)%tr(1,irow)
+                 ic = bsepol(irp)%tr(2,irow)
+                 ik = bsepol(irp)%tr(3,irow)
+
+                 isp_r = 1
+                 if (irow > bsepol(irp)%n_up) isp_r = 2
+                 ! direct part is spin-diagonal
+                 if (isp_c /= isp_r) cycle
+
+                 lflagc = .false.
+                 lflagv = .false.
+                 do pcc = 1, kernel_x(jrp)%nn
+                    icc = pcc + ipe * kernel_x(jrp)%nn
+                    if (icc > kernel_x(jrp)%ncol) cycle
+                    ispb_c = 1
+                    if (icc > kernel_x(jrp)%ncol_up) ispb_c = 2
+                    if (isp_c /= ispb_c) cycle
+                    if ( ic == kernel_x(jrp)%col(1,icc) .and. &
+                         icp == kernel_x(jrp)%col(2,icc) .and. &
+                         ikp == kernel_x(jrp)%col(3,icc) ) then
+                       lflagc = .true.
+                       exit
+                    endif
+                 enddo
+                 do ivv = 1, kernel_x(jrp)%nrow
+                    ispb_r = 1
+                    if (ivv > kernel_x(jrp)%nrow_up) ispb_r = 2
+                    if (isp_r /= ispb_r) cycle
+                    if ( iv == kernel_x(jrp)%row(1,ivv) .and. &
+                         ivp == kernel_x(jrp)%row(2,ivv) .and. &
+                         ikp == kernel_x(jrp)%row(3,ivv) ) then
+                       lflagv = .true.
+                       exit
+                    endif
+                 enddo
+                 if (lflagc .and. lflagv) bsepol(irp)%Zv(irow,pcol) = &
+                      bsepol(irp)%Zv(irow,pcol) - tmp_vvcc(ivv,pcc) / &
+                      real(nkpt,dp)
+              enddo
+           enddo
+
+           !-------------------------------------------------------------------
+           ! And now deal with with K^BB part.
+           !
+           do icol = 1, bsepol(irp)%ntr
+              ivp = bsepol(irp)%tr(1,icol)
+              icp = bsepol(irp)%tr(2,icol)
+              ikp = bsepol(irp)%tr(3,icol)
+
+              pcol = icol - r_grp%inode*ncol
+              if (pcol < 1 .or. pcol > ncol) cycle
+              isp_c = 1
+              if (icol > bsepol(irp)%n_up) isp_c = 2
+
+              do irow = 1, bsepol(irp)%ntr
+                 iv = bsepol(irp)%tr(1,irow)
+                 ic = bsepol(irp)%tr(2,irow)
+                 ik = bsepol(irp)%tr(3,irow)
+
+                 isp_r = 1
+                 if (irow > bsepol(irp)%n_up) isp_r = 2
+                 ! direct part is spin-diagonal
+                 if (isp_c /= isp_r) cycle
+
+                 lflagc = .false.
+                 lflagv = .false.
+                 do pcc = 1, kernel_x(jrp)%nn
+                    icc = pcc + ipe * kernel_x(jrp)%nn
+                    if (icc > kernel_x(jrp)%ncol) cycle
+                    ispb_c = 1
+                    if (icc > kernel_x(jrp)%ncol_up) ispb_c = 2
+                    if (isp_c /= ispb_c) cycle
+                    if ( ic == kernel_x(jrp)%col(1,icc) .and. &
+                         icp == kernel_x(jrp)%col(2,icc) .and. &
+                         ikp == kernel_x(jrp)%col(3,icc) ) then
+                       lflagc = .true.
+                       exit
+                    endif
+                 enddo
+                 do ivv = 1, kernel_x(jrp)%nrow
+                    ispb_r = 1
+                    if (ivv > kernel_x(jrp)%nrow_up) ispb_r = 2
+                    if (isp_r /= ispb_r) cycle
+                    if ( iv == kernel_x(jrp)%row(1,ivv) .and. &
+                         ivp == kernel_x(jrp)%row(2,ivv) .and. &
+                         ikp == kernel_x(jrp)%row(3,ivv) ) then
+                       lflagv = .true.
+                       exit
+                    endif
+                 enddo
+                 if (lflagc .and. lflagv) &
+                      bsepol(irp)%Zv(irow + nmat,pcol + bsepol(irp)%nn) = &
+                      bsepol(irp)%Zv(irow + nmat,pcol + bsepol(irp)%nn) + &
+                      tmp_vvcc(ivv,pcc) / real(nkpt,dp)
+              enddo
+           enddo
+
+        enddo ! irp = 1, nrep
+
+     enddo ! ipe = 0, r_grp%npes - 1
+
+     deallocate(tmp_vvcc)
+  enddo
+
+end subroutine Zdirect_b
+!===================================================================

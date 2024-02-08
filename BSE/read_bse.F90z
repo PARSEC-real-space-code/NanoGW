@@ -1,0 +1,131 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Read BSE Hamiltonian from checkpoint file bse_chkpt.dat and store
+! it in bsepol%v.
+! Only master PE read from disk and sends data to all other PEs.
+! 
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zread_bse(nrep,chkpt,bsepol)
+
+  use typedefs
+  use mpi_module
+  implicit none
+#ifdef MPI
+  include 'mpif.h'
+#endif
+
+  ! arguments
+  ! number of representations
+  integer, intent(in) :: nrep
+  ! chekpoint flag
+  integer, intent(inout) :: chkpt
+  ! BSE polarizability data
+  type (polinfo), dimension(nrep), intent(inout) :: bsepol
+
+  ! local variables
+  integer, parameter :: iunit = 60
+  integer :: jj, irp, ncount, irow, nmat, ipe, jpe, icol, pcol, info
+  SCALAR, allocatable :: tmpdum(:,:)
+#ifdef MPI
+  integer :: status(MPI_STATUS_SIZE)
+#endif
+
+  chkpt = 0
+  if (peinf%master) then
+     open(iunit,file='bse_chkpt.dat',form='unformatted',status='old', &
+          iostat = info)
+     if (info == 0) then
+        read(iunit) chkpt
+        read(iunit) (ipe,jj=1,2*nrep), ipe
+        write(6,*) 'Reading partial BSE hamiltonian ', &
+             ' from bse_chkpt.dat, previous number of processors = ', ipe
+        write(6,*)
+     endif
+     write(6,*) ' Checkpoint control = ', chkpt
+  endif
+#ifdef MPI
+  call MPI_BCAST(chkpt,1,MPI_INTEGER,peinf%masterid,peinf%comm,info)
+#endif
+  if (chkpt <= 0) return
+
+  do irp = 1, nrep
+     if ( bsepol(irp)%ntr == 0 ) cycle
+     nmat = bsepol(irp)%nn * r_grp%npes
+     ncount = bsepol(irp)%ntr
+     allocate(tmpdum(nmat*2,bsepol(irp)%nn))
+     !  ipe : PE rank in the group that owns this representation.
+     !  jpe : world rank of PE with rank ipe.
+     do ipe = 0, r_grp%npes - 1
+        jpe = r_grp%map(ipe+1,r_grp%rep_g(irp)+1)
+        if (peinf%master) then
+           tmpdum = zero
+           do pcol = 1, bsepol(irp)%nn
+              icol = pcol + jpe*bsepol(irp)%nn
+              if (icol > ncount) cycle
+              read(iunit) (tmpdum(irow,pcol),irow=1,ncount)
+              read(iunit) (tmpdum(irow,pcol),irow=nmat+1,nmat+ncount)
+           enddo
+           if (jpe == peinf%inode) then
+              call Zcopy(nmat*bsepol(irp)%nn*2,tmpdum,1,bsepol(irp)%Zv(1,1),1)
+           else
+#ifdef MPI
+              call MPI_SEND(tmpdum,nmat*bsepol(irp)%nn*2, &
+                   MPI_DOUBLE_SCALAR,jpe,jpe,peinf%comm,info)
+#endif
+           endif
+        else
+           if (jpe == peinf%inode) then
+#ifdef MPI
+              call MPI_RECV(tmpdum,nmat*bsepol(irp)%nn*2, &
+                   MPI_DOUBLE_SCALAR,peinf%masterid,jpe,peinf%comm,status,info)
+#endif
+              call Zcopy(nmat*bsepol(irp)%nn*2,tmpdum,1,bsepol(irp)%Zv(1,1),1)
+           endif
+        endif
+#ifdef MPI
+        call MPI_BARRIER(peinf%comm,info)
+#endif
+     enddo
+     do ipe = 0, r_grp%npes - 1
+        jpe = r_grp%map(ipe+1,r_grp%rep_g(irp)+1)
+        if (peinf%master) then
+           tmpdum = zero
+           do pcol = 1, bsepol(irp)%nn
+              icol = pcol + jpe*bsepol(irp)%nn
+              if (icol > ncount) cycle
+              read(iunit) (tmpdum(irow,pcol),irow=1,ncount)
+              read(iunit) (tmpdum(irow,pcol),irow=nmat+1,nmat+ncount)
+           enddo
+           if (jpe == peinf%inode) then
+              call Zcopy(nmat*bsepol(irp)%nn*2,tmpdum,1, &
+                   bsepol(irp)%Zv(1,bsepol(irp)%nn+1),1)
+           else
+#ifdef MPI
+              call MPI_SEND(tmpdum,nmat*bsepol(irp)%nn*2, &
+                   MPI_DOUBLE_SCALAR,jpe,jpe,peinf%comm,info)
+#endif
+           endif
+        else
+           if (jpe == peinf%inode) then
+#ifdef MPI
+              call MPI_RECV(tmpdum,nmat*bsepol(irp)%nn*2, &
+                   MPI_DOUBLE_SCALAR,peinf%masterid,jpe,peinf%comm,status,info)
+#endif
+              call Zcopy(nmat*bsepol(irp)%nn*2,tmpdum,1, &
+                   bsepol(irp)%Zv(1,bsepol(irp)%nn+1),1)
+           endif
+        endif
+#ifdef MPI
+        call MPI_BARRIER(peinf%comm,info)
+#endif
+     enddo
+     deallocate(tmpdum)
+  enddo
+  if (peinf%master) close(iunit)
+
+end subroutine Zread_bse
+!===================================================================

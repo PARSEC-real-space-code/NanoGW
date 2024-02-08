@@ -1,0 +1,21 @@
+#
+# Ab-initio calculation by the finite-difference method
+
+spin_polarization true
+
+output_all_states true
+ 
+Boundary_Sphere_Radius:  8.00
+Grid_Spacing:  0.5
+ 
+States_Num:  80
+ 
+Atom_Types_Num:  1
+
+Atom_Type: N
+Local_Component: p
+
+begin Atom_Coord
+   0.00000 0.00000 0.00000 
+end Atom_Coord
+

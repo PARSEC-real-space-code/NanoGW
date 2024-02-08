@@ -1,0 +1,11 @@
+Bug:
+1.
+There are some problems running rgwbs.in_mix, rgwbs.in_rpa, rgwbs.in_tdlda. 
+The program stucks after printing: 
+" 
+allocate(k_tmp(nbuff_max)), where nbuff_max =           20 
+k_tmp(:)%nblock_max = nbuff =        50000 
+call k_integrate 
+" 
+Sometimes the program does not stuck and seems to get correct results. 
+The program does not stuck for rgwbs.in_hf and rgwbs.in_xhf. 

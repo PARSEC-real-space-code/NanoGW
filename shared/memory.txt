@@ -1,0 +1,14 @@
+
+Large matrix:
+
+P, Q, Bmtrx, Bmtrxc, Xmtrx, zeta: larger size than wfns, (n_intp_r*w_grp%mydim*nsymm)
+
+PsiV, PsiC: similar size as wfns, (maxnc*w_grp%mydim), (maxv*w_grp%mydim)
+
+
+Old implementation:
+1. PsiV, PsiC, PsiV_intp, PsiC_intp
+
+2. P, Q, P_intp, Q_intp
+
+3. calculate Amtrx and Bmtrx

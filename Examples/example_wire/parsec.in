@@ -1,0 +1,38 @@
+# polyacetylene
+
+boundary_conditions wire
+
+begin cell_shape
+   4.64306
+end cell_shape
+
+Boundary_Sphere_Radius:  12.00
+Grid_Spacing:  0.40
+ 
+States_Num:  20
+
+output_all_states true
+
+Atom_Types_Num:  2
+
+#------------ new atom type ---------------- 
+Atom_Type: C
+Local_Component: p
+ 
+begin Atom_Coord
+   -1.208950000      -0.643450000       0.000000000      1
+    1.208950000       0.643450000       0.000000000      1
+end Atom_Coord
+ 
+#------------ end of atom type ------------- 
+ 
+#------------ new atom type ---------------- 
+Atom_Type: H
+Local_Component: s
+ 
+begin Atom_Coord
+   -1.256200000      -2.702710000       0.000000000      1
+    1.256200000       2.702710000       0.000000000      1
+end Atom_Coord
+ 
+#------------ end of atom type ------------- 

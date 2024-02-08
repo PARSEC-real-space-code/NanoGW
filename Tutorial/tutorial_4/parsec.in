@@ -1,0 +1,26 @@
+#
+# Ab-initio calculation by the finite-difference method
+#
+ 
+Boundary_Sphere_Radius:  15.0
+Grid_Spacing:  0.35
+
+States_Num:  60
+
+output_all_states true
+
+eigensolver diagla
+
+Atom_Types_Num:  1
+ 
+#------------ new atom type ---------------- 
+Atom_Type: Cl
+Local_Component: p
+ 
+begin Atom_Coord
+      .000000      .000000     1.844979
+      .000000      .000000    -1.844979
+end Atom_Coord
+ 
+#------------ end of atom type ------------- 
+ 

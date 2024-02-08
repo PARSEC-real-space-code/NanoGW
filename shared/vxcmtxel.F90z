@@ -1,0 +1,160 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Calculate matrix elements of the LDA exchange-correlation potential
+! parametrized by Perdew-Zunger. Other parametrizations can be 
+! implemented in xc_functionals module. Potentials Vx (exchange),
+! Vc (correlation) and Vxc (Vx + Vc) are calculated in rydberg units.
+!
+! nfunc =  1 exchange
+!       = 11 correlation
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!---------------------------------------------------------------
+subroutine Zvxcmtxel(gvec,kpt,xc_model,nfunc,isp,ik,nspin,nmap, &
+     map_w,ndiag,noff,map_d_off,vxc)
+
+  use typedefs
+  use mpi_module
+  use fft_module
+  use fd_module
+  use xc_functionals
+  implicit none
+
+  ! arguments
+  type (gspace), intent(inout) :: gvec
+  type (kptinfo), intent(in) :: kpt
+  type(xc_type), intent(in) :: xc_model
+  integer, intent(in) :: nfunc, isp, ik, nspin, nmap, ndiag, noff
+  integer, intent(in) :: map_w(nmap), map_d_off(ndiag + 2*noff)
+  complex(dpc), dimension(ndiag+noff), intent(inout) :: vxc
+
+  ! local variables
+  character (len=800) :: lastwords
+  integer :: ii, j1, j2, m1, m2, ngrid, off, icol_pe, ipe
+  real(dp) :: xtmp
+  SCALAR :: ztmp
+  real(dp), dimension(:,:), allocatable :: vxc_tmp, vx_tmp
+  SCALAR, dimension(:), allocatable :: wfn2, v_r, v_tmp
+  SCALAR, external :: Zdot_c
+
+  if (peinf%master) then
+     if (nfunc == 1) then
+        write(6,*) ' Calculating exchange matrix elements, spin ',isp
+        write(6,*) 'Functional : ', trim(x_model_name(xc_model))
+     elseif (nfunc == 11) then
+        write(6,*) ' Calculating correlation matrix elements, spin ',isp
+        write(6,*) 'Functional : ', trim(c_model_name(xc_model))
+     endif
+  endif
+
+  !-------------------------------------------------------------------
+  ! Allocate data and initialize arrays.
+  !
+  ngrid = w_grp%mydim
+  off = w_grp%offset
+  allocate(wfn2(ngrid),stat=ii)
+  call alccheck('wfn2','vxcmtxel',ngrid,ii)
+  allocate(v_r(ngrid),stat=ii)
+  call alccheck('v_r','vxcmtxel',ngrid,ii)
+  allocate(vxc_tmp(w_grp%nr,nspin),stat=ii)
+  call alccheck('vxc_tmp','vxcmtxel',w_grp%nr*nspin,ii)
+  allocate(vx_tmp(w_grp%nr,nspin),stat=ii)
+  call alccheck('vx_tmp','vxcmtxel',w_grp%nr*nspin,ii)
+
+  !-------------------------------------------------------------------
+  ! Calculate functionals on real-space grid.
+  !
+  do j1 = 1, nspin
+     call dcopy(w_grp%nr,kpt%rho(1,j1),1,vxc_tmp(1,j1),1)
+     call dcopy(w_grp%nr,kpt%rho(1,j1),1,vx_tmp(1,j1),1)
+  enddo
+
+  if (fd%norder < 0) call dinitialize_FFT(peinf%inode,fft_box)
+
+  call vxc_get(gvec,xc_model,nspin,gvec%syms%ntrans,vxc_tmp,xtmp)
+  call vx_get(gvec,xc_model,nspin,gvec%syms%ntrans,vx_tmp,xtmp)
+
+  if (fd%norder < 0) call dfinalize_FFT(peinf%inode,fft_box)
+
+  if (nfunc == 1) then
+     do j1 = 1, ngrid
+        v_r(j1) = Zone*vx_tmp(j1+off,isp)
+     enddo
+  else
+     do j1 = 1, ngrid
+        v_r(j1) = Zone*( vxc_tmp(j1+off,isp) - vx_tmp(j1+off,isp) )
+     enddo
+  endif
+  deallocate(vxc_tmp)
+  deallocate(vx_tmp)
+
+  allocate(v_tmp(ndiag + noff),stat=ii)
+  call alccheck('v_tmp','vxcmtxel',ndiag + noff,ii)
+  v_tmp = Zzero
+  !-------------------------------------------------------------------
+  ! Calculate Vxc(m1,m2) = < m1 | Vxc | m2 >, diagonal part.
+  !
+  do icol_pe = 1, ndiag, peinf%npes
+     do ipe = 0, w_grp%npes - 1
+        ii = icol_pe + ipe + w_grp%npes * w_grp%mygr + r_grp%npes * r_grp%mygr
+        if (ii > ndiag) cycle
+        m1 = map_w(map_d_off(ii))
+        j1 = kpt%wfn(isp,ik)%map(m1)
+        if (j1 == 0) then
+           write(lastwords,*) ' ERROR in vxcmtxel: could not find ', &
+                'wavefunction ',m1,' in memory! ', j1, ii
+           call die(lastwords)
+        endif
+        call Zcopy(ngrid,kpt%wfn(isp,ik)%Zwf(1,j1),1,wfn2,1)
+        call Zmultiply_vec(ngrid,v_r,wfn2)
+        v_tmp(ii) = Zdot_c(ngrid,kpt%wfn(isp,ik)%Zwf(1,j1),1,wfn2,1)
+     enddo
+  enddo
+
+  !-------------------------------------------------------------------
+  ! Calculate Vxc(m1,m2) = < m1 | Vxc | m2 >, off-diagonal part.
+  !
+  do icol_pe = 1, noff, peinf%npes
+     do ipe = 0, w_grp%npes - 1
+        ii = icol_pe + ipe + &
+             w_grp%npes * w_grp%mygr + r_grp%npes * r_grp%mygr
+        if (ii > noff) cycle
+        m1 = map_w(map_d_off(ndiag + ii))
+        j1 = kpt%wfn(isp,ik)%map(m1)
+        if (j1 == 0) then
+           write(lastwords,*) ' ERROR in vxcmtxel: could not find ', &
+                'wavefunction ',m1,' in memory! ', j1, ii
+           call die(lastwords)
+        endif
+        m2 = map_w(map_d_off(ndiag + noff + ii))
+        if ( kpt%wfn(isp,ik)%irep(m1) /= kpt%wfn(isp,ik)%irep(m2) ) cycle
+        j2 = kpt%wfn(isp,ik)%map(m2)
+        if (j2 == 0) then
+           write(lastwords,*) ' ERROR in vxcmtxel: could not find ', &
+                'wavefunction ',m2,' in memory! ', j2, ii
+           call die(lastwords)
+        endif
+        call Zcopy(ngrid,kpt%wfn(isp,ik)%Zwf(1,j2),1,wfn2,1)
+        call Zmultiply_vec(ngrid,v_r,wfn2)
+        v_tmp(ii + ndiag) = Zdot_c(ngrid,kpt%wfn(isp,ik)%Zwf(1,j1),1,wfn2,1)
+     enddo
+  enddo
+
+  !-------------------------------------------------------------------
+  ! Sum data across PEs and include weight factor in integration over
+  ! irreducible wedge.
+  !
+  ztmp = Zone*gvec%syms%ntrans
+  ii = ndiag + noff
+  call Zpsum(ii,peinf%npes,peinf%comm,v_tmp)
+  call Zscal(ii,ztmp,v_tmp,1)
+  vxc = vxc + v_tmp
+
+  deallocate(wfn2, v_r, v_tmp)
+
+  return
+end subroutine Zvxcmtxel
+!===================================================================

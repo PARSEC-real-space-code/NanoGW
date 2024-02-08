@@ -1,0 +1,15 @@
+
+tdlda_cutoff 8 eV
+
+energy_range 20.0 eV
+energy_data_points 801
+dynamic_energy_resolution 0.25 eV
+
+begin diag
+range 1 6
+end diag
+
+begin offdiag
+range 1 6
+end offdiag
+

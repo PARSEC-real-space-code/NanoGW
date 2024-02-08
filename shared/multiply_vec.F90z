@@ -1,0 +1,37 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Multiply arrays vec1 and vec2 element by element. Output on vec2.
+! The product is done efficiently with the use of linear algebra
+! libraries (assuming that they were optimized for the current machine).
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zmultiply_vec(ndata,vec1,vec2)
+
+  use myconstants
+  implicit none
+  ! length of arrays
+  integer, intent(in) :: ndata
+  ! array vec1
+  SCALAR, dimension(ndata), intent(in) :: vec1
+  ! array vec2
+  ! on output, it is replaced with the product vec2(i) = vec1(i) * vec2(i)
+  SCALAR, dimension(ndata), intent(inout) :: vec2
+
+#ifdef USEESSL
+! IBM specific
+  call Zvem(ndata,vec1,1,vec2,1,vec2,1)
+#else
+! BLAS specific
+#ifdef CPLX
+  call ztbmv('U','N','N',ndata,0,vec1,1,vec2,1)
+#else
+  call dtbmv('U','N','N',ndata,0,vec1,1,vec2,1)
+#endif
+#endif
+
+end subroutine Zmultiply_vec
+!===================================================================

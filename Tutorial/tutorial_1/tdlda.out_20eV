@@ -1,0 +1,312 @@
+
+=================================================================
+
+ TDLDA   2009 Jan 23 12:46:31  -420 UTC
+
+ Running serial version (no MPI)
+
+Version date : Fri Jan  2 17:07:49 EST 2009
+architecture = sp5_nersc
+pre-processing options = -DUSEESSL 
+compilation options = -O3 -qextname=flush -qarch=auto -qtune=auto -qhot -qalias=noaryovrlp -Q -qautodbl=dbl4 -q64
+
+=================================================================
+
+
+ Electronic structure data :
+ ---------------------------
+
+ Reading electron wavefunctions from file parsec.dat/wfn.dat
+ WARNING: parsec.dat file not found
+          Looking for file wfn.dat
+ ELAPSED TIME =        0.00 s. parsec_wfn:  reading wfn.dat
+
+ Wavefunction file created on 23-JAN-2009 12:44:58 -0700 UTC
+
+ Spin unpolarized calculation.
+
+  Number of occupied levels, spin  1  :  4.00000000000000000
+ DFT Eigenvalues (eV), spin  1  :
+ -13.49  -8.51  -8.51  -8.51   0.06   0.30   0.30   0.30   1.89   1.89
+   2.16   2.16   2.16   3.64   5.12   5.12   5.12   5.22   5.22   5.22
+   5.74   5.74   5.74   6.62   7.05   7.05   8.34   8.34   8.34   8.47
+   8.47   8.50   8.52   8.52   8.52   9.51   9.69   9.69   9.69  11.68
+  11.68  11.68  11.78  11.78  11.79  11.79  11.79  11.80  11.80  11.80
+  11.92  11.92  11.92  12.06  12.06  12.06  14.67  14.67  14.67  15.30
+  15.30  15.30  15.30  15.32  15.32  15.32  15.35  15.35  15.36  15.39
+  15.39  15.39  15.92  15.92  16.34  16.57  16.57  16.57  17.31  17.31
+ Irreducible representations, spin  1  :
+    1    4    2    3    1    2    3    4    1    1
+    4    3    2    1    4    2    3    3    2    4
+    4    3    2    1    1    1    4    3    2    1
+    1    1    3    2    4    1    4    3    2    4
+    3    2    1    1    4    3    2    3    2    4
+    2    3    4    4    2    3    3    2    4    3
+    2    4    1    2    3    4    1    1    1    4
+    2    3    1    1    1    4    3    2    1    1
+ 
+ Maximum value of electron density (a.u.^-3) =   0.17465195E+00
+ Total number of electrons =     8.0000
+
+ MPI data :
+ ----------
+
+  Group partition information: 
+  Distributing  1  processors among  1  groups.
+  Each group contains  1  processors.
+  I am processor rank  0  in group  0
+  I am master in my group, with master rank  0
+  My group has representations: 
+    1    2    3    4
+
+  Wavefunction partition information: 
+  Distributing  1  processors among  1  groups.
+  Each group contains  1  processors.
+  I am processor rank  0  in group  0
+  I am master in my group, with master rank    0
+
+
+ Grid data :
+ -----------
+
+ Gradients and Laplacians calculated with FFT
+
+  ELECTRONIC SYSTEM IS CONFINED !
+
+
+ Confining radius (a.u.) =         9.417758
+
+ Grid spacing (a.u.) =         0.661404        0.661404        0.661404
+
+ Real-space FFT grid =   60  60  60  62
+
+ Long-wavelength Coulomb energy (eV) =         0.0000000000
+
+ Coulomb truncation length (a.u.) =        18.8355155385
+
+ Full grid has      12160 points.
+ Irreducible wedge has       3040 points.
+
+ ELAPSED TIME =        0.00 s. parsec_wfn:  reading wave functions
+
+ Read wavefunctions for         80 levels, spin    1
+
+-----------------------------------------------------------------
+
+
+-----------------------------------------------------------------
+
+ ELAPSED TIME =        0.02 s. Calling setup_g
+
+-----------------------------------------------------------------
+
+ Polarizability input data: 
+ -------------------------
+
+ Number of transitions per representation in TDLDA polarizabillity:
+      28      32      32      32
+ total =        124
+
+ Energy cutoff applied in TDLDA polarizability =  20.0000000000000036  eV
+ Not using the Tamm-Dancoff approximation in TDLDA polarizability.
+
+ Coulomb potential is being truncated in the TDLDA equation.
+
+
+ Memory needed to store wavefunctions :       1.86 MB/proc.
+ Memory needed to calculate kernel matrix elements :       0.12 MB/proc.
+
+ Memory needed for diagonalization :       0.02 MB/proc.
+
+-----------------------------------------------------------------
+
+ ELAPSED TIME =        0.08 s.  Calling readmatrix kernel_p
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x + K_f (TDLDA spin singlet)
+ Using  35  data blocks to store matrix elements.
+ ELAPSED TIME =        0.10 s. Starting calculation of kernel
+Kernel done!        406 matrix elements calculated by PE  0 representation  1
+ Buffer sizes:  2
+ 406 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =        0.39 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+
+*****************************************************************
+  WARNING!!!! Removing the long-wavelength exchange. 
+*****************************************************************
+
+ ELAPSED TIME =        0.39 s.  Calling diag_pol
+
+#################################################################
+ Calculation of polarizability eigenvectors for representation  1
+ number of pair transitions =           28
+ pair transitions per PE =           28
+#################################################################
+
+ ELAPSED TIME =        0.39 s. diag_pol: Calling eigensolver
+ ELAPSED TIME =        0.39 s. diag_pol: eigensolver done
+ ELAPSED TIME =        0.39 s. diag_pol: energy factors included in eigenvectors
+  Lowest energy eigenvalues in polarizability (eV): 
+        9.091204
+        9.091205
+        9.308272
+ ELAPSED TIME =        0.40 s.  Calling readmatrix kernel_p
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x + K_f (TDLDA spin singlet)
+ Using  39  data blocks to store matrix elements.
+ ELAPSED TIME =        0.41 s. Starting calculation of kernel
+Kernel done!        528 matrix elements calculated by PE  0 representation  2
+ Buffer sizes:  2
+ 528 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =        0.72 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+
+*****************************************************************
+  WARNING!!!! Removing the long-wavelength exchange. 
+*****************************************************************
+
+ ELAPSED TIME =        0.72 s.  Calling diag_pol
+
+#################################################################
+ Calculation of polarizability eigenvectors for representation  2
+ number of pair transitions =           32
+ pair transitions per PE =           32
+#################################################################
+
+ ELAPSED TIME =        0.72 s. diag_pol: Calling eigensolver
+ ELAPSED TIME =        0.72 s. diag_pol: eigensolver done
+ ELAPSED TIME =        0.72 s. diag_pol: energy factors included in eigenvectors
+  Lowest energy eigenvalues in polarizability (eV): 
+        8.731703
+        8.907931
+        9.663840
+ ELAPSED TIME =        0.73 s.  Calling readmatrix kernel_p
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x + K_f (TDLDA spin singlet)
+ Using  39  data blocks to store matrix elements.
+ ELAPSED TIME =        0.74 s. Starting calculation of kernel
+Kernel done!        528 matrix elements calculated by PE  0 representation  3
+ Buffer sizes:  2
+ 528 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =        1.05 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+
+*****************************************************************
+  WARNING!!!! Removing the long-wavelength exchange. 
+*****************************************************************
+
+ ELAPSED TIME =        1.05 s.  Calling diag_pol
+
+#################################################################
+ Calculation of polarizability eigenvectors for representation  3
+ number of pair transitions =           32
+ pair transitions per PE =           32
+#################################################################
+
+ ELAPSED TIME =        1.05 s. diag_pol: Calling eigensolver
+ ELAPSED TIME =        1.05 s. diag_pol: eigensolver done
+ ELAPSED TIME =        1.05 s. diag_pol: energy factors included in eigenvectors
+  Lowest energy eigenvalues in polarizability (eV): 
+        8.731703
+        8.907931
+        9.663840
+ ELAPSED TIME =        1.05 s.  Calling readmatrix kernel_p
+
+ Calculating kernel matrix elements in blocks of        50000 (buffer size) 
+
+  kernel K_x + K_f (TDLDA spin singlet)
+ Using  39  data blocks to store matrix elements.
+ ELAPSED TIME =        1.08 s. Starting calculation of kernel
+Kernel done!        528 matrix elements calculated by PE  0 representation  4
+ Buffer sizes:  2
+ 528 0
+ 
+ 50000 50000
+ 
+ ELAPSED TIME =        1.37 s. FFT finalized
+  Reconstructing kernel in blocks of  50000  matrix elements
+
+*****************************************************************
+  WARNING!!!! Removing the long-wavelength exchange. 
+*****************************************************************
+
+ ELAPSED TIME =        1.37 s.  Calling diag_pol
+
+#################################################################
+ Calculation of polarizability eigenvectors for representation  4
+ number of pair transitions =           32
+ pair transitions per PE =           32
+#################################################################
+
+ ELAPSED TIME =        1.37 s. diag_pol: Calling eigensolver
+ ELAPSED TIME =        1.37 s. diag_pol: eigensolver done
+ ELAPSED TIME =        1.37 s. diag_pol: energy factors included in eigenvectors
+  Lowest energy eigenvalues in polarizability (eV): 
+        8.731703
+        8.907931
+        9.663840
+
+-----------------------------------------------------------------
+
+ Checking oscillator strength sum rule
+ Ratio between numerical and exact values :
+                            Field polarization
+                           x  ----  y  ----  z  ---- average
+  RPA-LDA Sum Rule  =   0.8578   0.8578   0.8578      0.8578
+     ALDA Sum Rule  =   0.8578   0.8578   0.8578      0.8578
+
+-----------------------------------------------------------------
+
+ Static polarizability (a.u.) 
+                                 Field polarization 
+                                x  ----  y  ----  z  ---- average
+ RPA-LDA Polarizability =    51.59    51.59    51.59       51.593
+    ALDA Polarizability =    33.30    33.30    33.30       33.297
+
+  Average ALDA sum rule =  0.857808356375336922
+  Average static RPA-LDA polarizability =  51.5929804622264001
+-----------------------------------------------------------------
+
+  Lowest energy eigenvalues in polarizability, all representations:
+ Order      Energy (eV)  Representation
+    1        8.731703         3
+    2        8.731703         2
+    3        8.731703         4
+    4        8.907931         4
+    5        8.907931         2
+    6        8.907931         3
+    7        9.091204         1
+    8        9.091205         1
+    9        9.308272         1
+   10        9.663840         3
+
+-----------------------------------------------------------------
+                               CPU [s]     WALL [s]           #
+
+ SETUP_T:                         0.060        0.060          1
+ KERNEL:                          1.270        1.293          4
+ 
+ DIAG_POL:                        0.010        0.004          4
+ POISSON_FFT:                     0.000        0.000          0
+ EIGENSOLVER:                     0.000        0.000          0
+ INTEGRATION:                     0.000        0.000          0
+
+                TOTAL             1.400        1.411
+
+ Finished 2009 Jan 23 12:46:32  -420 UTC
+-----------------------------------------------------------------

@@ -1,0 +1,1443 @@
+#include "../shared/mycomplex.h"
+!===============================================================
+!
+! Module for pseudopotentials.
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!---------------------------------------------------------------
+#ifndef CPLX
+module psp_module
+
+  use myconstants
+
+  public
+
+  type  pseudo_potential
+     ! chemical symbol
+     character(len=2) :: name
+     ! number of atoms of this type
+     integer :: natmi
+     ! Cartesian coordinates of all atoms of this type, in units of Bohr radius
+     real(dp), dimension (:,:), pointer :: ratm
+     ! number of angular components
+     integer :: nlp
+     ! choice of local component: 1 for s, 2 for p, etc.; 1 < loc < nlp
+     integer :: loc
+     ! pseudopotential core cutoff, in a.u.
+     real(dp) :: rcore
+     ! (true) chemical number for this atom type
+     integer :: zz
+     ! valence chemical number = number of valence electrons
+     real(dp) :: zval
+     ! specification of the radial (logarithmic) grid
+     ! rs(i) = par_a*(exp(par_b*(i-1))) - par_c; i = 1, 2, ..., ns
+     real(dp) :: par_a, par_b, par_c
+     ! ns - number of points on the radial pseudopotential grid
+     integer :: ns
+     ! coordinates of radial pseudopotential grid
+     real(dp), dimension (:), pointer :: rs
+     ! local pseudopotential, in Ry
+     real(dp), dimension (:), pointer :: vion
+     ! Kleinman-Bylander normalization integral, in Ry, or its inverse, in (a.u.)^3/Ry
+     real(dp), dimension (:), pointer :: ekbi
+     ! pseudo radial wavefunction
+     real(dp), dimension (:,:), pointer :: wfspd
+     ! wfspd*vspd/r, Kleinman-Bylander projector, in Ry
+     real(dp), dimension (:,:), pointer :: vw
+  end type pseudo_potential
+
+  ! Existing pseudopotential formats:
+  integer, parameter :: &
+       MARTINS_KB = 1, &     ! Martins binary format
+       MARTINS_WANG = 2, &   ! PeTOT format
+       FHIPP = 3, &          ! original FHIPP format
+       MARTINS_NEW = 4       ! Martins ASCII format
+
+  ! total number of atom types
+  integer :: type_num
+
+  ! pseudopotentials, one for each atom type
+  type (pseudo_potential), pointer :: psp(:)
+
+contains
+  !===================================================================
+  !
+  ! Read in user pseudopotential file and define structure ps_pot for
+  ! the specified atom type. All fields in ps_pot type are defined
+  ! in this subroutine, except for some parameters no present in the psp
+  ! file and that are taken from other input files (see parent routine).
+  ! New formats can be defined in this subroutine (corresponding flag
+  ! must be added in myconstants; extra input parameters may need to be
+  ! added in calling routine).
+  !
+  !-------------------------------------------------------------------
+  subroutine read_psp(ps_pot,verbose,fname,pspformat,hcub,ierr)
+
+    use myconstants
+    implicit none
+
+    ! parameters
+    type (pseudo_potential), intent(inout) :: ps_pot
+    ! true for master processor
+    logical, intent(in) :: verbose
+
+    ! name of file where this pseudopotential will be read
+    character(len=*), intent(in) :: fname
+    ! pseudopotential format (see myconstans for allowed formats)
+    integer, intent(in) :: pspformat
+    ! (grid spacing)^3
+    real(dp), intent(in) :: hcub
+    ! error flag: 0 in successful exits, greater than zero otherwise
+    integer, intent(out) :: ierr
+
+    ! local variables
+    ! order for finite difference in derivatives
+    integer, parameter :: norder = 6
+    ! angular momentum labels
+    character (len=1), dimension(4), parameter :: angl = (/ 's', 'p', 'd', 'f' /)
+    ! strings read from pseudopotential file
+    character(len=200) :: linestr
+    ! order for the pseudopotential derivative (number of points
+    ! on each side used); maximum value is mor = 10
+    integer, parameter :: mor = 9
+    ! number of components in the pseudopotential (per given atom)
+    ! read from pseudopotential file
+    integer :: lll
+    ! number of spin-polarized pseudopotential components
+    integer :: nlso
+    ! temporary core cutoff parameters
+    real(dp) :: rc, tcore
+    ! <psi_l|psi_l> - check that the input pseudowavefunction is
+    ! properly normalized on the radial grid
+    real(dp) :: psinorm(4)
+    ! pseudopotential data read from pseudopotential file(s):
+    ! vspd - pseudopotential (up to four components)
+    real(dp), dimension (:,:), allocatable :: vspd
+    ! tolerance for identifying ekbi as zero)
+    real(dp), parameter :: small = 1.0d-5
+    ! counters, temporary variables
+    integer :: ii, jj, i0, lp, npoint, jtmp(10)
+    real(dp) :: temp0, fspd, delr, rtmp(10)
+    integer, allocatable :: nloc(:)
+
+    !-------------------------------------------------------------------
+    ! Open potential & wave function input files.
+    ! Print out error message and exit if files do not exist.
+    !
+    if (verbose) write(6,*) 'Pseudopotential file for this atom type is ', &
+         trim(fname)
+    open(unit=20,file=trim(fname),status='old',form='formatted', iostat=ierr)
+    if (ierr /= 0) then
+       if (verbose) write(6,'(a,a,a,/,a)') ' ERROR: The file ',trim(fname), &
+            ' does not seem to exist.',' STOP in read_psp.'
+       ierr = 1
+       return
+    endif
+    !-------------------------------------------------------------------
+    ! Read in pseudopotential data.
+    !
+    select case (pspformat)
+    case (MARTINS_NEW)
+       read(20,'(a200)',end=67) linestr
+67     continue
+       read(20,'(a200)',end=68) linestr
+68     continue
+       read(20,'(a200)',end=69) linestr
+69     continue
+       read(20,*) ps_pot%nlp, ii, ps_pot%ns
+
+       if (ps_pot%loc > ps_pot%nlp) then
+          if (verbose) then
+             write(6,'(/,a)') ' ERROR: problem with this atom type'
+             write(6,*) 'local pseudopot. beyond # of components: ', &
+                  ps_pot%loc, ps_pot%nlp
+             write(6,*) 'STOP in read_psp'
+          endif
+          ierr = 1
+          return
+       endif
+       if (ps_pot%nlp > 4) then
+          if (verbose) then
+             write(6,*) 'ERROR: More than 4 pseudopot. components'
+             write(6,*) 'Do you really need to go beyond f orbitals?'
+             write(6,*) 'STOP in read_psp'
+          endif
+          ierr = 1
+          return
+       endif
+    case (MARTINS_WANG)
+       read(20,*) ps_pot%ns, ii, ii, temp0, ps_pot%loc
+       read(20,*) ii, jj, i0
+       ps_pot%nlp = 3
+       if (ii == 0) ps_pot%nlp = ps_pot%nlp - 1
+       if (jj == 0) ps_pot%nlp = ps_pot%nlp - 1
+       if (i0 == 0) ps_pot%nlp = ps_pot%nlp - 1
+
+       if (ps_pot%loc > ps_pot%nlp) then
+          if (verbose) then
+             write(6,'(/,a)') ' ERROR: problem with this atom type'
+             write(6,*) 'local pseudopot. beyond # of components: ', &
+                  ps_pot%loc, ps_pot%nlp
+             write(6,*) 'STOP in read_psp'
+          endif
+          ierr = 1
+          return
+       endif
+    case (FHIPP)
+       read(20,*) temp0, ps_pot%nlp
+       do jj = 1, 10
+          read(20,*)
+       enddo
+       read(20,*) ps_pot%ns
+    end select
+
+    ! The increase by one is in order to "push in" the point at r=0. See below.
+    ps_pot%ns = ps_pot%ns + 1
+
+    !-------------------------------------------------------------------
+    ! Allocate working arrays.
+    !
+    allocate (ps_pot%rs (-norder:ps_pot%ns))
+    allocate (ps_pot%vw (-norder:ps_pot%ns,ps_pot%nlp))
+    ps_pot%vw = zero
+    allocate (ps_pot%vion (-norder:ps_pot%ns))
+    ps_pot%vion = zero
+    allocate (vspd (-norder:ps_pot%ns, ps_pot%nlp))
+    allocate (ps_pot%wfspd (-norder:ps_pot%ns, ps_pot%nlp))
+    vspd = zero
+    ps_pot%wfspd = zero
+
+    ps_pot%zval = zero
+
+    rewind(unit=20)
+
+    select case (pspformat)
+    case (MARTINS_NEW)
+       read(20,'(a200)',end=83) linestr
+83     continue
+       if (verbose) write(6,*) trim(linestr)
+       read(20,'(a200)',end=84) linestr
+84     continue
+       if (verbose) write(6,*) trim(linestr)
+       read(20,'(a200)',end=86) linestr
+86     continue
+       if (verbose) write(6,'(a)') trim(linestr)
+       read(20,*) ps_pot%nlp, nlso, ii, ps_pot%par_a, ps_pot%par_b, ps_pot%zval
+       ps_pot%par_c = ps_pot%par_a
+
+       ! Read in s,p,d,f pseudopotentials.
+       ! All reading starts from j=2 to leave room for r=0 at j=1.
+       read(20,*)
+       read(20,*) (ps_pot%rs(jj),jj=2,ps_pot%ns)
+       do ii = 1,ps_pot%nlp
+          read(20,*)
+          read(20,*) lp
+          if (lp > 4) then
+             if (verbose) then
+                write(6,*)'ERROR: More than 4 pseudopot. components'
+                write(6,*) 'Do you really need to go beyond f orbitals?'
+                write(6,*) 'STOP in read_psp'
+             endif
+             ierr = 1
+             return
+          endif
+          read(20,*) (vspd(jj,lp+1),jj=2,ps_pot%ns)
+
+          do jj = 2, ps_pot%ns
+             vspd(jj,lp+1) = vspd(jj,lp+1)/ps_pot%rs(jj)
+          enddo
+
+       enddo
+       ! Ignore second component of relativistic/spin polarized potentials.
+       do ii = 1,nlso
+          read(20,*)
+          read(20,*) jj
+          read(20,*) (temp0,jj=2,ps_pot%ns)
+       enddo
+       read(20,*)
+       read(20,*) (temp0,jj=2,ps_pot%ns)
+       !
+       ! Ignore valence charge density.
+       !
+       read(20,*)
+       read(20,*) (temp0,jj=2,ps_pot%ns)
+       !
+       ! Read in s,p,d pseudo wave functions
+       ! all reading starts from j=2 to leave room for r=0 at j=1
+       ! for cutoff radius, choose the maximum cutoff in file.
+       !
+       tcore = zero
+       do ii = 1,ps_pot%nlp
+          read(20,*)
+          read(20,*) lp,rc,rc
+          read(20,*) (ps_pot%wfspd(jj,lp+1),jj=2,ps_pot%ns)
+          if (tcore < rc) tcore = rc
+       enddo
+       !
+       ! Move core radius to the next grid point.
+       !
+       do ii = 2, ps_pot%ns
+          if (ps_pot%rs(ii) > tcore) exit
+       enddo
+       tcore = ps_pot%rs(ii)
+       ps_pot%rcore = tcore
+    case (MARTINS_WANG)
+       read(20,*) ii, ii, ii, ps_pot%zval, ps_pot%loc
+
+       allocate( nloc(ps_pot%nlp) )
+       read(20,*) jtmp(1:3)
+       jj = 0
+       do ii = 1, 3
+          if (jtmp(ii) /= 0) then
+             jj = jj + 1
+             nloc(jj) = ii
+          endif
+       enddo
+
+       do ii = 2, ps_pot%ns
+          read(20,*) ps_pot%rs(ii),(rtmp(jj),jj=1,6)
+          do jj = 1, ps_pot%nlp
+             vspd(ii,jj) = rtmp(nloc(jj)) * two
+             ps_pot%wfspd(ii,jj) = rtmp(nloc(jj) + 3) * ps_pot%rs(ii)
+          enddo
+       enddo
+       !
+       !  Calculate the radius step parameters - the pseudopotential is
+       !  given on a log grid !
+       !          r(i) = par_a*exp(par_b*(i-1)) - par_c
+       !  The calculation is based on the results at two grid points that
+       !  are quite far away, for accuracy.
+       !
+       i0 = 101
+       jj = 2*(i0-1) + 1
+       if (jj > ps_pot%ns) then
+          write(6,*) 'ERROR: choose smaller i0 to get par_a & par_b, i0 = ', i0
+          write(6,*) 'STOP in pseudo'
+          ierr = 1
+          return
+       endif
+       ps_pot%par_a = ps_pot%rs(i0)**2 / (ps_pot%rs(jj)-two*ps_pot%rs(i0))
+       ps_pot%par_b = log(ps_pot%rs(jj) / ps_pot%par_a + one)/real(jj-1,dp)
+       ps_pot%par_c = ps_pot%par_a
+
+       deallocate(nloc)
+
+    case (FHIPP)
+       read(20,*) ps_pot%zval
+       do jj = 1, 10
+          read(20,*)
+       enddo
+       do ii = 1, ps_pot%nlp
+          read(20,*) jj, rtmp(1)
+          if (jj /= ps_pot%ns - 1) then
+             write(6,*) 'ERROR in file ',trim(fname)
+             write(6,*) 'Radial grid size for angular ',  &
+                  'component l = ',ii - 1,' is not equal to the'
+             write(6,*) 'size for other angular components! ',  &
+                  jj, ps_pot%ns - 1
+             write(6,*) 'STOP in read_psp'
+             ierr = 1
+             return
+          endif
+          do jj = 2, ps_pot%ns
+             read(20,*) i0, ps_pot%rs(jj), ps_pot%wfspd(jj,ii), vspd(jj,ii)
+             vspd(jj,ii) = vspd(jj,ii) * two
+          enddo
+          ps_pot%par_a = ps_pot%rs(2)/rtmp(1)
+          ps_pot%par_b = log(rtmp(1))
+          ps_pot%par_c = zero
+          if (ii > 1 .and. rtmp(1) /= exp(ps_pot%par_b)) then
+             write(6,*) 'ERROR in file ',trim(fname)
+             write(6,*) 'Radial increment for angular ',  &
+                  'component l = ',ii-1,' is not equal to the'
+             write(6,*) 'increment for other angular ',  &
+                  'components! ',rtmp(1), exp(ps_pot%par_b)
+             write(6,*) 'STOP in read_psp'
+             ierr = 1
+             return
+          endif
+       enddo
+
+    end select
+
+       if (verbose) &
+            write(6,58) ps_pot%par_a, ps_pot%par_b, ps_pot%par_c, ps_pot%ns
+
+58  format(/,' logarithmic parameters of pseudopot. radial grid',/, &
+         ' r(i) = a*[Exp(b(i-1)) - 1)]',/,' a (a.u.) = ',g14.6, &
+         ' b = ',g14.6,' c = ',g14.6,' nr = ',i8)
+    close(unit=20)
+    !-------------------------------------------------------------------
+    ! Filling in the value at r<=0 for the pseudopotentials and wave
+    ! functions. Value at r=0 NOT provided by pseudopotential file!
+    ! For negative r, set rs arbitrarily be j-1 for preventing
+    ! division by zero. This only affects several points near the
+    ! atom center, which is a negligible effect.
+    !
+    ps_pot%rs(1) = zero
+    do jj = -norder, 1
+       ps_pot%rs(jj) = real(jj-1,dp)
+       do lp = 1, ps_pot%nlp
+          vspd(jj,lp) = vspd(2,lp)
+          ps_pot%wfspd(jj,lp) = zero
+       enddo
+    enddo
+    !-------------------------------------------------------------------
+    ! Change non-local components of the pseudopotential into the
+    ! difference between them and the local component, i.e., give
+    ! pseudopotentials to the main program already in Kleinman-
+    ! Bylander form.
+    !
+    do i0 = -norder, ps_pot%ns
+       ps_pot%vion(i0) = vspd(i0,ps_pot%loc)
+    enddo
+    do lp = 1, ps_pot%nlp
+       if (lp == ps_pot%loc) cycle
+       do i0 = -norder, ps_pot%ns
+          vspd(i0,lp) = vspd(i0,lp) - vspd(i0,ps_pot%loc)
+       enddo
+    enddo
+    !-------------------------------------------------------------------
+    ! Define core cutoff.
+    !
+    if (ps_pot%rcore <= zero) then
+       rtmp = zero
+       do lp = 1, ps_pot%nlp
+          if (lp == ps_pot%loc) cycle
+          do jj = ps_pot%ns, 2, -1
+             if (abs(vspd(jj,lp)) > small) then
+                rtmp(lp) = ps_pot%rs(jj)
+                exit
+             endif
+          enddo
+       enddo
+       ps_pot%rcore = maxval(rtmp)
+    endif
+
+    if (verbose) write(6,'(/,a,i1,a,i1,/,a,f5.2,/)') &
+         ' # of pseudopot= ', ps_pot%nlp, ', Local component is l = ', &
+         ps_pot%loc - 1, ' Core radius (a.u.) = ', ps_pot%rcore
+    !-------------------------------------------------------------------
+    ! Calculate the derivative of the ionic (=local) pseudopotential,
+    ! wfspd*vspd/r, and its derivative.
+    !
+    ! Comment: the wavefunctions and pseudopotentials are specified
+    ! on a logarithmic grid, c but the numerical derivative assumes a
+    ! uniform grid, therefore: d/dr = di/dr*d/di. 
+    ! The term 1/(b*(rs(j)+a)) is di/dr, hence its appearance
+    ! wherever a derivative is taken.
+    !
+    ! Set the first mor-1 elements of wfspd*vspd/r be zero	   
+    ! for all atom types and all pseudopotential components.
+    !
+    do lp = 1, ps_pot%nlp
+       if (lp /= ps_pot%loc)  then
+          do jj = -norder, mor - 1
+             ps_pot%vw(jj,lp) = zero 
+          enddo
+          do jj = mor, ps_pot%ns
+             ps_pot%vw(jj,lp) = vspd(jj,lp)*ps_pot%wfspd(jj,lp) / ps_pot%rs(jj)
+          enddo
+          do jj = -norder,mor
+             ps_pot%vw(jj,lp) = ps_pot%vw(mor*2,lp)
+          enddo
+       endif
+    enddo
+    !-------------------------------------------------------------------
+    ! Calculate (in ekbi) the Kleinman-Bylander normalization factor 
+    ! <psi|(V_l-V_local)|psi> (this is the denominator of Eq. (3) in
+    ! Chelikowsky et al., PRL, 72, 1240 (1994)). As this is needed
+    ! for the non-local pseudopotential only, the results for the
+    ! local pseudopotential are junk and are never used.
+    !
+    ! Also calculate (in psinorm) the integral of psi* times psi over
+    ! the radial grid (in psinorm) in order to make sure it is close
+    ! to one, and write it out. This is for information
+    ! only - psinorm is not used anywhere else. 
+    !
+    if (verbose) then
+       write(6,'(a)') ' Normalization check and Kleinman-Bylander Integral:'
+       write(6,'(11x,4(13x,a))') (angl(lp),lp=1,ps_pot%nlp)
+    endif
+
+    allocate (ps_pot%ekbi (ps_pot%nlp*ps_pot%nlp))
+    npoint = ps_pot%ns
+    do lp = 1, ps_pot%nlp
+       delr = ps_pot%rs(2) - ps_pot%rs(1)
+       fspd = ps_pot%wfspd(1,lp)*ps_pot%wfspd(1,lp)
+       psinorm(lp) = fspd*delr
+       temp0 = vspd(1,lp)*fspd*delr
+       do jj = 2, npoint - 1
+          delr = half*(ps_pot%rs(jj+1)-ps_pot%rs(jj-1))
+          fspd = ps_pot%wfspd(jj,lp)*ps_pot%wfspd(jj,lp)
+          psinorm(lp) =  psinorm(lp) + fspd*delr
+          temp0 = temp0 + vspd(jj,lp)*fspd*delr
+       enddo
+       delr = ps_pot%rs(npoint) - ps_pot%rs(npoint-1)
+       fspd = ps_pot%wfspd(npoint,lp)*ps_pot%wfspd(npoint,lp)
+       psinorm(lp) =  psinorm(lp) + fspd*delr
+       temp0 = temp0 + vspd(npoint,lp)*fspd*delr
+       do jj = (lp-1)*(lp-1) + 1, lp*lp
+          ps_pot%ekbi(jj) = temp0
+       enddo
+    enddo
+    if (verbose) then
+       write(6,78) ' Normalization    ', (psinorm(lp),lp=1,ps_pot%nlp)
+       write(6,78) ' K-B Integral (Ry)', (ps_pot%ekbi(lp*lp),lp=1,ps_pot%nlp)
+    endif
+
+78  format(a,4(1x,f13.8))
+    !-------------------------------------------------------------------
+    ! Because the Kleinman-Bylander normalization factor is eventually used
+    ! in a denominator, if it is close to zero its inverse will explode.
+    ! Therefore, check its value and it is too small for any non-local
+    ! component of any atom - print out an error message and quit.
+    !
+    do lp = 1, ps_pot%nlp
+       if (lp /= ps_pot%loc) then
+          if (abs(ps_pot%ekbi(lp*lp)) < small)  then
+             if (verbose) then
+                write(6,*) 'WARNING: The K-B Integral is too small!!'
+                write(6,79) lp - 1, ps_pot%ekbi(lp*lp)
+                write(6,*) 'Integrals are renormalized to one.'
+             endif
+          endif
+          !
+          !  Renormalize K-B projectors with normalization factor.
+          !
+          temp0 = sqrt(abs(ps_pot%ekbi(lp*lp)))
+          ps_pot%vw(:,lp) = ps_pot%vw(:,lp)/temp0
+          do jj = (lp-1)*(lp-1) + 1, lp*lp
+             ps_pot%ekbi(jj) = ps_pot%ekbi(jj)/temp0/temp0
+          enddo
+       endif
+    enddo
+
+79  format(1x,'the Kleinman-Bylander integral of L = ',i1,' is ',g15.6)
+    !-------------------------------------------------------------------
+    ! Change ekbi into h^3/ekbi, to be used from now on.
+    !
+    do lp = 1, ps_pot%nlp
+       if (lp == ps_pot%loc) then
+          do jj = (lp-1)*(lp-1) + 1, lp*lp
+             ps_pot%ekbi(jj) = zero
+          enddo
+       else
+          do jj = (lp-1)*(lp-1) + 1, lp*lp
+             ps_pot%ekbi(jj) = hcub / ps_pot%ekbi(jj)
+          enddo
+       endif
+    enddo
+
+    deallocate (vspd)
+
+  end subroutine read_psp
+  !===============================================================
+  !
+  ! Calculate the local component of the pseudopotential for each
+  ! atom type and add it to array v_loc. The potential is calculated
+  ! on the real space grid with a simple interpolation of grid points
+  ! on the atomic (logarithmic) grid. Array v_loc is local (each PE
+  ! stores v_loc at the grid points assigned to it).
+  !
+  !---------------------------------------------------------------
+  subroutine v_local(gvec,ps_pot,v_loc)
+
+    use typedefs
+    use mpi_module
+    implicit none
+
+    ! arguments
+    type (gspace), intent(in) :: gvec
+    type (pseudo_potential), intent(in) :: ps_pot
+    real(dp), intent(inout) :: v_loc(w_grp%mydim)
+
+    ! local variables
+    ! temporary storage variables
+    real(dp) :: dist, rindex, delr, vtemp, uvec(3)
+    ! counters
+    integer :: jok, iat, igrid, jgrid, ii
+
+    !---------------------------------------------------------------
+
+    ! Exit if pseudopotential information is not available.
+    if (ps_pot%ns < 0) return
+
+    ! Go over all atoms, superimpose the contribution to the local
+    ! ionic potential from each atom over each point of the grid.
+    do iat = 1, ps_pot%natmi
+       do jgrid = 1, w_grp%mydim
+          igrid = jgrid + w_grp%offset
+          do ii = 1, 3
+             uvec(ii) = (gvec%shift(ii) + gvec%r(ii,igrid))*gvec%step(ii) &
+                  - ps_pot%ratm(ii,iat)
+          enddo
+          dist = sqrt(dot_product(uvec,uvec))
+          !
+          ! If dist is larger than the largest value of r given in the
+          ! pseudopotential file, rs(ns), use -zion/r as the ionic
+          ! potential, vtemp.
+          if (dist >= ps_pot%rs(ps_pot%ns-1)) then
+             vtemp = ps_pot%vion(ps_pot%ns) * ps_pot%rs(ps_pot%ns) / dist
+          else
+             !
+             ! If dist is smaller than the largest value of r, find the index
+             ! of dist in the pseudopotential by inverting the logarithmic
+             ! pseudopotential grid, then interpolate the local pseudopotential.
+             !
+             if (ps_pot%par_c+dist < ps_pot%par_a) then
+                jok = 0
+             else
+                rindex = one/ps_pot%par_b * log((ps_pot%par_c+dist)/ps_pot%par_a)
+                jok  = int(rindex) + 1
+             endif
+             delr = (dist-ps_pot%rs(jok)) / (ps_pot%rs(jok+1)-ps_pot%rs(jok))
+             vtemp = ps_pot%vion(jok)*ps_pot%rs(jok)/dist + &
+                  delr*(ps_pot%vion(jok+1)*ps_pot%rs(jok+1) - &
+                  ps_pot%vion(jok)*ps_pot%rs(jok))/dist
+             if (jok == 1) vtemp = ps_pot%vion(2)
+          endif
+
+          v_loc(jgrid) = v_loc(jgrid) + vtemp  
+
+       enddo
+    enddo
+
+  end subroutine v_local
+  !===============================================================
+  !
+  ! This subroutine calculates ionic force contributions and the
+  ! total nuclear energy using classical formulas, based on the
+  ! ionic charges and the distance between the atoms.
+  !  
+  !---------------------------------------------------------------
+  subroutine forceion(ps_pot,enuc)
+
+    use myconstants
+    implicit none
+
+    ! arguments
+    ! data for each chemical element (atom coordinates, charge)
+    type (pseudo_potential), dimension(type_num), intent(in) :: ps_pot
+    ! total nuclear energy
+    real(dp), intent(out) :: enuc
+
+    ! local variables
+    ! counters
+    integer :: ii, jj, ity, jty, ia, ja
+    ! distance between two atoms and their cube,
+    ! multiplication of their charges
+    real(dp) :: rij, qiqj, dr(3)
+
+    !---------------------------------------------------------------
+
+    ! Initialize nuclear energy.
+    enuc = zero
+
+    ! Initialize first atom counter ("i atoms").
+    ia = 0
+    ! For all "i" atoms (atom types and atom within type).
+    do ity = 1,type_num
+       do ii = 1, ps_pot(ity)%natmi
+          ia = ia + 1
+          ! Initialize second atom counter ("j atoms").
+          ja = 0
+          ! For all "j" atoms (atom types and atom within type).
+          do jty = 1, type_num
+             do jj = 1, ps_pot(jty)%natmi
+                ja = ja + 1
+                if (ia /= ja) then
+                   dr = ps_pot(ity)%ratm(:,ii) - ps_pot(jty)%ratm(:,jj)
+                   rij = sqrt(dot_product(dr,dr))
+                   qiqj = ps_pot(ity)%zval*ps_pot(jty)%zval
+                   enuc = enuc + qiqj/rij
+                endif
+             enddo
+          enddo
+       enddo
+    enddo
+
+  end subroutine forceion
+  !===============================================================
+  !
+  ! For an input point with cartesian coordinates rr(1:3),
+  ! calculate the tesseral harmonics tlm(1:2*lp-1) and their
+  ! gradients, tlmd(1:3, 1:2*lp-1). The tesseral harmonics are real
+  ! combination of spherical harmonics.
+  !
+  !---------------------------------------------------------------
+  subroutine tesseral(lp,rr,rnorm,tlm,tlmd)
+
+    use myconstants
+    implicit none 
+
+    ! arguments
+    integer, intent(in) :: lp ! l + 1, orbital quantum number
+    ! Cartesian coordinates of r vector and its norm
+    real(dp), intent(in) :: rr(3), rnorm
+    ! tesseral harmonics and their gradients at r
+    real(dp), intent(out) :: tlm(2*lp-1), tlmd(3,2*lp-1)
+
+    ! local variables
+    !  coordinate factors
+    real(dp) :: xx, yy, zz, x2, y2, z2, xy, xz, yz, xyz, rinv, thrinv
+    !
+    !  Spherical harmonics coefficients - for s, p, and d
+    !  formulae, see, e.g., pp. 11-12 in W. A. Harrison, "Electronic
+    !  Structure and the Properties of Solids: The Physics of the
+    !  Chemical Bond". For f formulae, see, e.g., 
+    !  S. F. A. Kettle, "Physical Inorganic Chemistry", p. 244.
+    !  Notice that they *have* the factor sqrt( (2*l+1)/4*pi ).
+    !
+    !  1/(2*sqrt(pi)) for s
+    real(dp), parameter :: c0  = 0.282094791773878143474039725779d0
+    !  sqrt(3/(4*pi)), for px, py, pz 
+    real(dp), parameter :: c1  = 0.488602511902919921586384622837d0
+    !  sqrt(15/(4*pi)), dxy, dzy, dzx 
+    real(dp), parameter :: c21 = 1.092548430592079070543385705802d0
+    !  sqrt(5/(16*pi)), for dz^2 
+    real(dp), parameter :: c22 = 0.315391565252520006030893690294d0
+    !  sqrt(7/(16*pi)), for f_z(5z^2-3r^2)
+    real(dp), parameter :: c31 = 0.373176332590115391414395913197d0
+    !  sqrt(21/(32*pi)), for f_x(5z^2-r^2),f_y(5z^2-r^2)
+    real(dp), parameter :: c32 = 0.457045799464465736158020696916d0
+    !  sqrt(105/(16*pi)), for f_z(x^2-y^2)
+    real(dp), parameter :: c33 = 1.445305721320277027694690077198d0
+    !  sqrt(105/(4*pi)), for f_xyz
+    real(dp), parameter :: c34 = 2.890611442640554055389380154398d0
+    !  sqrt(35/(32*pi)), for f_x(x^2-3y^2),f_y(y^2-3x^2)
+    real(dp), parameter :: c35 = 0.590043589926643510345610277541d0
+
+    !---------------------------------------------------------------
+
+    tlm(:) = zero
+    tlmd(:,:) = zero
+    rinv = one/rnorm
+    xx = rr(1) * rinv
+    yy = rr(2) * rinv
+    zz = rr(3) * rinv
+
+    select case(lp)
+    case (1)
+       !
+       !  l = 0 (lp = 1) , s orbital
+       !
+       tlm(1) = c0
+    case (2)
+       !
+       !  l = 1 (lp = 2), p orbitals
+       !
+       !  --- px, py, pz
+       tlm(1) = c1*xx
+       tlm(2) = c1*yy
+       tlm(3) = c1*zz
+       !  --- derivatives of px,py,pz
+       xy = -rinv*xx*yy
+       xz = -rinv*xx*zz
+       yz = -rinv*yy*zz
+
+       tlmd(1,1) = c1*rinv*(one-xx*xx) 
+       tlmd(2,1) = c1*xy
+       tlmd(3,1) = c1*xz
+
+       tlmd(1,2) = c1*xy
+       tlmd(2,2) = c1*rinv*(one-yy*yy)
+       tlmd(3,2) = c1*yz
+
+       tlmd(1,3) = c1*xz
+       tlmd(2,3) = c1*yz
+       tlmd(3,3) = c1*rinv*(one-zz*zz)
+    case (3)
+       !
+       !  l = 2 (lp = 3) , d orbitals
+       !
+       !  --- dxy, dyz, dxz, dz2, dx2-y2 
+       tlm(1) = c21*xx*yy
+       tlm(2) = c21*zz*yy
+       tlm(3) = c21*xx*zz
+       tlm(4) = c22*(three*zz*zz-one)
+       tlm(5) = c21*half*(xx*xx-yy*yy)
+       !  --- derivatives of dxy, dyz, dxz, dz2, dx2-y2 
+       x2 = xx*xx
+       y2 = yy*yy
+       z2 = zz*zz
+       xyz = -two*rinv*xx*yy*zz
+
+       tlmd(1,1) = c21*rinv*yy*(one-two*x2) 
+       tlmd(2,1) = c21*rinv*xx*(one-two*y2) 
+       tlmd(3,1) = c21*xyz
+
+       tlmd(1,2) = c21*xyz
+       tlmd(2,2) = c21*rinv*zz*(one-two*y2) 
+       tlmd(3,2) = c21*rinv*yy*(one-two*z2) 
+
+       tlmd(1,3) = c21*rinv*zz*(one-two*x2) 
+       tlmd(2,3) = c21*xyz
+       tlmd(3,3) = c21*rinv*xx*(one-two*z2) 
+
+       tlmd(1,4) = -c22*six*rinv*xx*z2 
+       tlmd(2,4) = -c22*six*rinv*yy*z2 
+       tlmd(3,4) =  c22*six*rinv*zz*(one-z2) 
+
+       tlmd(1,5) =  c21*rinv*xx*(one-x2+y2) 
+       tlmd(2,5) = -c21*rinv*yy*(one+x2-y2) 
+       tlmd(3,5) = -c21*rinv*zz*(x2-y2) 
+    case (4)
+       !
+       !  l = 3 (lp = 4) , f orbitals
+       !
+       !  --- fz(5z^2-3r^2), fx(5z^2-r^2), fy(5z^2-r^2),
+       !      fz(x^2-y^2), fxyz, fx(x^2-3y^2), fy(y^2-3x^2)
+       tlm(1) = c31*zz*(five*zz*zz-three)
+       tlm(2) = c32*xx*(five*zz*zz-one)
+       tlm(3) = c32*yy*(five*zz*zz-one)
+       tlm(4) = c33*zz*(xx*xx-yy*yy)
+       tlm(5) = c34*xx*yy*zz
+       tlm(6) = c35*xx*(xx*xx-three*yy*yy)
+       tlm(7) = c35*yy*(yy*yy-three*xx*xx)
+       !  --- derivatives of the seven f orbitals
+       x2 = xx*xx
+       y2 = yy*yy
+       z2 = zz*zz
+       xy = rinv*xx*yy
+       xz = rinv*xx*zz
+       yz = rinv*yy*zz
+       thrinv = three*rinv
+
+       tlmd(1,1) = c31*three*xz*(one-five*z2)
+       tlmd(2,1) = c31*three*yz*(one-five*z2)
+       tlmd(3,1) = c31*thrinv*(z2-one)*(one-five*z2) 
+
+       tlmd(1,2) = c32*rinv*(five*z2-one+x2*(one-15.d0*z2))
+       tlmd(2,2) = c32*xy*(one-15.d0*z2)
+       tlmd(3,2) = c32*xz*(11.d0-15.d0*z2)
+
+       tlmd(1,3) = c32*xy*(one-15.d0*z2)
+       tlmd(2,3) = c32*rinv*(five*z2-one+y2*(one-15.d0*z2))
+       tlmd(3,3) = c32*yz*(11.d0-15.d0*z2)
+
+       tlmd(1,4) =  c33*xz*(two-three*(x2-y2))
+       tlmd(2,4) = -c33*yz*(two+three*(x2-y2))
+       tlmd(3,4) =  c33*rinv*(one-three*z2)*(x2-y2)
+
+       tlmd(1,5) = c34*yz*(one-three*x2)
+       tlmd(2,5) = c34*xz*(one-three*y2)
+       tlmd(3,5) = c34*xy*(one-three*z2)
+
+       tlmd(1,6) = c35*thrinv*(x2-y2-x2*(x2-three*y2))
+       tlmd(2,6) = c35*three*xy*(three*y2-x2-two)
+       tlmd(3,6) = c35*three*xz*(three*y2-x2)
+
+       tlmd(1,7) = c35*three*xy*(three*x2-y2-two)
+       tlmd(2,7) = c35*thrinv*(y2-x2-y2*(y2-three*x2))
+       tlmd(3,7) = c35*three*yz*(three*x2-y2)
+    end select
+
+  end subroutine tesseral
+  !===================================================================
+#endif
+  !
+  ! Add the nonlocal part of the dipole matrix element. Relevant only in
+  ! periodic systems.
+  !
+  !---------------------------------------------------------------
+  subroutine Znonloc(gvec,ps_pot,wfn,occ_bnds,ity,kcart,dip)
+
+    use typedefs
+    use mpi_module
+    implicit none
+
+    ! arguments
+    ! real-space grid
+    type (gspace), intent(in) :: gvec
+    ! pseudpotential for this atom
+    type (pseudo_potential), intent(in) :: ps_pot
+    ! electron wavefunctions
+    type (wavefunction), intent(in) :: wfn
+    ! bounds of dipole matrix elements (defines which orbitals will be handled)
+    integer, intent(in) :: occ_bnds(4)
+    ! type of chemical element for this atom
+    integer, intent(in) :: ity
+    ! Cartesian coordinates of current k-point
+    real(dp), intent(in) :: kcart(3)
+    ! dipole matrix elements (nonlocal part is added to the input data)
+    SCALAR, intent(inout) :: dip(occ_bnds(2) - occ_bnds(1) + 1, &
+         occ_bnds(4) - occ_bnds(3) + 1, 3)
+
+    ! local variables
+    character (len=800) :: lastwords
+    real(dp) :: vwr, x, y, z, xa, ya, za, rinv, rw(3)
+    real(dp) :: rc, ainv, binv, covera, rrmin, rr_tmp, phase
+    !  number of replicas of the periodic cell to be used in the
+    !  construction of non-local spheres around each atom
+    !  nreplica = 0 if gvec%per = 0
+    integer :: nreplica(3)
+    !  temporary counter of number of non-local points around each atom.
+    integer :: nloc
+    !  loop counters 
+    integer :: iv, ic, jv, jc, istp, gr(3), j, iat
+    integer :: ii, idir, lp, mg, ml, icellx, icelly, icellz, irp, ist, itran
+    !  temporary storage variables
+    integer :: npt, mxnloc, mxnlm, nrep
+    integer :: nlatom(ps_pot%natmi)
+    real(dp) :: uvec(3), xvec(3), box_size(3), xdummy(3,7), vylmd(7)
+
+    integer, dimension(:), allocatable :: indr, indw, tran
+    real(dp), dimension(:), allocatable :: ffcc
+    real(dp), dimension(:,:), allocatable :: xyzr, rnloc
+    SCALAR, allocatable :: tvywd(:,:,:), vywd(:,:,:), kph(:)
+
+    !---------------------------------------------------------------
+    ! Exit if pseudopotential information is not available.
+    !
+    if (ps_pot%ns < 0) return
+
+    box_size = zero
+    do ii = 1, gvec%per
+       box_size(ii) = sqrt(sum(gvec%avec(:,ii)**2))
+    enddo
+
+    !---------------------------------------------------------------
+    !  Define parameters for periodic boundary conditions.
+    !
+    nreplica = 0
+    nreplica(1:gvec%per) = 1
+
+    nlatom = 0
+
+    !---------------------------------------------------------------
+    !  Update temporary variables for number of points in
+    !  pseudopotential, npt, (inverse) radial grid parameters,
+    !  smallest distance from the atom recorded in
+    !  psedupotential file (rrmin) and the smaller between the core
+    !  -cutoff radius and the largest radius still available in the
+    !  pseudopotential file, rc.
+    !
+    npt = ps_pot%ns
+    rc = ps_pot%rcore
+    if (ps_pot%rs(npt-1) < rc) then
+       rc = ps_pot%rs(npt-1)
+    endif
+
+    !---------------------------------------------------------------
+    !  Run through all atoms of this type.
+    !
+    do iat = 1, ps_pot%natmi
+       xa = ps_pot%ratm(1,iat)
+       ya = ps_pot%ratm(2,iat)
+       za = ps_pot%ratm(3,iat)
+       !
+       !  Check if the grid point is within the core-cutoff radius around
+       !  the atom. If it is not, it has no non-local contribution because
+       !  outside the core all pseudopotential components are equal.
+       !  If we are dealing with periodic boundary conditions, we
+       !  also need to see whether a given grid point is inside the
+       !  core-cutoff radius if shifted by the size of the box in the
+       !  +x,-x,+y,-y,+z,-z directions (and any combination thereof). In
+       !  theory, one would need to check for shifts of twice the size of
+       !  the box, three times the size of the box, etc. In practice this
+       !  is NOT needed, because it would imply a core cutoff radius
+       !  larger than the box - which makes for a very bad calculation
+       !  anyway.
+
+       !  reset counter of non-local points per given atom
+       nloc = 0
+       !  for each grid point in the full grid...
+       do mg = 1, gvec%nr
+          !  allow each point to be shifted by the length of the box in each
+          !  direction
+          do irp = 1, gvec%syms%ntrans
+             call unfold(gvec%r(1,mg),gvec%syms%trans(1,1,irp),gvec%shift,gr)
+             do icellx = -nreplica(1),nreplica(1)
+                do icelly = -nreplica(2),nreplica(2)
+                   do icellz = -nreplica(3),nreplica(3)
+                      !  compute distance between point (or its replica if PBC) and atom
+                      !  and increase nloc if it is inside the non-local range.
+                      uvec(1)=(gvec%shift(1) + gr(1)) * gvec%step(1) + &
+                           real(icellx,dp)*box_size(1)
+                      uvec(2)=(gvec%shift(2) + gr(2)) * gvec%step(2) + &
+                           real(icelly,dp)*box_size(2)
+                      uvec(3)=(gvec%shift(3) + gr(3)) * gvec%step(3) + &
+                           real(icellz,dp)*box_size(3)
+
+                      call dmatvec3('N',gvec%avec_norm,uvec,xvec)
+
+                      x = xvec(1) - xa
+                      y = xvec(2) - ya
+                      z = xvec(3) - za
+
+                      rr_tmp = sqrt(x*x+y*y+z*z)
+
+                      if (rr_tmp <= rc) nloc = nloc + 1
+
+                   enddo
+                enddo
+             enddo
+          enddo
+       enddo
+       !  Update array of total number of non-local points per atom and
+       !  maximum size of non-local block associated with any atom.
+       nlatom(iat) = nloc
+    enddo                  ! iat = 1, ps_pot%natmi
+
+    mxnloc = maxval(nlatom)
+    mxnlm = 16
+    nrep = gvec%syms%ntrans
+    !---------------------------------------------------------------
+    !  Report non-local block sizes to file.
+    !
+#ifdef DEBUG
+    if (peinf%master) then
+       write(6,'(/,a,/,a)') 'Non-local pseudopotential messages:', &
+            '-----------------------------------'
+       write(6,*) 'Max # of nonlocal points for one atom = ', mxnloc
+       write(6,'(/,a)') 'Sizes of all non-local blocks '
+       write(6,'(12(1x,i5))') (nlatom(ii),ii=1,ps_pot%natmi)
+       write(6,*)
+    endif
+#endif
+
+    allocate(indw(mxnloc))
+    allocate(indr(mxnloc))
+    allocate(tran(mxnloc))
+    allocate(ffcc(mxnloc))
+    allocate(rnloc(3,mxnloc))
+    allocate(xyzr(4,mxnloc))
+    allocate(kph(mxnloc))
+    allocate(vywd(0:3,wfn%nmem,mxnlm))
+    allocate(tvywd(0:3,wfn%nmem,7))
+
+    npt = ps_pot%ns
+    ainv = one / ps_pot%par_a
+    binv = one / ps_pot%par_b
+    covera = ps_pot%par_c / ps_pot%par_a
+    rc = ps_pot%rcore
+    if (ps_pot%rs(npt-1) < rc) then
+       rc = ps_pot%rs(npt-1)
+    endif
+    rrmin = ps_pot%rs(2)
+    do iat = 1, ps_pot%natmi
+       if (mod(iat-1,w_grp%npes) /= w_grp%mygr + r_grp%mygr*w_grp%num) cycle
+       xa = ps_pot%ratm(1,iat)
+       ya = ps_pot%ratm(2,iat)
+       za = ps_pot%ratm(3,iat)
+       nloc = 0
+       ii = 0
+       do irp = 1, gvec%syms%ntrans
+          do mg = 1, gvec%nr
+             ii = ii + 1
+             call unfold(gvec%r(1,mg),gvec%syms%trans(1,1,irp),gvec%shift,gr)
+             do icellx = -nreplica(1),nreplica(1)
+                do icelly = -nreplica(2),nreplica(2)
+                   do icellz = -nreplica(3),nreplica(3)
+  !  Compute distance between point (or its replica if PBC) and atom.
+  !  If the point is inside non-local range:
+  !  1. Increase the non-local point counter, nloc, by one.
+  !  Update the four output arrays, indw, ratom,
+  !  with the grid point, its distance from the atom, the closest
+  !  radial grid point, and the fractional distance to the next grid
+  !  point (for extrapolation), respectively.
+  !  2. Store the cartesian coordinates of this point in rnloc,
+  !  without bringing it back to the initial cell (if PBC).
+
+                      uvec(1)=(gvec%shift(1) + gr(1)) * gvec%step(1) + &
+                           real(icellx,dp)*box_size(1)
+                      uvec(2)=(gvec%shift(2) + gr(2)) * gvec%step(2) + &
+                           real(icelly,dp)*box_size(2)
+                      uvec(3)=(gvec%shift(3) + gr(3)) * gvec%step(3) + &
+                           real(icellz,dp)*box_size(3)
+
+                      call dmatvec3('N',gvec%avec_norm,uvec,xvec)
+
+                      x = xvec(1) - xa
+                      y = xvec(2) - ya
+                      z = xvec(3) - za
+
+                      rr_tmp = sqrt(x*x+y*y+z*z)
+                      if (rr_tmp < rrmin)  rr_tmp = rrmin
+                      if (rr_tmp <= rc) then
+                         nloc = nloc + 1
+                         indw(nloc) = gvec%rindex(ii)
+                         tran(nloc) = gvec%rtrans(ii)
+
+                         npt = idint(binv * log(covera+ainv*rr_tmp))+1
+                         indr(nloc) = npt
+                         ffcc(nloc) = (rr_tmp - ps_pot%rs(npt)) / &
+                              (ps_pot%rs(npt+1) - ps_pot%rs(npt))
+
+                         rinv = one/rr_tmp
+                         xyzr(:,nloc) = (/ x, y, z, one /)
+                         xyzr(:,nloc) = xyzr(:,nloc) * rinv
+                         xyzr(4,nloc) = rr_tmp
+                         rnloc(:,nloc) = (/ x, y, z /)
+#ifdef CPLX
+                         phase = zero
+                         do idir = 1, gvec%per
+                            phase = phase + kcart(idir) * rnloc(idir,nloc)
+                         enddo
+                         kph(nloc) = cmplx(cos(phase),sin(phase))
+#else
+                         kph(nloc) = Zone
+#endif
+                      endif
+                   enddo
+                enddo
+             enddo
+          enddo
+       enddo
+       if (nloc /= nlatom(iat)) then
+          write(lastwords,*) ' ERROR in nonloc ',nloc,iat,ity,nlatom(iat)
+          call die(lastwords)
+       endif
+
+       ! Construct projector array for all non-local components and
+       ! multiply it with all wave-functions. Store result in vywd.
+       vywd = Zzero
+       do lp = 1, ps_pot%nlp
+          if (lp == ps_pot%loc) cycle
+          tvywd = Zzero
+          do nloc = 1, nlatom(iat)
+             call tesseral(lp,xyzr(1,nloc),one,vylmd,xdummy)
+             npt = indr(nloc)
+             vwr = ps_pot%vw(npt,lp) + ffcc(nloc) * &
+                  (ps_pot%vw(npt+1,lp) - ps_pot%vw(npt,lp))
+             do ml = 1, 2 * lp - 1
+                vylmd(ml) = vwr * vylmd(ml)
+             enddo
+
+             mg = indw(nloc) - w_grp%offset
+             if ( mg <= 0  .or.  mg > w_grp%mydim ) cycle ! non-local row
+             itran = tran(nloc)
+             rw = rnloc(:,nloc)
+             do ist = 1, wfn%nstate
+                ii = wfn%map(ist)
+                irp = wfn%jrep(0,ist)
+                if (ii == 0) cycle
+                do ml = 1, 2 * lp - 1
+                   tvywd(0,ii,ml) = tvywd(0,ii,ml) + vylmd(ml) * &
+                        wfn%Zwf(mg,ii) * gvec%syms%chi(irp,itran) * kph(nloc)
+                   do j = 1, 3
+                      tvywd(j,ii,ml) = tvywd(j,ii,ml) + vylmd(ml) * wfn%Zwf(mg,ii) * &
+                           gvec%syms%chi(irp,itran) * rw(j) * kph(nloc)
+                   enddo
+                enddo
+             enddo
+          enddo
+          do ist = 1, wfn%nmem
+             do ml = (lp-1)*(lp-1) + 1, lp*lp
+                do j = 0, 3
+                   vywd(j,ist,ml) = vywd(j,ist,ml) + tvywd(j,ist, ml - (lp-1)*(lp-1))
+                enddo
+             enddo
+          enddo
+       enddo
+       do ml = 1, ps_pot%nlp * ps_pot%nlp
+          ! Multiply by the normalization factor ekbi and update dipole.
+          do ic = occ_bnds(3), occ_bnds(4)
+             jc = ic - occ_bnds(3) + 1
+             istp = wfn%map(ic)
+             do iv = occ_bnds(1), occ_bnds(2)
+                jv = iv - occ_bnds(1) + 1
+                ist = wfn%map(iv)
+                do j = 1, 3
+                   dip(jv,jc,j) = dip(jv,jc,j) - &
+                        MYCONJG(vywd(0,ist,ml)) * vywd(j,istp,ml) + &
+                        vywd(0,istp,ml) * MYCONJG(vywd(j,ist,ml)) * ps_pot%ekbi(ml)
+                enddo
+             enddo
+          enddo
+       enddo
+#ifdef DEBUG
+       if (peinf%master) write(6,*) ' non-local dipole ', ity, iat
+#endif
+    enddo                  ! iat = 1, ps_pot%natmi
+
+    deallocate(tvywd, vywd, kph, xyzr, rnloc)
+    deallocate(ffcc)
+    deallocate(indw, tran, indr)
+
+  end subroutine Znonloc
+  !===============================================================
+  !
+  ! Calculates the non-local energy matrix elements.
+  !
+  !---------------------------------------------------------------
+  subroutine Zv_nloc(gvec,ps_pot,wfn,ity,kcart,e_nl)
+
+    use typedefs
+    use mpi_module
+    implicit none
+
+    ! arguments
+    type (gspace), intent(in) :: gvec
+    type (pseudo_potential), intent(in) :: ps_pot
+    type (wavefunction), intent(in) :: wfn
+    integer, intent(in) :: ity
+    real(dp), intent(in) :: kcart(3)
+    SCALAR, intent(inout) :: e_nl(wfn%nmem,wfn%nmem)
+
+    ! local variables
+    character (len=800) :: lastwords
+    real(dp) :: vwr, x, y, z, xa, ya, za, rinv, rw(3)
+    real(dp) :: rc, ainv, binv, covera, rrmin, rr_tmp, phase
+    !  number of replicas of the periodic cell to be used in the
+    !  construction of non-local spheres around each atom
+    !  nreplica = 0 if gvec%per = 0
+    integer :: nreplica(3)
+    !  temporary counter of number of non-local points around each atom.
+    integer :: nloc
+    !  loop counters 
+    integer :: iv, ic, gr(3), iat
+    integer :: ii, idir, lp, mg, ml, icellx, icelly, icellz, irp, ist, itran
+    !  temporary storage variables
+    integer :: npt, mxnloc, mxnlm, nrep
+    integer :: nlatom(ps_pot%natmi)
+    real(dp) :: uvec(3), xvec(3), box_size(3), xdummy(3,7), vylmd(7)
+
+    integer, dimension(:), allocatable :: indr, indw, tran
+    real(dp), dimension(:), allocatable :: ffcc
+    real(dp), dimension(:,:), allocatable :: xyzr, rnloc
+    SCALAR, allocatable :: tvywd(:,:), vywd(:,:), kph(:)
+
+    !---------------------------------------------------------------
+
+    ! Exit if pseudopotential information is not available.
+    if (ps_pot%ns < 0) return
+
+    box_size = zero
+    do ii = 1, gvec%per
+       box_size(ii) = sqrt(sum(gvec%avec(:,ii)**2))
+    enddo
+
+    !  Define parameters for periodic boundary conditions.
+    nreplica = 0
+    nreplica(1:gvec%per) = 1
+
+    nlatom = 0
+
+    !  Update temporary variables for number of points in
+    !  pseudopotential, npt, (inverse) radial grid parameters,
+    !  smallest distance from the atom recorded in
+    !  psedupotential file (rrmin) and the smaller between the core
+    !  -cutoff radius and the largest radius still available in the
+    !  pseudopotential file, rc. 
+    npt = ps_pot%ns
+    rc = ps_pot%rcore
+    if (ps_pot%rs(npt-1) < rc) then
+       rc = ps_pot%rs(npt-1)
+    endif
+
+    !---------------------------------------------------------------
+    !  Run through all atoms of this type.
+    !
+    do iat = 1, ps_pot%natmi
+       xa = ps_pot%ratm(1,iat)
+       ya = ps_pot%ratm(2,iat)
+       za = ps_pot%ratm(3,iat)
+       !
+       !  Check if the grid point is within the core-cutoff radius around
+       !  the atom. If it is not, it has no non-local contribution because
+       !  outside the core all pseudopotential components are equal.
+       !  If we are dealing with periodic boundary conditions, we
+       !  also need to see whether a given grid point is inside the
+       !  core-cutoff radius if shifted by the size of the box in the
+       !  +x,-x,+y,-y,+z,-z directions (and any combination thereof). In
+       !  theory, one would need to check for shifts of twice the size of
+       !  the box, three times the size of the box, etc. In practice this
+       !  is NOT needed, because it would imply a core cutoff radius
+       !  larger than the box - which makes for a very bad calculation
+       !  anyway.
+
+       !  reset counter of non-local points per given atom
+       nloc = 0
+       !  for each grid point in the full grid...
+       do mg = 1, gvec%nr
+          !  allow each point to be shifted by the length of the box in each
+          !  direction
+          do irp = 1, gvec%syms%ntrans
+             call unfold(gvec%r(1,mg),gvec%syms%trans(1,1,irp),gvec%shift,gr)
+             do icellx = -nreplica(1),nreplica(1)
+                do icelly = -nreplica(2),nreplica(2)
+                   do icellz = -nreplica(3),nreplica(3)
+                      !  compute distance between point (or its replica if PBC) and atom
+                      !  and increase nloc if it is inside the non-local range.
+                      uvec(1)=(gvec%shift(1) + gr(1)) * gvec%step(1) + &
+                           real(icellx,dp)*box_size(1)
+                      uvec(2)=(gvec%shift(2) + gr(2)) * gvec%step(2) + &
+                           real(icelly,dp)*box_size(2)
+                      uvec(3)=(gvec%shift(3) + gr(3)) * gvec%step(3) + &
+                           real(icellz,dp)*box_size(3)
+
+                      call dmatvec3('N',gvec%avec_norm,uvec,xvec)
+
+                      x = xvec(1) - xa
+                      y = xvec(2) - ya
+                      z = xvec(3) - za
+
+                      rr_tmp = sqrt(x*x+y*y+z*z)
+
+                      if (rr_tmp <= rc) nloc = nloc + 1
+
+                   enddo
+                enddo
+             enddo
+          enddo
+       enddo
+       !  Update array of total number of non-local points per atom and
+       !  maximum size of non-local block associated with any atom.
+       nlatom(iat) = nloc
+    enddo                  ! iat = 1, ps_pot%natmi
+
+    mxnloc = maxval(nlatom)
+    mxnlm = 16
+    nrep = gvec%syms%ntrans
+
+    allocate(indw(mxnloc))
+    allocate(indr(mxnloc))
+    allocate(tran(mxnloc))
+    allocate(ffcc(mxnloc))
+    allocate(rnloc(3,mxnloc))
+    allocate(xyzr(4,mxnloc))
+    allocate(kph(mxnloc))
+    allocate(vywd(wfn%nmem,mxnlm))
+    allocate(tvywd(wfn%nmem,7))
+
+    npt = ps_pot%ns
+    ainv = one / ps_pot%par_a
+    binv = one / ps_pot%par_b
+    covera = ps_pot%par_c / ps_pot%par_a
+    rc = ps_pot%rcore
+    if (ps_pot%rs(npt-1) < rc) then
+       rc = ps_pot%rs(npt-1)
+    endif
+    rrmin = ps_pot%rs(2)
+    do iat = 1, ps_pot%natmi
+       if (mod(iat-1,w_grp%npes) /= w_grp%mygr + r_grp%mygr*w_grp%num) cycle
+       xa = ps_pot%ratm(1,iat)
+       ya = ps_pot%ratm(2,iat)
+       za = ps_pot%ratm(3,iat)
+       nloc = 0
+       ii = 0
+       do irp = 1, gvec%syms%ntrans
+          do mg = 1, gvec%nr
+             ii = ii + 1
+             call unfold(gvec%r(1,mg),gvec%syms%trans(1,1,irp),gvec%shift,gr)
+             do icellx = -nreplica(1),nreplica(1)
+                do icelly = -nreplica(2),nreplica(2)
+                   do icellz = -nreplica(3),nreplica(3)
+  !  Compute distance between point (or its replica if PBC) and atom.
+  !  If the point is inside non-local range:
+  !  1. Increase the non-local point counter, nloc, by one.
+  !  Update the four output arrays, indw, ratom,
+  !  with the grid point, its distance from the atom, the closest
+  !  radial grid point, and the fractional distance to the next grid
+  !  point (for extrapolation), respectively.
+  !  2. Store the cartesian coordinates of this point in rnloc,
+  !  without bringing it back to the initial cell (if PBC).
+
+                      uvec(1)=(gvec%shift(1) + gr(1)) * gvec%step(1) + &
+                           real(icellx,dp)*box_size(1)
+                      uvec(2)=(gvec%shift(2) + gr(2)) * gvec%step(2) + &
+                           real(icelly,dp)*box_size(2)
+                      uvec(3)=(gvec%shift(3) + gr(3)) * gvec%step(3) + &
+                           real(icellz,dp)*box_size(3)
+
+                      call dmatvec3('N',gvec%avec_norm,uvec,xvec)
+
+                      x = xvec(1) - xa
+                      y = xvec(2) - ya
+                      z = xvec(3) - za
+
+                      rr_tmp = sqrt(x*x+y*y+z*z)
+                      if (rr_tmp < rrmin)  rr_tmp = rrmin
+                      if (rr_tmp <= rc) then
+                         nloc = nloc + 1
+                         indw(nloc) = gvec%rindex(ii)
+                         tran(nloc) = gvec%rtrans(ii)
+
+                         npt = idint(binv * log(covera+ainv*rr_tmp))+1
+                         indr(nloc) = npt
+                         ffcc(nloc) = (rr_tmp - ps_pot%rs(npt)) / &
+                              (ps_pot%rs(npt+1) - ps_pot%rs(npt))
+
+                         rinv = one/rr_tmp
+                         xyzr(:,nloc) = (/ x, y, z, one /)
+                         xyzr(:,nloc) = xyzr(:,nloc) * rinv
+                         xyzr(4,nloc) = rr_tmp
+                         rnloc(:,nloc) = (/ x, y, z /)
+#ifdef CPLX
+                         phase = zero
+                         do idir = 1, gvec%per
+                            phase = phase + kcart(idir) * rnloc(idir,nloc)
+                         enddo
+                         kph(nloc) = cmplx(cos(phase),sin(phase))
+#else
+                         kph(nloc) = Zone
+#endif
+                      endif
+                   enddo
+                enddo
+             enddo
+          enddo
+       enddo
+       if (nloc /= nlatom(iat)) then
+          write(lastwords,*) ' ERROR in nonloc ',nloc,iat,ity,nlatom(iat)
+          call die(lastwords)
+       endif
+
+       ! Construct projector array for all non-local components and
+       ! multiply it with all wave-functions. Store result in vywd.
+       vywd = Zzero
+       do lp = 1, ps_pot%nlp
+          if (lp == ps_pot%loc) cycle
+          tvywd = Zzero
+          do nloc = 1, nlatom(iat)
+             call tesseral(lp,xyzr(1,nloc),one,vylmd,xdummy)
+             npt = indr(nloc)
+             vwr = ps_pot%vw(npt,lp) + ffcc(nloc) * &
+                (ps_pot%vw(npt+1,lp) - ps_pot%vw(npt,lp))
+             do ml = 1, 2 * lp - 1
+                vylmd(ml) = vwr * vylmd(ml)
+             enddo
+
+             mg = indw(nloc) - w_grp%offset
+             if ( mg <= 0  .or.  mg > w_grp%mydim ) cycle ! non-local row
+             itran = tran(nloc)
+             rw = rnloc(:,nloc)
+             do ist = 1, wfn%nmem
+                irp = wfn%jrep(0,wfn%imap(ist))
+                do ml = 1, 2 * lp - 1
+                   tvywd(ist,ml) = tvywd(ist,ml) + vylmd(ml) * &
+                        wfn%Zwf(mg,ist) * gvec%syms%chi(irp,itran) * kph(nloc)
+                enddo
+             enddo
+          enddo
+          do ist = 1, wfn%nmem
+             do ml = (lp-1)*(lp-1) + 1, lp*lp
+                vywd(ist,ml) = vywd(ist,ml) + tvywd(ist, ml - (lp-1)*(lp-1))
+             enddo
+          enddo
+       enddo
+
+       do ml = 1, ps_pot%nlp * ps_pot%nlp
+          do ic = 1, wfn%nmem
+             do iv = 1, wfn%nmem
+                ! Multiply by the normalization factor ekbi.
+                e_nl(iv,ic) = e_nl(iv,ic) + MYCONJG(vywd(iv,ml)) * &
+                     vywd(ic,ml) * ps_pot%ekbi(ml)
+             enddo
+          enddo
+       enddo
+    enddo                  ! iat = 1, ps_pot%natmi
+
+    deallocate(tvywd, vywd, kph, xyzr, rnloc)
+    deallocate(ffcc)
+    deallocate(tran, indr, indw)
+
+  end subroutine Zv_nloc
+  !===============================================================
+#ifdef CPLX
+end module psp_module
+#endif

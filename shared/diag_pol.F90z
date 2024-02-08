@@ -1,0 +1,310 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! For each q-vector and each representation, set up the TDLDA eigenvalue
+! problem and calculate eigenvalues/eigenvectors of the full polarizability
+! function. On exit, eigenvectors are stored columnwise in pol%Zv and
+! pol%Zv is distributed columnwise among PEs (i.e., PE0 has the first
+! few eigenvectors, PE1 has the next ones and so on).
+!
+! OUTPUT:
+!   pol%eig : TDLDA eigenvalues, global array
+!   pol%Zv : TDLDA eigenvectors, local array
+!   pol%lv = .true. (pol%Zv holds eigenvectors), global array
+!   pol%nn = kernel_p%nn : number of eigenpairs per processor, local array
+!   pol%ostr : TDLDA oscillator strength, global array
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zdiag_pol(kpt,kernel_p,pol,irp,iq,nspin,celvol,tamm_d,notrunc)
+
+  use typedefs
+  use mpi_module
+  implicit none
+#ifdef MPI
+  include 'mpif.h'
+#endif
+
+  ! arguments
+  integer, intent(in) :: nspin
+  type (kptinfo), intent(in) :: kpt
+  type (kernelinfo), intent(in) :: kernel_p
+  type (polinfo), intent(inout) :: pol
+  integer, intent(in) :: &
+       irp, &      ! current representation in Abelian group
+       iq          ! current q-vector
+  ! volume of periodic cell, referenced only in bulk (gvec%per = 3)
+  real(dp), intent(in) :: celvol
+  logical, intent(in) :: &
+       tamm_d, &   ! true if Tamm-Dancof is used, false otherwise
+       notrunc     ! true if Coulomb (Hartree) kernel is not truncated
+                   ! relevant only in bulk systems (gvec%per = 3)
+
+  ! local variables
+  real(dp) :: factd   ! spin degeneracy factor
+  ! TDLDA eigenvalues and squared roots
+  real(dp), allocatable :: sqrtel(:), eig_tmp(:)
+  ! counters
+  integer :: ipe, i1, i2, jj, irow, icol, pcol, ncol, ierr, isp
+  real(dp) :: tsec(2), occdif
+  SCALAR :: tmp_f, k_long
+  ! temporary array for oscillator strength
+  SCALAR, allocatable :: ostr_tmp(:,:)
+  ! external functions
+  SCALAR, external :: Zdot_u
+
+  !-------------------------------------------------------------------
+  ! Initialize parameters.
+  !
+  if (tamm_d) then
+     factd = two / real(nspin,dp) / real(kpt%nk,dp)
+  else
+     factd = four / real(nspin,dp) / real(kpt%nk,dp)
+  endif
+  pol%nn = kernel_p%nn
+  ncol = r_grp%npes * pol%nn
+
+  allocate(pol%Zv(pol%nn*r_grp%npes,pol%nn),stat=jj)
+  call alccheck('pol%zv','diag_pol',pol%nn*r_grp%npes*pol%nn,jj)
+  pol%Zv = Zzero
+  pol%lv = .true.
+
+  if (r_grp%master) then
+     write(6,'(/,a)') repeat('#',65)
+     write(6,'(a,a,i2)') ' Calculation of polarizability eigenvectors for', &
+          ' representation ', irp
+     write(6,'(a,i12)') ' number of pair transitions = ', pol%ntr
+     write(6,'(a,i12)') ' pair transitions per PE = ', pol%nn
+     write(6,'(a,/)') repeat('#',65)
+  endif
+
+  !-------------------------------------------------------------------
+  ! Start by storing the effective hamiltonian in pol%Zv
+  ! columns of pol%Zv are distributed among PEs
+  ! eigenvectors are stored columnwise in pol%Zv (first column has
+  !  first eigenvector, second column has second, etc.)
+  !   irow : row index
+  !   icol : global column index
+  !   pcol : local column index
+  !
+  !
+  ! Diagonal part: ( E_c - E_v )
+  !
+  do irow = 1,pol%ntr
+     i1 = pol%tr(1,irow)
+     i2 = pol%tr(2,irow)
+     icol = irow
+     ipe = int((icol-1)/pol%nn)
+     if (ipe /= r_grp%inode) cycle
+     pcol = mod(icol-1,pol%nn) + 1
+     isp = 1
+     if (irow > pol%n_up) isp = 2
+     occdif = kpt%wfn(isp,pol%tr(3,irow))%occ0(i1) - kpt%wfn(isp,pol%tr(4,irow))%occ0(i2)
+     pol%Zv(irow,pcol) = kpt%wfn(isp,pol%tr(4,irow))%e1(i2) - kpt%wfn(isp,pol%tr(3,irow))%e1(i1)
+     pol%Zv(irow,pcol) = pol%Zv(irow,pcol)/occdif
+  enddo
+  !call Zsave_pol(pol,4000,irp,iq)
+  !-------------------------------------------------------------------
+  ! Off-diagonal part: kernel_p(i1,i2,i3,i4) * 2 * 2 / nspin
+  !   one factor of 2 from spin
+  !   another factor of 2 from the positive/negative energy components
+  !   (if Tamm-Dancoff approximation is not used)
+  !
+  do pcol = 1, pol%nn
+     icol = pcol + r_grp%inode*pol%nn
+     if (icol > pol%ntr) cycle
+     tmp_f = Zone*factd
+     call Zaxpy(pol%ntr,tmp_f,kernel_p%Zm(1,pcol),1,pol%Zv(1,pcol),1)
+  enddo
+  !call Zsave_pol(pol,5000,irp,iq)
+  !-------------------------------------------------------------------
+  ! If TDLDA is calculated in a periodic environment, may need to
+  ! remove the long-wavelength part of Coulomb interaction. Use
+  ! dipole matrix elements:
+  ! kernel_long(i1,i2,i3,i4) = ( 4*pi * e^2 / V_cell ) *
+  !                            conjg( dipole(i1,i2) ) * dipole(i3,i4)
+  ! Additional factor of 3 below comes from the angular average (assume
+  ! isotropic crystal).
+  ! In 1-dimensional and 2-dimensional materials, the long-wavelength
+  ! part is small because the overlap matrix elements involving pairs of
+  ! orbitals (i1,i2) and (i3,i4) are proportional to the length of the
+  ! "q = 0" vector. In the limit of optical momenta, q << 1 and the
+  ! long-wavelength  part vanishes, even with divergent Coulomb
+  ! interactions.
+  ! 
+  if (notrunc) then
+     if (peinf%master) write(6,'(/,a,/,a,/,a,/)') repeat('*',65), &
+          ' WARNING!!!! Keeping the long-wavelength exchange.', &
+          repeat('*',65)
+     do pcol = 1, pol%nn
+        icol = pcol + r_grp%inode * pol%nn
+        if (icol > pol%ntr) cycle
+        do irow = 1, pol%ntr
+           k_long = Zzero
+           do jj = 1, 3
+              k_long = k_long + MYCONJG(pol%Zdipole(irow,jj)) * &
+                   pol%Zdipole(icol,jj)
+           enddo
+           k_long = k_long * eight * pi / celvol / three * factd
+           pol%Zv(irow,pcol) = pol%Zv(irow,pcol) + k_long
+        enddo
+     enddo
+  endif
+  !call Zsave_pol(pol,6000,irp,iq)
+  !-------------------------------------------------------------------
+  ! Without Tamm-Dancof, must include energy factors: 
+  !            Q = sqrt(E_2 - E_1) * sqrt(occ_2 - occ_1) * 
+  !                              K * 
+  !                sqrt(E_4 - E_3) * sqrt(occ_4 - occ_3)
+  !
+  if (.not. tamm_d) then
+     allocate(sqrtel(ncol))
+     sqrtel = zero
+     do jj = 1, pol%ntr
+        isp = 1
+        if (jj > pol%n_up) isp = 2
+        i1 = pol%tr(1,jj)
+        i2 = pol%tr(2,jj)
+        sqrtel(jj) = kpt%wfn(isp,pol%tr(4,jj))%e1(i2) - kpt%wfn(isp,pol%tr(3,jj))%e1(i1)
+        occdif = kpt%wfn(isp,pol%tr(3,jj))%occ0(i1) - kpt%wfn(isp,pol%tr(4,jj))%occ0(i2)
+        sqrtel(jj) = sqrt(sqrtel(jj) * occdif)
+     enddo
+     !
+     ! energy factors to the right...
+     !
+     do pcol = 1, pol%nn
+        icol = pcol + r_grp%inode*pol%nn
+        if (icol <= pol%ntr) call Zscal(ncol,sqrtel(icol),pol%Zv(1,pcol),1)
+     enddo
+     !
+     ! ...and to the left
+     !
+     do irow = 1, pol%ntr
+        call Zscal(pol%nn,sqrtel(irow),pol%Zv(irow,1),ncol)
+     enddo
+  endif
+  !-------------------------------------------------------------------
+  ! If the number of TDLDA eigenstates is not distributed evenly
+  ! across PEs, we need to pad pol%Zv with empty columns/rows; add
+  ! a diagonal part with negative numbers on diagonal.
+  !
+  do irow = pol%ntr + 1, pol%nn*r_grp%npes
+     icol = irow
+     ipe = int((icol-1)/pol%nn)
+     if (ipe /= r_grp%inode) cycle
+     pcol = mod(icol-1,pol%nn) + 1
+     pol%Zv(irow,pcol) = -Zone
+  enddo
+  !call Zsave_pol(pol,7000,irp,iq)
+  !
+  ! Change sign of Hamiltonian so that padded eigenstates go to the end.
+  !
+  tmp_f = -Zone
+  call Zscal(ncol*pol%nn,tmp_f,pol%Zv,1)
+  !
+  ! Call eigensolver, scalapack interface.
+  !
+  call stopwatch(r_grp%master,'diag_pol: Calling eigensolver')
+  call timacc(12,1,tsec)
+  allocate(eig_tmp(pol%nn*r_grp%npes))
+  call Zeigensolver(r_grp%master,r_grp%inode,r_grp%npes, &
+       r_grp%comm,pol%nn,pol%nn*r_grp%npes,pol%Zv,eig_tmp,ierr)
+  call dcopy(pol%ntr,eig_tmp,1,pol%eig,1)
+  deallocate(eig_tmp)
+  if (ierr /= 0) call die(' ')
+  call timacc(12,2,tsec)
+  call stopwatch(r_grp%master,'diag_pol: eigensolver done')
+#ifdef DEBUG
+  if (r_grp%master) then
+     write(6,*) ' EIGENVALUES ',minval(pol%eig),maxval(pol%eig),sum(pol%eig)
+  endif
+#endif
+  !-------------------------------------------------------------------
+  ! Revert sign change in Hamiltonian. After that, padded eigenstates
+  ! will have negative eigenvalues and are the last ones stored in memory.
+  !
+  pol%eig = -pol%eig
+#ifdef DEBUG
+  if (r_grp%master) then
+     write(6,*) ' EIGENVALUES ',minval(pol%eig),maxval(pol%eig),sum(pol%eig)
+  endif
+#endif
+  !-------------------------------------------------------------------
+  ! Upright eigenvectors. For each eigenvector, set the phase of its highest
+  ! component to zero.
+  !
+  do pcol = 1, pol%nn
+     icol = pcol + r_grp%inode*pol%nn
+     if (icol > pol%ntr) cycle
+     tmp_f = Zzero
+     do irow = 1, pol%ntr
+        if (abs(tmp_f) < abs(pol%Zv(irow,pcol))) tmp_f = pol%Zv(irow,pcol)
+     enddo
+     tmp_f = tmp_f/abs(tmp_f)
+     call Zscal(ncol,tmp_f,pol%Zv(1,pcol),1)
+  enddo
+  call stopwatch(r_grp%master,'diag_pol: energy factors included in eigenvectors')
+  !-------------------------------------------------------------------
+  ! Without Tamm-Dancof, take square root of eingenvalues and include
+  ! energy factors.
+  !
+  if (.not. tamm_d) then
+     do icol = 1, pol%ntr
+        pol%eig(icol) = sqrt(pol%eig(icol))
+     enddo
+#ifdef DEBUG
+     if (r_grp%master) then
+        write(6,*) ' EIGENVALUES stats: ',minval(pol%eig),maxval(pol%eig),sum(pol%eig)
+     endif
+#endif
+     do irow = 1, pol%ntr
+        tmp_f = Zone * sqrtel(irow)
+        call Zscal(pol%nn,tmp_f,pol%Zv(irow,1),ncol)
+     enddo
+     do pcol = 1, pol%nn
+        icol = pcol + r_grp%inode*pol%nn
+        if (icol > pol%ntr) cycle
+        tmp_f = Zone / sqrt(pol%eig(icol))
+        call Zscal(ncol,tmp_f,pol%Zv(1,pcol),1)
+     enddo
+     deallocate(sqrtel)
+  endif
+  !-------------------------------------------------------------------
+  ! Calculate oscillator strength matrix elements from polarizability
+  ! eigenvectors.
+  ! Matrix elements for eigenstate i are <i|r|Ground> for each
+  ! of the cartesian directions: x, y, z.
+  !
+  allocate(ostr_tmp(pol%ntr,3))
+  ostr_tmp = Zzero
+  pol%ostr = zero
+  do pcol = 1, pol%nn
+     icol = pcol + r_grp%inode*pol%nn
+     if (icol > pol%ntr) cycle
+     do jj = 1, 3
+        ostr_tmp(icol,jj) = Zdot_u(pol%ntr,pol%Zv(1,pcol),1,pol%Zdipole(1,jj),1)
+     enddo
+  enddo
+  call Zpsum(pol%ntr*3,r_grp%npes,r_grp%comm,ostr_tmp)
+  do icol = 1, pol%ntr
+     do jj = 1, 3
+        pol%ostr(icol,jj) = two * pol%eig(icol) * abs(ostr_tmp(icol,jj)**2)
+     enddo
+  enddo
+  deallocate(ostr_tmp)
+
+  if (r_grp%master) then
+     write(6,*) ' Lowest energy eigenvalues in polarizability (eV): '
+     write(6,'(f16.6)') (pol%eig(jj)*ryd,jj=pol%ntr, &
+          pol%ntr-min(3,pol%ntr)+1,-1)
+  endif
+#ifdef DEBUG
+  if (r_grp%master) then
+     write(6,*) ' EIGENVALUES ',minval(pol%eig),maxval(pol%eig),sum(pol%eig)
+  endif
+#endif
+
+end subroutine Zdiag_pol
+!===================================================================

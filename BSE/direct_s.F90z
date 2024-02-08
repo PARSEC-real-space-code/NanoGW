@@ -1,0 +1,266 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Calculates the direct (screened interaction) kernel and includes
+! that in the BSE Hamiltonian. Output is updated Hamiltonian bsepol(:)%v.
+! The screened kernel has two parts. One part is the correlation,
+! the V*V term of Eq. 37 in Tiago & Chelikowsky PRB (2006). The second
+! part is the vertex, see Eq. 38 in Tiago & Chelikowsky PRB (2006).
+!
+! INPUT:
+!    bsepol%v : input BSE Hamiltonian (local, column-distributed)
+!
+! OUTPUT:
+!    bsepol%v : BSE Hamiltonian with added screened interaction
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zdirect_s(kpt,pol,bsepol,k_cc,k_vv, &
+     nrep,nspin,eref,ecutb2,xsum,pot_c_v,pot_f_v,pot_c_c,pot_f_c)
+
+  use typedefs
+  use mpi_module
+  implicit none
+
+  ! arguments
+  ! k-points and electron wave-functions
+  type (kptinfo), intent(in) :: kpt
+  ! TDLDA polarizability
+  type (polinfo), intent(in) :: pol
+  ! BSE polarizability
+  type (polinfo), intent(inout) :: bsepol(nrep)
+  ! direct kernels for unoccupied and occupied orbitals respectively
+  type (kernelinfo), intent(in) :: k_cc, k_vv
+  ! number of representations (Abelian group) and number of spins
+  integer, intent(in) :: nrep, nspin
+  real(dp), intent(in) :: &
+       eref, &        ! energy reference where kernel is calculated
+       ecutb2, &      ! resolution in energy denominators
+       xsum           ! sum rule
+  SCALAR, dimension(pol%nn,k_vv%ncol), intent(in) :: &
+       pot_c_v, &     ! V_cc' potential in Eq. 37 and 38
+       pot_f_v        ! F_cc' potential in Eq. 37 and 38
+  SCALAR, dimension(pol%nn,k_cc%ncol), intent(in) :: &
+       pot_c_c, &     ! V_vv' potential in Eq. 37 and 38
+       pot_f_c        ! F_vv' potential in Eq. 37 and 38
+
+  ! local variables
+  logical :: dynamic, lflagc, lflagv
+  integer :: irp, iv, ic, ik, ivp, icp, ikp, icc, ivv, irow, icol, pcol, &
+       isp_c, isp_r, isp_vv, isp_cc, ipol, jj, nmat
+  real(dp) :: efac1, efac2, efac, ev, ec, evp, ecp, occ_vc, occ_vcp
+  SCALAR :: rdummy, rsum
+  SCALAR, dimension(:), allocatable :: hrow
+
+  if (r_grp%master) write(6,*) 'DIRECT , xsum = ', xsum
+  !-------------------------------------------------------------------
+  ! If reference energy is negative, assume static limit.
+  !
+  if (eref <= zero) then
+     dynamic = .false.
+  else
+     dynamic = .true.
+  endif
+  efac1 = zero
+  efac2 = zero
+
+  do irp = 1, nrep
+     !-------------------------------------------------------------------
+     ! Work first with K^AA part.
+     !
+     do icol = 1, bsepol(irp)%ntr
+        isp_c = 1
+        if (icol > bsepol(irp)%n_up) isp_c = 2
+
+        ivp = bsepol(irp)%tr(1,icol)
+        icp = bsepol(irp)%tr(2,icol)
+        ikp = bsepol(irp)%tr(3,icol)
+        if (dynamic) then
+           ecp = kpt%wfn(isp_c,ikp)%eqpc(kpt%wfn(isp_c,ikp)%cmapi(icp))
+           evp = kpt%wfn(isp_c,ikp)%eqpv(kpt%wfn(isp_c,ikp)%vmapi(ivp))
+        endif
+
+        allocate(hrow(bsepol(irp)%ntr))
+        hrow = Zzero
+        do irow = 1, bsepol(irp)%ntr
+           isp_r = 1
+           if (irow > bsepol(irp)%n_up) isp_r = 2
+           ! direct part is spin-diagonal
+           if (isp_c /= isp_r) cycle
+
+           iv = bsepol(irp)%tr(1,irow)
+           ic = bsepol(irp)%tr(2,irow)
+           ik = bsepol(irp)%tr(3,irow)
+
+           if (dynamic) then
+              ec = kpt%wfn(isp_r,ik)%eqpc(kpt%wfn(isp_r,ik)%cmapi(ic))
+              ev = kpt%wfn(isp_r,ik)%eqpv(kpt%wfn(isp_r,ik)%vmapi(iv))
+              efac1 = (ev - ecp + eref)*xsum
+              efac2 = (evp - ec + eref)*xsum
+           endif
+
+           lflagc = .false.
+           lflagv = .false.
+           do icc = 1, k_cc%ncol
+              isp_cc = 1
+              if (icc > k_cc%ncol_up) isp_cc = 2
+              if (isp_c /= isp_cc) cycle
+!ccm Should revise the matching of indices
+              if ( ic == k_cc%col(1,icc) .and. icp == k_cc%col(2,icc) &
+                   .and. ikp == k_cc%col(3,icc) ) then
+                 lflagc = .true.
+                 exit
+              endif
+           enddo
+           do ivv = 1, k_vv%ncol
+              isp_vv = 1
+              if (ivv > k_vv%ncol_up) isp_vv = 2
+              if (isp_r /= isp_vv) cycle
+              if ( iv == k_vv%col(1,ivv) .and. ivp == k_vv%col(2,ivv) &
+                   .and. ikp == k_vv%col(3,ivv) ) then
+                 lflagv = .true.
+                 exit
+              endif
+           enddo
+           if (.not. (lflagc .and. lflagv) ) cycle
+
+           rsum = Zzero
+           do jj = 1, pol%nn
+              ipol = jj + r_grp%inode*pol%nn
+              if (ipol > pol%ntr) cycle
+              efac = (pol%eig(ipol)-efac1)/( (pol%eig(ipol)-efac1)**2 + ecutb2 ) + &
+                   (pol%eig(ipol)-efac2)/( (pol%eig(ipol)-efac2)**2 + ecutb2 )
+              rdummy = two*pot_c_v(jj,ivv)*pot_c_c(jj,icc) + &
+                   pot_f_c(jj,icc)*pot_c_v(jj,ivv) + &
+                   pot_c_c(jj,icc)*pot_f_v(jj,ivv)
+              rsum = rsum + rdummy*efac
+           enddo
+           hrow(irow) = rsum
+        enddo
+        call Zpsum(bsepol(irp)%ntr,r_grp%npes,r_grp%comm,hrow)
+        !
+        ! Spin multiplicity factor.
+        !
+        hrow = hrow / real(nspin,dp) / real(kpt%nk,dp)
+        !
+        ! Update local Hamiltonian.
+        !
+        pcol = icol - r_grp%inode*bsepol(irp)%nn
+        if (pcol > 0 .and. pcol <= bsepol(irp)%nn) then
+           occ_vcp = sqrt(kpt%wfn(isp_c,ikp)%occ1(ivp) - kpt%wfn(isp_c,ikp)%occ1(icp))
+           do irow = 1, bsepol(irp)%ntr
+              isp_r = 1
+              if (irow > bsepol(irp)%n_up) isp_r = 2
+              occ_vc = sqrt(kpt%wfn(isp_r,ik)%occ1(iv) - kpt%wfn(isp_r,ik)%occ1(ic))
+              bsepol(irp)%Zv(irow,pcol) = bsepol(irp)%Zv(irow,pcol) + &
+                   hrow(irow)*occ_vc*occ_vcp
+           enddo
+        endif
+        deallocate(hrow)
+     enddo
+
+     !-------------------------------------------------------------------
+     ! And now deal with with K^BB part.
+     !
+     nmat = bsepol(irp)%nn * r_grp%npes
+     do icol = 1, bsepol(irp)%ntr
+        isp_c = 1
+        if (icol > bsepol(irp)%n_up) isp_c = 2
+
+        ivp = bsepol(irp)%tr(1,icol)
+        icp = bsepol(irp)%tr(2,icol)
+        ikp = bsepol(irp)%tr(3,icol)
+        if (dynamic) then
+           ecp = kpt%wfn(isp_c,ikp)%eqpc(kpt%wfn(isp_c,ikp)%cmapi(icp))
+           evp = kpt%wfn(isp_c,ikp)%eqpv(kpt%wfn(isp_c,ikp)%vmapi(ivp))
+        endif
+
+        allocate(hrow(bsepol(irp)%ntr))
+        hrow = Zzero
+        do irow = 1, bsepol(irp)%ntr
+           isp_r = 1
+           if (irow > bsepol(irp)%n_up) isp_r = 2
+           ! direct part is spin-diagonal
+           if (isp_c /= isp_r) cycle
+
+           iv = bsepol(irp)%tr(1,irow)
+           ic = bsepol(irp)%tr(2,irow)
+           ik = bsepol(irp)%tr(3,irow)
+
+           if (dynamic) then
+!ccm
+              ec = kpt%wfn(isp_r,ik)%eqpc(kpt%wfn(isp_r,ik)%cmapi(ic))
+              ev = kpt%wfn(isp_r,ik)%eqpv(kpt%wfn(isp_r,ik)%vmapi(iv))
+              efac1 = (ev - ecp + eref)*xsum
+              efac2 = (evp - ec + eref)*xsum
+!              efac1 = (ecp - ec)*xsum
+!              efac2 = (ev - evp)*xsum
+!ccm
+           endif
+
+           lflagc = .false.
+           lflagv = .false.
+           do icc = 1, k_cc%ncol
+              isp_cc = 1
+              if (icc > k_cc%ncol_up) isp_cc = 2
+              if (isp_c /= isp_cc) cycle
+              if ( ic == k_cc%col(1,icc) .and. icp == k_cc%col(2,icc) &
+                   .and. ikp == k_cc%col(3,icc) ) then
+                 lflagc = .true.
+                 exit
+              endif
+           enddo
+           do ivv = 1, k_vv%ncol
+              isp_vv = 1
+              if (ivv > k_vv%ncol_up) isp_vv = 2
+              if (isp_r /= isp_vv) cycle
+              if ( iv == k_vv%col(1,ivv) .and. ivp == k_vv%col(2,ivv) &
+                   .and. ikp == k_vv%col(3,ivv) ) then
+                 lflagv = .true.
+                 exit
+              endif
+           enddo
+           if (.not. (lflagc .and. lflagv) ) cycle
+
+           rsum = Zzero
+           do jj = 1, pol%nn
+              ipol = jj + r_grp%inode*pol%nn
+              if (ipol > pol%ntr) cycle
+              efac = (pol%eig(ipol)-efac1)/( (pol%eig(ipol)-efac1)**2 + ecutb2 ) + &
+                   (pol%eig(ipol)-efac2)/( (pol%eig(ipol)-efac2)**2 + ecutb2 )
+              rdummy = two*pot_c_v(jj,ivv)*pot_c_c(jj,icc) + &
+                   pot_f_c(jj,icc)*pot_c_v(jj,ivv) + &
+                   pot_c_c(jj,icc)*pot_f_v(jj,ivv)
+              rsum = rsum + rdummy*efac
+           enddo
+           hrow(irow) = rsum
+        enddo
+        call Zpsum(bsepol(irp)%ntr,r_grp%npes,r_grp%comm,hrow)
+        !
+        ! Spin multiplicity factor.
+        !
+        hrow = hrow / real(nspin,dp) / real(kpt%nk,dp)
+        !
+        ! Update local Hamiltonian.
+        !
+        pcol = icol - r_grp%inode*bsepol(irp)%nn
+        if (pcol > 0 .and. pcol <= bsepol(irp)%nn) then
+           occ_vcp = sqrt(kpt%wfn(isp_c,ikp)%occ1(ivp) - kpt%wfn(isp_c,ikp)%occ1(icp))
+           do irow = 1, bsepol(irp)%ntr
+              isp_r = 1
+              if (irow > bsepol(irp)%n_up) isp_r = 2
+              occ_vc = sqrt(kpt%wfn(isp_r,ik)%occ1(iv) - kpt%wfn(isp_r,ik)%occ1(ic))
+              bsepol(irp)%Zv(irow+nmat,pcol+bsepol(irp)%nn) = &
+                   bsepol(irp)%Zv(irow+nmat,pcol+bsepol(irp)%nn) - &
+                   hrow(irow)*occ_vc*occ_vcp
+           enddo
+        endif
+        deallocate(hrow)
+     enddo
+
+  enddo
+
+end subroutine Zdirect_s
+!===================================================================

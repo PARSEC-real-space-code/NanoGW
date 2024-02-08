@@ -1,0 +1,706 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Calculate self-energy and quasiparticle Hamiltonian for each
+! SCGW iteration.
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!---------------------------------------------------------------
+subroutine Zcalculate_sigma(nspin,nkpt,n_it,it_scf,nr_buff,static_type, &
+     sig_en,dft_code,chkpt_in,gvec,kpt,qpt,k_c,k_p,pol,sig_in, &
+     sig,q_p,nolda,tamm_d,writeqp,snorm,cohsex,hqp_sym,lstop, &
+     ecuts,qpmix,sig_cut,max_sig,&
+     isdf_in, doisdf)
+
+  use typedefs
+  use mpi_module
+  implicit none
+#ifdef MPI
+  include 'mpif.h'
+#endif
+
+  ! arguments
+  integer, intent(in) :: &
+       nspin, &    ! number of spin channels
+       nkpt, &     ! number of k-points where self-energy is computed
+       n_it, &     ! number of SCGW iterations
+       it_scf, &   ! iteration counter
+       nr_buff, &  ! number of grid points where static potentials are computed
+       sig_en, &   ! number of energy values where self-energy is computed
+       dft_code, & ! choice of DFT code
+       static_type ! type of static correction for correlation self energy
+  integer, intent(inout) :: chkpt_in ! checkpoint flag
+  ! real-space grid
+  type (gspace), intent(inout) :: gvec
+  ! k-points and wavefunctions, q-space in TDLDA
+  type (kptinfo), intent(inout) :: kpt
+  type (qptinfo), intent(inout) :: qpt
+  type (ISDF), intent(inout) :: isdf_in
+  logical, intent(in) :: doisdf
+  type (kernelinfo), dimension(gvec%syms%ntrans,qpt%nk), intent(inout) :: &
+       k_c, &        ! kernel for correlation, vertex
+       k_p           ! kernel for TDLDA
+  ! TDLDA polarizability
+  type (polinfo), dimension(gvec%syms%ntrans,qpt%nk), intent(inout) :: pol
+  ! input self-energy data
+  type (siginfo), intent(inout) :: sig_in
+  ! self-energy data
+  type (siginfo), dimension(nspin,nkpt), intent(inout) :: sig
+  ! quasi-particle data
+  type (qpinfo), dimension(gvec%syms%ntrans,nspin,nkpt), intent(inout) :: q_p
+
+  logical, intent(in) :: &
+       nolda, &      ! true if LDA kernel is not used
+       tamm_d, &     ! true if Tamm-Dancof approximation is used
+       writeqp, &    ! true if QP wavefunctions are printed in file parsec_qp.dat
+       snorm, &      ! true if sum rule is renormalized
+       cohsex, &     ! true if self-energy is computed within the COHSEX approximation
+       hqp_sym       ! true if QP Hamiltonian is symmetrized
+  ! abort flag, true if calculation aborted abnormally
+  logical, intent(out) :: lstop
+
+  real(dp), intent(in) :: &
+       ecuts, &      ! resolution in energy denominators, in Ry
+       qpmix, &      ! mixing parameter in SCGW
+       sig_cut       ! cut-off in self-energy corrections
+  ! maximum amplitude of self-energy correction
+  real(dp), intent(out) :: max_sig
+  ! Additional input parameters for ISDF method
+
+
+  ! local variables
+  character (len=100) :: file_name
+
+  integer, parameter :: pol_unit = 51  ! unit for pol_diag.dat file
+  logical :: staticcorr
+  integer :: ii, jj, irp, jrp, iq, ik, jk,  isp,  isig, &
+       info, chkpt, neig_qp
+  real(dp) :: tsec(2), xsum, rtmp, epsinv
+  integer, allocatable :: iord(:)
+
+  if (peinf%master) then
+     write(6,'(/,a,/)') repeat('*',65)
+     write(6,*) ' Start self-consistent iteration ',it_scf,' out of ', n_it
+     write(6,*)
+  endif
+
+  if (sig_in%xc == XC_GW) then
+     !
+     ! Calculate TDLDA polarizability.
+     !
+     ! Define checkpoint flag:
+     ! chkpt < 0 : ignore checkpointable data (files pol_diag.dat and 
+     !             sigma.chkp.dat).
+     !
+     chkpt = chkpt_in
+     call Zcalculate_tdlda(gvec,kpt,qpt,k_p,pol,nspin,chkpt, &
+          tamm_d,nolda,.false.,.false.,.false.,.false.,xsum,epsinv, &
+          isdf_in)
+     !
+     ! Rescale sum rule.
+     if (.not. snorm) xsum = one
+     if (cohsex) xsum = zero
+     !
+     ! Calculate static potentials using the q=0 polarizability.
+     !
+     do iq = 1, qpt%nk
+        if (qpt%zerok(iq)) exit
+     enddo
+     if (nr_buff > 0) then
+        if (peinf%master) inquire(file='wpol0.dat',exist=lstop)
+#ifdef MPI
+        call MPI_BCAST(lstop,1,MPI_LOGICAL,peinf%masterid,peinf%comm,info)
+#endif
+        if (chkpt_in == -1 .or. (.not. lstop)) then
+           if ( doisdf ) then
+             if (peinf%master) write(6,*) " call wpol0_isdf() "
+             call timacc(5,1,tsec)
+             call Zwpol0_isdf(gvec,kpt,qpt,pol(:,iq),k_p(:,iq),nolda,gvec%syms%ntrans,nspin,iq,nr_buff,isdf_in)
+             call timacc(5,2,tsec)
+             if (peinf%master) write(6,*) " wpol0_isdf() done "
+           else ! no isdf
+             if (peinf%master) write(6,*) " call wpol0() "
+             call timacc(5,1,tsec)
+             call Zwpol0(gvec,kpt,qpt,pol(:,iq),k_p(:,iq),nolda,gvec%syms%ntrans,nspin,iq,nr_buff)
+             call timacc(5,2,tsec)
+             if (peinf%master) write(6,*) " wpol0() done "
+           endif
+        endif
+     endif
+  endif
+  lstop = .false.
+  if (sig_in%ndiag_s + sig_in%noffd_s == 0) then
+     lstop = .true.
+     return
+  endif
+
+  !-------------------------------------------------------------------
+  ! Prepare to calculate self-energy.
+  !
+  staticcorr = .false.
+
+  do ik = 1, nkpt
+     do isp = 1, nspin
+        if (sig(isp,ik)%ndiag_s > 0) then
+           sig(isp,ik)%xdiag = zzero
+           sig(isp,ik)%scsdiag = zzero
+        endif
+        if (sig(isp,ik)%noffd_s > 0) then
+           sig(isp,ik)%xoffd = zzero
+           sig(isp,ik)%scsoffd = zzero
+        endif
+        if (sig_in%xc == XC_GW) then
+           if (sig(isp,ik)%ndiag > 0) then
+              sig(isp,ik)%scdiag = zzero
+              sig(isp,ik)%sexdiag = zzero
+              sig(isp,ik)%sgdiag = zzero
+           endif
+           if (sig(isp,ik)%ndiag_s > 0) sig(isp,ik)%sgsdiag = zzero
+           if (sig(isp,ik)%noffd > 0) then
+              sig(isp,ik)%scoffd = zzero
+              sig(isp,ik)%sgoffd = zzero
+           endif
+           if (sig(isp,ik)%noffd_s > 0) sig(isp,ik)%sgsoffd = zzero
+        endif
+     enddo
+  enddo
+
+  !-------------------------------------------------------------------
+  ! Search for checkpoint file.
+  !
+  chkpt = chkpt_in
+  if (sig_in%xc == XC_GW) then
+     chkpt = chkpt_in
+     if (peinf%master) call read_sigma(nkpt,nspin,sig_in,sig,chkpt)
+#ifdef MPI
+     do ik = 1, nkpt
+        do isp = 1, nspin
+           call MPI_BCAST(chkpt,1, &
+                MPI_INTEGER,peinf%masterid,peinf%comm,info)
+           if (sig(isp,ik)%ndiag_s > 0) &
+                call MPI_BCAST(sig(isp,ik)%xdiag,sig(isp,ik)%ndiag_s, &
+                MPI_DOUBLE_COMPLEX,peinf%masterid,peinf%comm,info)
+           if (sig(isp,ik)%noffd_s > 0) &
+                call MPI_BCAST(sig(isp,ik)%xoffd,sig(isp,ik)%noffd_s, &
+                MPI_DOUBLE_COMPLEX,peinf%masterid,peinf%comm,info)
+           if (sig(isp,ik)%ndiag_s > 0) then
+              call MPI_BCAST(sig(isp,ik)%scsdiag,sig(isp,ik)%ndiag_s, &
+                   MPI_DOUBLE_COMPLEX,peinf%masterid,peinf%comm,info)
+              call MPI_BCAST(sig(isp,ik)%sgsdiag,sig(isp,ik)%ndiag_s, &
+                   MPI_DOUBLE_COMPLEX,peinf%masterid,peinf%comm,info)
+           endif
+           if (sig(isp,ik)%ndiag > 0) then
+              call MPI_BCAST(sig(isp,ik)%scdiag,2*sig_in%nen*sig(isp,ik)%ndiag, &
+                   MPI_DOUBLE_COMPLEX,peinf%masterid,peinf%comm,info)
+              call MPI_BCAST(sig(isp,ik)%sexdiag,2*sig_in%nen*sig(isp,ik)%ndiag, &
+                   MPI_DOUBLE_COMPLEX,peinf%masterid,peinf%comm,info)
+              call MPI_BCAST(sig(isp,ik)%sgdiag,2*sig_in%nen*sig(isp,ik)%ndiag, &
+                   MPI_DOUBLE_COMPLEX,peinf%masterid,peinf%comm,info)
+           endif
+           if (sig(isp,ik)%noffd_s > 0) then
+              call MPI_BCAST(sig(isp,ik)%scsoffd,sig(isp,ik)%noffd_s, &
+                   MPI_DOUBLE_COMPLEX,peinf%masterid,peinf%comm,info)
+              call MPI_BCAST(sig(isp,ik)%sgsoffd,sig(isp,ik)%noffd_s, &
+                   MPI_DOUBLE_COMPLEX,peinf%masterid,peinf%comm,info)
+           endif
+           if (sig(isp,ik)%noffd > 0) then
+              call MPI_BCAST(sig(isp,ik)%scoffd,4*sig(isp,ik)%noffd, &
+                   MPI_DOUBLE_COMPLEX,peinf%masterid,peinf%comm,info)
+              call MPI_BCAST(sig(isp,ik)%sgoffd,4*sig(isp,ik)%noffd, &
+                   MPI_DOUBLE_COMPLEX,peinf%masterid,peinf%comm,info)
+           endif
+        enddo
+     enddo
+#endif
+  endif
+
+  if (chkpt >= (2*qpt%nk + 1) * gvec%syms%ntrans) goto 23
+
+  !-------------------------------------------------------------------
+  ! Calculate bare exchange part of self-energy.
+  !
+  if (chkpt < (qpt%nk + 1) * gvec%syms%ntrans) then
+     call stopwatch(r_grp%master,' Calling exchange ')
+     do ik = 1, nkpt
+        do isp = 1, nspin
+           jk = sig(isp,ik)%indxk
+           call timacc(6,1,tsec)
+           if (sig_in%xc == XC_GW .or. sig_in%xc == XC_HF .or. &
+                sig_in%xc == XC_B3LYP) &
+                call Zfock_exchange(gvec,kpt,sig(isp,ik),isp,jk)
+           if (sig_in%xc == XC_B3LYP .or. sig_in%xc == XC_LDA_CA .or. &
+                sig_in%xc == XC_GGA_PBE .or. sig_in%xc == XC_GGA_BLYP) &
+                call Zmodel_exchange(gvec,kpt,sig(isp,ik),nspin,isp,jk, &
+                sig_in%xc,gvec%syms%ntrans)
+           call timacc(6,2,tsec)
+        enddo
+     enddo
+     if (r_grp%master) call save_sigma(nkpt,nspin,sig_in,sig)
+
+     chkpt = (qpt%nk + 1) * gvec%syms%ntrans
+
+     if (peinf%master .and. sig_in%xc == XC_GW) &
+          call write_sigma(nkpt,nspin,kpt,sig_in,sig,chkpt)
+  endif
+
+  if (sig_in%xc == XC_GW) then
+     !-------------------------------------------------------------------
+     ! Calculate correlation and vertex. Must reset the file with
+     ! polarizability eigenvectors.
+     !
+     if (r_grp%master) then
+        open(pol_unit,file='pol_diag.dat',form='unformatted')
+        rewind(pol_unit)
+        read(pol_unit)
+        read(pol_unit)
+     endif
+
+     do iq = 1, qpt%nk
+        call stopwatch(peinf%master, "before call gw_correlation")
+        do jrp = 1, gvec%syms%ntrans/r_grp%num
+           irp = r_grp%g_rep(jrp)
+           if ( (chkpt-(qpt%nk+iq)*gvec%syms%ntrans >= irp) ) cycle
+           call Zgw_correlation(gvec,kpt,qpt,k_c(irp,iq),pol(irp,iq), &
+                sig_in,sig,nspin,nkpt,irp, &
+                pol_unit,k_p(irp,iq)%nn,qpt%nk,iq,sig_en,nolda,xsum, &
+                isdf_in)
+        enddo
+        call stopwatch(peinf%master, "after call gw_correlation")
+#ifdef MPI
+        !-------------------------------------------------------------------
+        ! Since the polarizability representations are distributed, the PEs
+        ! must share data.
+        !
+        do ik = 1, nkpt
+           do isp = 1, nspin
+              if (r_grp%master) then
+                 ii = sig(isp,ik)%ndiag_s
+                 if (ii > 0 ) then
+                    call zpsum(ii,r_grp%num,r_grp%m_comm,sig(isp,ik)%scsdiag)
+                    call zpsum(ii,r_grp%num,r_grp%m_comm,sig(isp,ik)%sgsdiag)
+                 endif
+                 ii = 2*sig_in%nen * sig(isp,ik)%ndiag
+                 if (ii > 0 ) then
+                    call zpsum(ii,r_grp%num,r_grp%m_comm,sig(isp,ik)%scdiag)
+                    call zpsum(ii,r_grp%num,r_grp%m_comm,sig(isp,ik)%sexdiag)
+                    call zpsum(ii,r_grp%num,r_grp%m_comm,sig(isp,ik)%sgdiag)
+                 endif
+                 ii = sig(isp,ik)%noffd_s
+                 if (ii > 0 ) then
+                    call zpsum(ii,r_grp%num,r_grp%m_comm,sig(isp,ik)%scsoffd)
+                    call zpsum(ii,r_grp%num,r_grp%m_comm,sig(isp,ik)%sgsoffd)
+                 endif
+                 ii = 4 * sig(isp,ik)%noffd
+                 if (ii > 0 ) then
+                    call zpsum(ii,r_grp%num,r_grp%m_comm,sig(isp,ik)%scoffd)
+                    call zpsum(ii,r_grp%num,r_grp%m_comm,sig(isp,ik)%sgoffd)
+                 endif
+              endif
+              if (sig(isp,ik)%ndiag_s > 0) then
+                 call MPI_BCAST(sig(isp,ik)%scsdiag,sig(isp,ik)%ndiag_s, &
+                      MPI_DOUBLE_COMPLEX,peinf%masterid,peinf%comm,info)
+                 call MPI_BCAST(sig(isp,ik)%sgsdiag,sig(isp,ik)%ndiag_s, &
+                      MPI_DOUBLE_COMPLEX,peinf%masterid,peinf%comm,info)
+              endif
+              if (sig(isp,ik)%ndiag > 0) then
+                 call MPI_BCAST(sig(isp,ik)%scdiag,2*sig_in%nen * sig(isp,ik)%ndiag, &
+                      MPI_DOUBLE_COMPLEX,peinf%masterid,peinf%comm,info)
+                 call MPI_BCAST(sig(isp,ik)%sexdiag,2*sig_in%nen * sig(isp,ik)%ndiag, &
+                      MPI_DOUBLE_COMPLEX,peinf%masterid,peinf%comm,info)
+                 call MPI_BCAST(sig(isp,ik)%sgdiag,2*sig_in%nen * sig(isp,ik)%ndiag, &
+                      MPI_DOUBLE_COMPLEX,peinf%masterid,peinf%comm,info)
+              endif
+              if (sig(isp,ik)%noffd_s > 0) then
+                 call MPI_BCAST(sig(isp,ik)%scsoffd,sig(isp,ik)%noffd_s, &
+                      MPI_DOUBLE_COMPLEX,peinf%masterid,peinf%comm,info)
+                 call MPI_BCAST(sig(isp,ik)%sgsoffd,sig(isp,ik)%noffd_s, &
+                      MPI_DOUBLE_COMPLEX,peinf%masterid,peinf%comm,info)
+              endif
+              if (sig(isp,ik)%noffd > 0) then
+                 call MPI_BCAST(sig(isp,ik)%scoffd,4 * sig(isp,ik)%noffd, &
+                      MPI_DOUBLE_COMPLEX,peinf%masterid,peinf%comm,info)
+                 call MPI_BCAST(sig(isp,ik)%sgoffd,4 * sig(isp,ik)%noffd, &
+                      MPI_DOUBLE_COMPLEX,peinf%masterid,peinf%comm,info)
+              endif
+           enddo
+        enddo
+#endif
+
+        chkpt = (qpt%nk + iq + 1) * gvec%syms%ntrans
+        if (r_grp%master) call save_sigma(nkpt,nspin,sig_in,sig)
+        if (peinf%master) call write_sigma(nkpt,nspin,kpt,sig_in,sig,chkpt)
+     enddo
+     if (r_grp%master) close(pol_unit)
+
+  else
+     !-------------------------------------------------------------------
+     ! Calculate correlation if model DFT is used.
+     !
+     if (sig_in%xc /= XC_HF) then
+        do ik = 1, nkpt
+           do isp = 1, nspin
+              jk = sig(isp,ik)%indxk
+              call Zmodel_correlation(gvec,kpt,sig(isp,ik),nspin,isp,jk,sig_in%xc,gvec%syms%ntrans)
+           enddo
+        enddo
+     endif
+  endif
+
+23 continue
+
+  !-------------------------------------------------------------------
+  ! Search for file 'wpol0.dat', with static screened interaction. If it
+  ! is found, read it and proceed to calculation of static correction.
+  !
+  if (chkpt < (2*qpt%nk + 2) * gvec%syms%ntrans) then
+     if (sig_in%xc == XC_GW) &
+          call Zstatic_corr(nspin,nkpt,gvec%syms%ntrans,sig,gvec,kpt,nolda,staticcorr)
+     if (r_grp%master) call save_sigma(nkpt,nspin,sig_in,sig)
+     chkpt = (2*qpt%nk + 2) * gvec%syms%ntrans
+     if (peinf%master .and. sig_in%xc == XC_GW) &
+          call write_sigma(nkpt,nspin,kpt,sig_in,sig,chkpt)
+  endif
+
+  !-------------------------------------------------------------------
+  ! If periodic system, include by hand the long wavelength contribution
+  ! of Coulomb kernel. Should update only the real part of self-energy.
+  !
+  if (gvec%per > 2 .and. sig_in%xc == XC_GW) then
+     do ik = 1, nkpt
+        do isp = 1, nspin
+           jk = sig(isp,ik)%indxk
+           do isig = 1, sig(isp,ik)%ndiag
+              sig(isp,ik)%scdiag(:,isig) = sig(isp,ik)%scdiag(:,isig) - &
+                   gvec%long * (epsinv - one) * &
+                   kpt%wfn(isp,jk)%occ1(sig(isp,ik)%map(sig(isp,ik)%diag(isig)))
+           enddo
+        enddo
+     enddo
+  endif
+
+  call stopwatch(r_grp%master, &
+       ' All matrix elements calculated. Start printout')
+
+  if (peinf%master .and. sig_in%xc == XC_GW) then
+     open(12,file='hmat_qp_nostatic',form='formatted')
+     if (staticcorr) open(15,file='hmat_qp',form='formatted')
+  endif
+
+  max_sig = mone
+
+  !-------------------------------------------------------------------
+  ! From now on, unit of energy is eV.
+  !
+  do ik = 1, nkpt
+     do isp = 1, nspin
+        jk = sig(isp,ik)%indxk
+        if (sig(isp,ik)%ndiag_s > 0) then
+           sig(isp,ik)%vxcdiag = sig(isp,ik)%vxcdiag*ryd
+           sig(isp,ik)%xdiag = sig(isp,ik)%xdiag*ryd
+           sig(isp,ik)%scsdiag = sig(isp,ik)%scsdiag*ryd
+        endif
+        if (sig(isp,ik)%noffd_s > 0) then
+           sig(isp,ik)%vxcoffd = sig(isp,ik)%vxcoffd*ryd
+           sig(isp,ik)%xoffd = sig(isp,ik)%xoffd*ryd
+           sig(isp,ik)%scsoffd = sig(isp,ik)%scsoffd*ryd
+        endif
+        if (sig_in%xc == XC_GW) then
+           if (sig(isp,ik)%ndiag_s > 0) &
+                sig(isp,ik)%sgsdiag = sig(isp,ik)%sgsdiag*ryd
+           if (sig(isp,ik)%noffd_s > 0) &
+                sig(isp,ik)%sgsoffd = sig(isp,ik)%sgsoffd*ryd
+           if (sig(isp,ik)%ndiag > 0) then
+              sig(isp,ik)%scdiag = sig(isp,ik)%scdiag*ryd
+              sig(isp,ik)%sexdiag = sig(isp,ik)%sexdiag*ryd
+              sig(isp,ik)%sgdiag = sig(isp,ik)%sgdiag*ryd
+           endif
+           if (sig(isp,ik)%noffd > 0) then
+              sig(isp,ik)%scoffd = sig(isp,ik)%scoffd*ryd
+              sig(isp,ik)%sgoffd = sig(isp,ik)%sgoffd*ryd
+           endif
+        endif
+
+        !-------------------------------------------------------------------
+        ! Sort quasiparticle orbitals according to representation.
+        !
+        allocate(iord(sig(isp,ik)%nmap))
+        iord = 0
+        do irp = 1, gvec%syms%ntrans
+           jj = 0
+           do isig = 1, sig(isp,ik)%nmap
+              ii = sig(isp,ik)%map(isig)
+              if (kpt%wfn(isp,jk)%irep(ii) == irp) then
+                 jj = jj + 1
+                 iord(isig) = jj
+              endif
+           enddo
+           neig_qp = jj
+           q_p(irp,isp,ik)%neig = neig_qp
+           if (neig_qp > 0) then
+              allocate(q_p(irp,isp,ik)%jrep(neig_qp))
+              q_p(irp,isp,ik)%jrep = 0
+              allocate(q_p(irp,isp,ik)%hqp(neig_qp,neig_qp))
+              q_p(irp,isp,ik)%hqp = zzero
+              allocate(q_p(irp,isp,ik)%sigmaqp(neig_qp,neig_qp))
+              q_p(irp,isp,ik)%sigmaqp = zzero
+              allocate(q_p(irp,isp,ik)%sigmai(neig_qp))
+              q_p(irp,isp,ik)%sigmai = ecuts * ryd
+              allocate(q_p(irp,isp,ik)%eqp(neig_qp))
+              q_p(irp,isp,ik)%eqp = zero
+              allocate(q_p(irp,isp,ik)%vqp(neig_qp,neig_qp))
+              q_p(irp,isp,ik)%vqp = zzero
+              jj = 0
+              do isig = 1, sig(isp,ik)%nmap
+                 ii = sig(isp,ik)%map(isig)
+                 if (kpt%wfn(isp,jk)%irep(ii) == irp) then
+                    jj = jj + 1
+                    q_p(irp,isp,ik)%jrep(jj) = ii
+                    q_p(irp,isp,ik)%hqp(jj,jj) = zone*kpt%wfn(isp,jk)%e1(ii)*ryd
+                 endif
+              enddo
+           endif
+        enddo
+        !-------------------------------------------------------------------
+        ! Print self-energy corrections.
+        !
+        if (sig_in%xc /= XC_GW) then
+           if (gvec%per > 0) then
+              if (nspin == 1) then
+                 write(file_name,'(a,i3.3,a,i4.4)') 'sigma_', ik, '_', it_scf
+              else
+                 if (isp == 1) then
+                    write(file_name,'(a,i3.3,a,i4.4)') 'sigma_up_', ik,' _', it_scf
+                 else
+                    write(file_name,'(a,i3.3,a,i4.4)') 'sigma_down_', ik, '_', it_scf
+                 endif
+              endif
+           else
+              if (nspin == 1) then
+                 write(file_name,'(a,i3.3,a,i4.4)') 'sigma_', ik, '_', it_scf
+              else
+                 if (isp == 1) then
+                    write(file_name,'(a,i3.3,a,i4.4)') 'sigma_up_', ik, '_', it_scf
+                 else
+                    write(file_name,'(a,i3.3,a,i4.4)') 'sigma_down_', ik, '_', it_scf
+                 endif
+              endif
+           endif
+           call printsigma_nogw(gvec%syms%ntrans,sig(isp,ik),kpt%wfn(isp,jk), &
+                q_p(1:gvec%syms%ntrans,isp,ik),iord,qpmix,max_sig,file_name)
+        else
+           if (gvec%per > 0) then
+              if (nspin == 1) then
+                 write(file_name,'(a,i3.3,a,i4.4)') 'sigma_nostatic_', ik, '_', it_scf
+              else
+                 if (isp == 1) then
+                    write(file_name,'(a,i3.3,a,i4.4)') 'sigma_nostatic_up_', ik, '_', it_scf
+                 else
+                    write(file_name,'(a,i3.3,a,i4.4)') 'sigma_nostatic_down_', ik, '_', it_scf
+                 endif
+              endif
+           else
+              if (nspin == 1) then
+                 write(file_name,'(a,i3.3,a,i4.4)') 'sigma_nostatic_', ik, '_', it_scf
+              else
+                 if (isp == 1) then
+                    write(file_name,'(a,i3.3,a,i4.4)') 'sigma_nostatic_up_', ik, '_', it_scf
+                 else
+                    write(file_name,'(a,i3.3,a,i4.4)') 'sigma_nostatic_down_', ik, '_', it_scf
+                 endif
+              endif
+           endif
+           !
+           ! Print self-energy tables without static correction.
+           !
+           call printsigma(gvec%syms%ntrans,sig_in,sig(isp,ik), &
+                kpt%wfn(isp,jk),q_p(1:gvec%syms%ntrans,isp,ik),12, &
+                isp,ik,iord,qpmix,rtmp,file_name)
+           !
+           ! Update and print self-energy with static correction.
+           !
+           if (staticcorr) then
+              do isig = 1, sig(isp,ik)%ndiag
+                 ! The static remainder is divided by static_type=2.0 for
+                 ! get better convergence.
+                 ! static_type is guaranteed to be either 1 or 2 in input_s.f90
+                 sig(isp,ik)%scdiag(:,isig) = sig(isp,ik)%scdiag(:,isig) + &
+                      sig(isp,ik)%scsdiag(isig)/real(static_type,dp)
+                 sig(isp,ik)%sgdiag(:,isig) = sig(isp,ik)%sgdiag(:,isig) + &
+                      sig(isp,ik)%sgsdiag(isig)/real(static_type,dp)
+              enddo
+              do isig = 1, sig(isp,ik)%noffd
+                 sig(isp,ik)%scoffd(1,isig) = sig(isp,ik)%scoffd(1,isig) + &
+                      sig(isp,ik)%scsoffd(isig)/real(static_type,dp)
+                 sig(isp,ik)%sgoffd(1,isig) = sig(isp,ik)%sgoffd(1,isig) + &
+                      sig(isp,ik)%sgsoffd(isig)/real(static_type,dp)
+                 sig(isp,ik)%scoffd(2,isig) = sig(isp,ik)%scoffd(2,isig) + &
+                      conjg(sig(isp,ik)%scsoffd(isig))/real(static_type,dp)
+                 sig(isp,ik)%sgoffd(2,isig) = sig(isp,ik)%sgoffd(2,isig) + &
+                      conjg(sig(isp,ik)%sgsoffd(isig))/real(static_type,dp)
+              enddo
+              if (gvec%per > 0) then
+                 if (nspin == 1) then
+                    write(file_name,'(a,i3.3,a,i4.4)') 'sigma_', ik, '_', it_scf
+                 else
+                    if (isp == 1) then
+                       write(file_name,'(a,i3.3,a,i4.4)') 'sigma_up_', ik, '_', it_scf
+                    else
+                       write(file_name,'(a,i3.3,a,i4.4)') 'sigma_down_', ik, '_', it_scf
+                    endif
+                 endif
+              else
+                 if (nspin == 1) then
+                    write(file_name,'(a,i3.3,a,i4.4)') 'sigma_', ik, '_', it_scf
+                 else
+                    if (isp == 1) then
+                       write(file_name,'(a,i3.3,a,i4.4)') 'sigma_up_', ik, '_', it_scf
+                    else
+                       write(file_name,'(a,i3.3,a,i4.4)') 'sigma_down_', ik, '_', it_scf
+                    endif
+                 endif
+              endif
+              call printsigma(gvec%syms%ntrans,sig_in,sig(isp,ik), &
+                   kpt%wfn(isp,jk),q_p(1:gvec%syms%ntrans,isp,ik),15, &
+                   isp,ik,iord,qpmix,max_sig,file_name)
+           endif
+        endif
+        deallocate(iord)
+     enddo
+  enddo
+
+  if (peinf%master .and. sig_in%xc == XC_GW) then
+     close(12)
+     if (staticcorr) close(15)
+  endif
+#ifdef MPI
+  call MPI_BCAST(max_sig,1,MPI_DOUBLE_PRECISION, &
+       peinf%masterid,peinf%comm,info)
+#endif
+
+  !-------------------------------------------------------------------
+  ! Diagonalize QP Hamiltonian and write out QP eigenvalues/eigenvectors.
+  !
+  do ik = 1, nkpt
+     do isp = 1, nspin
+        do irp = 1, gvec%syms%ntrans
+           if (sig_in%xc == XC_GW) then
+              ! Apply cut-off in off-diagonal part of self-energy
+              do ii = 1, q_p(irp,isp,ik)%neig
+                 do jj = 1, q_p(irp,isp,ik)%neig
+                    if (abs(q_p(irp,isp,ik)%hqp(ii,jj)) < sig_cut .and. ii /= jj ) &
+                         q_p(irp,isp,ik)%hqp(ii,jj) = zzero
+                 enddo
+              enddo
+           endif
+
+           info = 0
+           if (q_p(irp,isp,ik)%neig > 0) &
+                call qp_eigensolver(q_p(irp,isp,ik),peinf%master,hqp_sym,info)
+           if (info /= 0) then
+              lstop = .true.
+              return
+           endif
+        enddo
+     enddo
+  enddo
+  !
+  ! Rotate wavefunctions. We must save the new ordering of wavefunctions.
+  ! Do that by using wfn(:)%cmapi.
+  !
+  call stopwatch(r_grp%master,' Calling rotate.')
+  if (peinf%master) write(6,*)
+  call timacc(10,1,tsec)
+  call Zrotate_qp(nspin,nkpt,gvec%syms%ntrans,sig,gvec,kpt,q_p,writeqp,it_scf)
+  call timacc(10,2,tsec)
+
+  !-------------------------------------------------------------------
+  ! Calculate total energy.
+  !
+  call Zetotal(gvec,kpt,nspin)
+
+  if (writeqp .and. sig_in%xc == XC_GW .and. dft_code == PARSEC) &
+       call Zprint_qp(nspin,gvec%syms%ntrans,66,77,gvec,kpt)
+  !
+  ! Prepare for the next iteration.
+  do isp = 1, nspin
+     do jk = 1, kpt%nk
+        if (sig_in%xc == XC_GW) then
+           deallocate(kpt%wfn(isp,jk)%mapd)
+           deallocate(kpt%wfn(isp,jk)%Zdipole)
+           call Zget_dipole(gvec,kpt%wfn(isp,jk),jk,kpt%fk(1,jk), &
+                kpt%wfn(isp,jk)%occ0)
+        endif
+     enddo
+
+     do ik = 1, nkpt
+        do irp = 1, gvec%syms%ntrans
+           if (q_p(irp,isp,ik)%neig > 0) then
+              deallocate(q_p(irp,isp,ik)%jrep)
+              deallocate(q_p(irp,isp,ik)%hqp)
+              deallocate(q_p(irp,isp,ik)%sigmaqp)
+              deallocate(q_p(irp,isp,ik)%sigmai)
+              deallocate(q_p(irp,isp,ik)%eqp)
+              deallocate(q_p(irp,isp,ik)%vqp)
+           endif
+        enddo
+     enddo
+  enddo
+
+  chkpt_in = -1
+  !
+  ! Update maps. Assume that all k-points have the same cmapi mapping.
+  !
+  if (sig_in%xc == XC_GW) then
+     do iq = 1, qpt%nk
+        do irp = 1, gvec%syms%ntrans
+           if (pol(irp,iq)%n_up > 0) &
+                call inverse_map(kpt%wfn(1,1)%nstate,kpt%wfn(1,1)%cmapi, &
+                2*pol(irp,iq)%n_up,pol(irp,iq)%tr)
+           if (k_p(irp,iq)%ncol_up > 0) &
+                call inverse_map(kpt%wfn(1,1)%nstate,kpt%wfn(1,1)%cmapi, &
+                2*k_p(irp,iq)%ncol_up,k_p(irp,iq)%col)
+           if (k_p(irp,iq)%nrow_up > 0) &
+                call inverse_map(kpt%wfn(1,1)%nstate,kpt%wfn(1,1)%cmapi, &
+                2*k_p(irp,iq)%nrow_up,k_p(irp,iq)%row)
+           if (k_c(irp,iq)%ncol_up > 0) &
+                call inverse_map(kpt%wfn(1,1)%nstate,kpt%wfn(1,1)%cmapi, &
+                2*k_c(irp,iq)%ncol_up,k_c(irp,iq)%col)
+           if (k_c(irp,iq)%nrow_up > 0) &
+                call inverse_map(kpt%wfn(1,1)%nstate,kpt%wfn(1,1)%cmapi, &
+                2*k_c(irp,iq)%nrow_up,k_c(irp,iq)%row)
+           if (nspin == 2) then
+              if (pol(irp,iq)%ntr-pol(irp,iq)%n_up > 0) &
+                   call inverse_map(kpt%wfn(2,1)%nstate,kpt%wfn(2,1)%cmapi, &
+                   2*(pol(irp,iq)%ntr-pol(irp,iq)%n_up), &
+                   pol(irp,iq)%tr(1,pol(irp,iq)%n_up+1))
+              if (k_p(irp,iq)%nrow-k_p(irp,iq)%nrow_up > 0) &
+                   call inverse_map(kpt%wfn(2,1)%nstate,kpt%wfn(2,1)%cmapi, &
+                   2*(k_p(irp,iq)%nrow-k_p(irp,iq)%nrow_up), &
+                   k_p(irp,iq)%row(1,k_p(irp,iq)%nrow_up+1))
+              if (k_p(irp,iq)%ncol-k_p(irp,iq)%ncol_up > 0) &
+                   call inverse_map(kpt%wfn(2,1)%nstate,kpt%wfn(2,1)%cmapi, &
+                   2*(k_p(irp,iq)%ncol-k_p(irp,iq)%ncol_up), &
+                   k_p(irp,iq)%col(1,k_p(irp,iq)%ncol_up+1))
+              if (k_c(irp,iq)%nrow-k_c(irp,iq)%nrow_up > 0) &
+                   call inverse_map(kpt%wfn(2,1)%nstate,kpt%wfn(2,1)%cmapi, &
+                   2*(k_c(irp,iq)%nrow-k_c(irp,iq)%nrow_up), &
+                   k_c(irp,iq)%row(1,k_c(irp,iq)%nrow_up+1))
+              if (k_c(irp,iq)%ncol-k_c(irp,iq)%ncol_up > 0) &
+                   call inverse_map(kpt%wfn(2,1)%nstate,kpt%wfn(2,1)%cmapi, &
+                   2*(k_c(irp,iq)%ncol-k_c(irp,iq)%ncol_up), &
+                   k_c(irp,iq)%col(1,k_c(irp,iq)%ncol_up+1))
+           endif
+        enddo
+     enddo
+  endif
+
+#ifdef MPI
+  call MPI_BARRIER(peinf%comm,info)
+#endif
+  if (peinf%master) write(6,'(/,a,i5,a,f10.5,/)') ' Iteration ', &
+       it_scf,'. Maximum potential (eV) = ',max_sig
+
+end subroutine Zcalculate_sigma
+!===================================================================

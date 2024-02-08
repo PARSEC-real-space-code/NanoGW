@@ -1,0 +1,229 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Calculate the bare exchange (Fock exchange) part of self-energy for all the
+! selected diagonal and off-diagonal matrix elements. The bare
+! exchange is given in Eq. 23 of Tiago & Chelikowsky, PRB (2006).
+!
+! OUTPUT:
+!    sig%xdiag : diagonal matrix elements of exchange
+!    sig%xoffd : off-diagonal matrix elements of exchange
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zfock_exchange(gvec,kpt,sig,isp,ik)
+
+  use typedefs
+  use mpi_module
+  use fft_module
+  implicit none
+
+  ! arguments
+  ! real-space grid
+  type (gspace), intent(inout) :: gvec
+  ! k-points and electron wavefunctions
+  type (kptinfo), intent(in) :: kpt
+  ! self-energy for this k-point and this spin channel
+  type (siginfo), intent(inout) :: sig
+  ! spin channel and k-points
+  integer, intent(in) :: isp, ik
+
+  ! local variables
+  ! tolerance in the identification of k-points
+  real(dp), parameter :: tol_l = 1.d-8
+  integer :: ii, jj, nn, icol, m1, m2, info, isig, irp, jk, maxv, ngrid, &
+       ngrid_pe, ioff, ipe, icol_pe, s_nmap
+  real(dp) :: fac, occfac, qkt(3), qkt_test(3)
+  SCALAR :: kernel
+  logical, allocatable :: select_map(:)
+  integer, allocatable :: s_map(:), mapsigtos(:)
+  SCALAR, allocatable :: wfn2(:), k_x(:,:), rho_h(:)
+  ! external functions
+  SCALAR, external :: Zdot_c
+
+  !-------------------------------------------------------------------
+  ! Initialize variables.
+  !
+  ngrid_pe = w_grp%ldn * w_grp%npes
+  ngrid = w_grp%mydim
+  fac = real(gvec%syms%ntrans,dp)/gvec%hcub
+
+  allocate(wfn2(ngrid_pe),stat=info)
+  call alccheck('wfn2','fock_exchange',ngrid_pe,info)
+  wfn2 = Zzero
+
+  allocate(select_map(sig%nmap))
+  select_map = .false.
+  do isig = 1, sig%ndiag_s
+     select_map(sig%diag(isig)) = .true.
+  enddo
+  do isig = 1, sig%noffd_s
+     select_map(sig%off1(isig)) = .true.
+     select_map(sig%off2(isig)) = .true.
+  enddo
+  s_nmap = 0
+  do ii = 1, sig%nmap
+     if (select_map(ii)) s_nmap = s_nmap + 1
+  enddo
+  allocate(s_map(s_nmap))
+  jj = 0
+  do ii = 1, sig%nmap
+     if (select_map(ii)) then
+        jj = jj + 1
+        s_map(jj) = sig%map(ii)
+     endif
+  enddo
+  deallocate(select_map)
+
+  allocate(k_x(s_nmap,s_nmap),stat=info)
+  call alccheck('k_x','fock_exchange',s_nmap*s_nmap,info)
+  k_x = Zzero
+
+  allocate(rho_h(w_grp%nr),stat=info)
+  call alccheck('rho_h','fock_exchange',w_grp%nr,info)
+
+  !-------------------------------------------------------------------
+  ! Initialize Coulomb box,
+  ! V_coul = 4*pi*e^2/q^2 (rydberg units, e^2 = 2).
+  !
+  qkt = zero
+  call Zinitialize_FFT(peinf%inode,fft_box)
+  if (gvec%per == 1) then
+     call Zcreate_coul_1D(peinf%inode,peinf%npes,peinf%comm,qkt(1),gvec,fft_box)
+  elseif (gvec%per == 2) then
+     call Zcreate_coul_2D(gvec%bdot,qkt(1),fft_box)
+  else
+     call Zcreate_coul_0D(gvec%bdot,qkt,fft_box)
+  endif
+
+  !-------------------------------------------------------------------
+  ! Calculate kernel matrix elements, kernel(n,i,j) = < n m1 | V_coul | n m2 >.
+  ! Distribute kernel round-robin over processors. Also, evaluate only
+  ! the upper triangle of matrix k_x: k_x(ii,jj) with ii < jj.
+  !
+  do jk = 1, kpt%nk
+     ! Determine the number of occupied orbitals (maxv).
+     maxv = 0
+     do nn = 1, kpt%wfn(isp,jk)%nstate
+        occfac = kpt%wfn(isp,jk)%occ1(nn)
+        if (occfac > tol_occ .and. maxv < nn) maxv = nn
+     enddo
+
+     do icol_pe = 1, s_nmap * maxv, peinf%npes
+        do ipe = 0, w_grp%npes - 1
+           icol = icol_pe + ipe + &
+                w_grp%npes * w_grp%mygr + r_grp%npes * r_grp%mygr
+           if (icol > s_nmap * maxv) cycle
+           nn = mod(icol-1, maxv) + 1
+           jj = (icol-1)/maxv + 1
+           ioff = w_grp%ldn * ipe + 1
+           m2 = s_map(jj)
+           call Zcopy(ngrid,kpt%wfn(isp,jk)%Zwf(1,nn),1,wfn2(ioff),1)
+           wfn2 = MYCONJG(wfn2)
+           call Zmultiply_vec(ngrid,kpt%wfn(isp,ik)%Zwf(1,m2),wfn2(ioff))
+        enddo
+        call Zgather(1,wfn2,rho_h)
+        icol = icol_pe + w_grp%inode + &
+             w_grp%npes * w_grp%mygr + r_grp%npes * r_grp%mygr
+        if (icol <= sig%nmap * maxv) then
+           nn = mod(icol-1, maxv) + 1
+           jj = (icol-1)/maxv + 1
+           m2 = s_map(jj)
+           irp = gvec%syms%prod(kpt%wfn(isp,jk)%irep(nn),kpt%wfn(isp,ik)%irep(m2))
+           ! If necessary, update the Coulomb interaction.
+           qkt_test = kpt%fk(:,ik) - kpt%fk(:,jk) - qkt
+
+           if (dot_product(qkt_test,qkt_test) > tol_l) then
+#ifdef DEBUG
+              if (peinf%master) then
+                 write(6,*) ' WARNING: q-point has changed '
+                 write(6,*) ik, kpt%fk(:,ik)
+                 write(6,*) jk, kpt%fk(:,jk)
+                 write(6,*) ' old q-vector ', qkt
+                 write(6,*) ' new q-vector ', kpt%fk(:,ik) - kpt%fk(:,jk)
+              endif
+#endif
+              qkt = kpt%fk(:,ik) - kpt%fk(:,jk)
+              if (gvec%per == 1) then
+                 call Zcreate_coul_1D(peinf%inode,peinf%npes,peinf%comm,qkt(1),gvec,fft_box)
+              elseif (gvec%per == 2) then
+                 call Zcreate_coul_2D(gvec%bdot,qkt(1),fft_box)
+              else
+                 call Zcreate_coul_0D(gvec%bdot,qkt,fft_box)
+              endif
+           endif
+
+           call Zpoisson(gvec,rho_h,irp)
+        endif
+        call Zscatter(1,wfn2,rho_h)
+        do ipe = 0, w_grp%npes - 1
+           icol = icol_pe + ipe + &
+                w_grp%npes * w_grp%mygr + r_grp%npes * r_grp%mygr
+           if (icol > s_nmap * maxv) cycle
+           nn = mod(icol-1, maxv) + 1
+           jj = (icol-1)/maxv + 1
+           m2 = s_map(jj)
+           ioff = w_grp%ldn * ipe + 1
+           call Zmultiply_vec(ngrid,kpt%wfn(isp,jk)%Zwf(1,nn),wfn2(ioff))
+           do ii = 1, jj
+              m1 = s_map(ii)
+              irp = gvec%syms%prod(kpt%wfn(isp,ik)%irep(m1),kpt%wfn(isp,ik)%irep(m2))
+              if (irp /= 1) cycle
+              kernel = -Zdot_c(ngrid,kpt%wfn(isp,ik)%Zwf(1,m1),1,wfn2(ioff),1) * fac
+              occfac = kpt%wfn(isp,jk)%occ1(nn) / real(kpt%nk,dp)
+              k_x(ii,jj) = k_x(ii,jj) + kernel * occfac
+#ifdef DEBUG
+              if (ii == jj) write(6,*) ' K_X ', jk, m1, nn, kernel*ryd
+#endif
+           enddo
+        enddo
+     enddo
+  enddo
+
+  call Zfinalize_FFT(peinf%inode,fft_box)
+
+  do jj = 1, s_nmap
+     do ii = 1, jj - 1
+        k_x(jj,ii) = MYCONJG(k_x(ii,jj))
+     enddo
+  enddo
+
+  allocate(mapsigtos(sig%nmap))
+  call mapinverse(1,sig%nmap,sig%map,s_nmap,s_map,mapsigtos)
+  do isig = 1, sig%ndiag_s
+     ii = mapsigtos(sig%diag(isig))
+     sig%xdiag(isig) = k_x(ii,ii)
+  enddo
+
+  do isig = 1, sig%noffd_s
+     ii = mapsigtos(sig%off1(isig))
+     jj = mapsigtos(sig%off2(isig))
+     sig%xoffd(isig) = k_x(ii,jj)
+  enddo
+  deallocate(mapsigtos)
+  deallocate(rho_h)
+  deallocate(k_x)
+  deallocate(s_map)
+  deallocate(wfn2)
+
+  !-------------------------------------------------------------------
+  ! Sum data across PE.
+  !
+  if (sig%ndiag_s > 0) call zpsum(sig%ndiag_s,peinf%npes,peinf%comm,sig%xdiag)
+  if (sig%noffd_s > 0) call zpsum(sig%noffd_s,peinf%npes,peinf%comm,sig%xoffd)
+
+  !-------------------------------------------------------------------
+  ! If periodic system, include by hand the long wavelength contribution
+  ! of Coulomb kernel. It affects only the diagonal part of occupied levels.
+  !
+  if (gvec%per > 0) then
+     do isig = 1, sig%ndiag_s
+        sig%xdiag(isig) = sig%xdiag(isig) - gvec%long * &
+             kpt%wfn(isp,ik)%occ1(sig%map(sig%diag(isig)))
+     enddo
+  endif
+
+end subroutine Zfock_exchange
+!===================================================================

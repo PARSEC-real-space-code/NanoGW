@@ -1,0 +1,161 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Calculate the exchange part of a model exchange-correlation
+! functional. In general, the functional may or may not include
+! Fock exchange. All the terms excluding Fock are assumed to be
+! local functions of electron density.
+!
+! OUTPUT:
+!    sig%xdiag : diagonal matrix elements of exchange
+!    sig%xoffd : off-diagonal matrix elements of exchange
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zmodel_exchange(gvec,kpt,sig,nspin,isp,ik,xc)
+
+  use typedefs
+  use xc_functionals
+  implicit none
+
+  ! arguments
+  ! real-space grid
+  type (gspace), intent(in) :: gvec
+  ! k-points and electron wavefunctions
+  type (kptinfo), intent(in) :: kpt
+  ! self-energy for this k-point and this spin channel
+  type (siginfo), intent(inout) :: sig
+  integer, intent(in) :: &
+       nspin, &       ! number of spin channels
+       isp, &         ! current spin channel
+       ik, &          ! current k-point
+       xc             ! exchange-correlation flag
+
+  ! local variables
+  integer :: ii
+  complex(dpc) :: vx_tmp(sig%ndiag_s+sig%noffd_s)
+  integer, allocatable :: map_c(:,:)
+  ! model functional
+  type(xc_type) :: xc_dft_model
+
+  if (sig%noffd_s > 0) then
+     allocate(map_c(sig%noffd_s,2))
+     do ii = 1, sig%noffd_s
+        map_c(ii,1) = sig%off1(ii)
+        map_c(ii,2) = sig%off2(ii)
+     enddo
+  endif
+
+  select case(xc)
+  case (XC_B3LYP)
+     ! B3LYP exchange functional:
+     !          0.20   Hartree-Fock
+     !          0.08   LDA-VWN
+     !          0.72   GGA-LYP
+     sig%xdiag = sig%xdiag * 0.20d0
+     sig%xoffd = sig%xoffd * 0.20d0
+
+     call xc_init(nspin,XC_LDA_X,XC_LDA_C_VWN,0,zero,one,.false.,xc_dft_model)
+     xc_dft_model%has_grad = .false.
+     vx_tmp = zzero
+     if (sig%ndiag_s /= 0) &
+          call Zvxcmtxel(gvec,kpt,xc_dft_model,1,isp,ik,nspin,sig%nmap,sig%map, &
+          sig%ndiag_s,0,sig%diag,vx_tmp)
+     do ii = 1, sig%ndiag_s
+        sig%xdiag(ii) = sig%xdiag(ii) + 0.08d0 * vx_tmp(ii)
+     enddo
+     vx_tmp = zzero
+     if (sig%noffd_s /= 0) &
+          call Zvxcmtxel(gvec,kpt,xc_dft_model,1,isp,ik,nspin,sig%nmap,sig%map, &
+          0,sig%noffd_s,map_c,vx_tmp(sig%ndiag_s+1))
+     do ii = 1, sig%noffd_s
+        sig%xoffd(ii) = sig%xoffd(ii) + 0.08d0 * vx_tmp(ii + sig%ndiag_s)
+     enddo
+     call xc_end(xc_dft_model)
+
+     call xc_init(nspin,XC_GGA_X_B88,XC_GGA_C_LYP,0,zero,one,.false.,xc_dft_model)
+     xc_dft_model%has_grad = .true.
+     vx_tmp = zzero
+     if (sig%ndiag_s /= 0) &
+          call Zvxcmtxel(gvec,kpt,xc_dft_model,1,isp,ik,nspin,sig%nmap,sig%map, &
+          sig%ndiag_s,0,sig%diag,vx_tmp)
+     do ii = 1, sig%ndiag_s
+        sig%xdiag(ii) = sig%xdiag(ii) + 0.72d0 * vx_tmp(ii)
+     enddo
+     vx_tmp = zzero
+     if (sig%noffd_s /= 0) &
+          call Zvxcmtxel(gvec,kpt,xc_dft_model,1,isp,ik,nspin,sig%nmap,sig%map, &
+          0,sig%noffd_s,map_c,vx_tmp(sig%ndiag_s+1))
+     do ii = 1, sig%noffd_s
+        sig%xoffd(ii) = sig%xoffd(ii) + 0.72d0 * vx_tmp(ii + sig%ndiag_s)
+     enddo
+     call xc_end(xc_dft_model)
+
+  case (XC_LDA_CA)
+     ! LDA-PZ exchange functional:
+     call xc_init(nspin,XC_LDA_X,XC_LDA_C_PZ,0,zero,one,.false.,xc_dft_model)
+     xc_dft_model%has_grad = .false.
+     vx_tmp = zzero
+     if (sig%ndiag_s /= 0) &
+          call Zvxcmtxel(gvec,kpt,xc_dft_model,1,isp,ik,nspin,sig%nmap,sig%map, &
+          sig%ndiag_s,0,sig%diag,vx_tmp)
+     do ii = 1, sig%ndiag_s
+        sig%xdiag(ii) = vx_tmp(ii)
+     enddo
+     vx_tmp = zzero
+     if (sig%noffd_s /= 0) &
+          call Zvxcmtxel(gvec,kpt,xc_dft_model,1,isp,ik,nspin,sig%nmap,sig%map, &
+          0,sig%noffd_s,map_c,vx_tmp(sig%ndiag_s+1))
+     do ii = 1, sig%noffd_s
+        sig%xoffd(ii) = vx_tmp(ii + sig%ndiag_s)
+     enddo
+     call xc_end(xc_dft_model)
+
+  case (XC_GGA_PBE)
+     ! GGA-PBE exchange functional:
+     call xc_init(nspin,XC_GGA_X_PBE,XC_GGA_C_PBE,0,zero,one,.false.,xc_dft_model)
+     xc_dft_model%has_grad = .true.
+     vx_tmp = zzero
+     if (sig%ndiag_s /= 0) &
+          call Zvxcmtxel(gvec,kpt,xc_dft_model,1,isp,ik,nspin,sig%nmap,sig%map, &
+          sig%ndiag_s,0,sig%diag,vx_tmp)
+     do ii = 1, sig%ndiag_s
+        sig%xdiag(ii) = vx_tmp(ii)
+     enddo
+     vx_tmp = zzero
+     if (sig%noffd_s /= 0) &
+          call Zvxcmtxel(gvec,kpt,xc_dft_model,1,isp,ik,nspin,sig%nmap,sig%map, &
+          0,sig%noffd_s,map_c,vx_tmp(sig%ndiag_s+1))
+     do ii = 1, sig%noffd_s
+        sig%xoffd(ii) = vx_tmp(ii + sig%ndiag_s)
+     enddo
+     call xc_end(xc_dft_model)
+
+  case (XC_GGA_BLYP)
+     ! BLYP exchange functional:
+     call xc_init(nspin,XC_GGA_X_B88,XC_GGA_C_LYP,0,zero,one,.false.,xc_dft_model)
+     xc_dft_model%has_grad = .true.
+     vx_tmp = zzero
+     if (sig%ndiag_s /= 0) &
+          call Zvxcmtxel(gvec,kpt,xc_dft_model,1,isp,ik,nspin,sig%nmap,sig%map, &
+          sig%ndiag_s,0,sig%diag,vx_tmp)
+     do ii = 1, sig%ndiag_s
+        sig%xdiag(ii) = vx_tmp(ii)
+     enddo
+     vx_tmp = zzero
+     if (sig%noffd_s /= 0) &
+          call Zvxcmtxel(gvec,kpt,xc_dft_model,1,isp,ik,nspin,sig%nmap,sig%map, &
+          0,sig%noffd_s,map_c,vx_tmp(sig%ndiag_s+1))
+     do ii = 1, sig%noffd_s
+        sig%xoffd(ii) = vx_tmp(ii + sig%ndiag_s)
+     enddo
+     call xc_end(xc_dft_model)
+
+  end select
+
+  if (sig%noffd_s > 0) deallocate(map_c)
+
+end subroutine Zmodel_exchange
+!===================================================================

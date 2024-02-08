@@ -1,0 +1,444 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Calculate wpol0(r), the static limit of the proper 
+! screened interaction W_pol, as defined by:
+!
+!    W_pol(r,r';E) = W(r,r';E) - e^2/|r - r'| ,
+!    wpol0(r) = W_pol(r,r'=r;E=0) .
+!
+! The static limit wpol0 can be used in a self-energy calculation
+! in order to include the static remainder to Sigma_c (correlation
+! part of self-energy), as an attempt to improve the convergence
+! of Sigma_c with respect to the number of LDA orbitals included in
+! the Green's function. If one defines Sc(n) as Sigma_c obtained
+! by summing over the lowest n orbitals, then one can assume the
+! approximate relation:
+!
+! Sc(infty) = Sc(n) + Delta,
+!
+! with Delta = Sc(infty) - Sc(n) evaluated in the static limit.
+!
+! In the static limit, Sc(infty) can be evaluated easily from
+! wpol0(r), see e.g. Hybertsen & Louie PRB 34, 5390 (1986) 
+! Eq. 17ab and 19ab.
+!
+! Generally speaking, the static remainder Delta is responsible
+! for a decrease in all quasi-particle energies, which arises from
+! the underestimate of the Coulomb-hole interaction when Sc(infty)
+! is replaced by Sc(n) (see ref. above). This underestimate is
+! less important if one looks at differences between quasi-particle
+! energies, like the energy gap, than at the actual energies. More
+! about the static remainder can be found in Appendix B of Tiago
+! & Chelikowsky, PRB (2006).
+!
+! Structures pol(:) have the value of these elements modified:
+!    nn : equal to k_p(:)%nn, old value may be 0 or otherwise
+!         inconsistent with k_p(:)%nn (this happens if TDLDA
+!         eigenvectors were not calculated in the same run).
+!    tv  : read from disk.
+!    ltv : flag that indicates v is allocated.
+!
+! At exit, pol(:)%tv is deallocated and pol(:)%ltv is set to false.
+!
+! All output of this subroutine is written to files wpol0.dat and
+! wpol0_rho.dat.
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zwpol0(gvec,kpt,qpt,pol,k_p,nolda,nrep,nspin,iq0,nr_buff)
+
+  use typedefs
+  use mpi_module
+  implicit none
+#ifdef MPI
+  include 'mpif.h'
+#endif
+
+  ! arguments
+  ! real-space grid
+  type (gspace), intent(inout) :: gvec
+  ! k-points (from DFT) and q-vectors
+  type (kptinfo), intent(in) :: kpt
+  type (qptinfo), intent(in) :: qpt
+  ! TDDFT polarizability
+  type (polinfo), intent(inout) :: pol(nrep)
+  ! TDDFT kernel
+  type (kernelinfo), intent(in) :: k_p(nrep)
+  ! true if LDA kernel is ignored
+  logical, intent(in) :: nolda
+  integer, intent(in) :: &
+       nrep, &        ! number of representations
+       nspin, &       ! number of spin channels
+       iq0, &         ! index of current q-vector
+       nr_buff        ! length of output buffer (defines at how many
+                      ! points the static limit is calculated)
+
+  ! local variables
+  character (len=13) :: filnam
+  logical :: alloc_fail
+  integer :: ii, ig, info, npol, mpol, ncount, ipol, jpol, &
+       ipe, jpe, istart, nr_pe, irp, jrp, rpt(3)
+  SCALAR :: xsum
+  SCALAR, dimension(:), allocatable :: vr, vrsum
+  SCALAR, dimension(:,:), allocatable :: ver, vtrans, vevtrans, &
+       wpolr, vvc, rdum1, rdum2, fr, frsum
+  SCALAR, dimension(:,:,:), allocatable :: fvc
+#ifdef MPI
+  integer :: status(MPI_STATUS_SIZE)
+#endif
+  integer, parameter :: &
+       pol_unit = 52, &          ! unit for pol_diag.dat file
+       scratch = 63, &           ! unit for scratch data
+       out_unit = 34, &          ! unit for wpol0.dat
+       out2_unit = 35            ! unit for wpol0_rho.dat
+
+  !-------------------------------------------------------------------
+  ! Prepare scratch files.
+  !
+  write(filnam,'(a9,i4.4)') 'TMPMATEL_', peinf%inode
+  open(scratch,file=filnam,form='unformatted')
+  rewind(scratch)
+
+#ifdef MPI
+  call MPI_BARRIER(peinf%comm,info)
+#endif
+  !-------------------------------------------------------------------
+  ! Calculate wpol=X in real space and write it on scratch files.
+  !
+  do jrp = 1, nrep/r_grp%num
+     irp = r_grp%g_rep(jrp)
+     pol(irp)%nn = k_p(irp)%nn
+     if ( pol(irp)%ntr == 0 ) cycle
+     call Zwpol_v(gvec,kpt,pol(irp),nolda,irp,nspin,nr_buff,scratch,qpt%fk(1,iq0))
+  enddo
+
+  rewind(scratch)
+
+#ifdef MPI
+  call MPI_BARRIER(peinf%comm,info)
+#endif
+  !-------------------------------------------------------------------
+  ! Try different grid sizes until all arrays fit in memory
+  ! allocate one eigenvector array as well.
+  !
+  mpol = maxval( pol(:)%nn )
+  npol = maxval( pol(:)%ntr )
+  allocate(pol(1)%Zv(mpol*r_grp%npes,mpol))
+
+  alloc_fail = .true.
+  ! Start with a grid size that fits buffer space.
+  nr_pe = nr_buff / r_grp%npes
+  do while (alloc_fail)
+     allocate(fvc(npol,2*nr_pe,nspin+1),stat=info)
+#ifdef MPI
+     call MPI_ALLREDUCE(info,ii,1,MPI_INTEGER,MPI_SUM,peinf%comm,info)
+     info = ii
+#endif
+     if (allocated(fvc)) deallocate(fvc)
+     if ( info == 0 )  then
+        alloc_fail= .false.
+     else
+        ! Reduce array sizes by 100 MB or more.
+        ncount = max(6553600/npol/nr_pe,100)
+#ifdef CPLX
+        ncount = ncount / 2
+#endif
+        nr_pe = nr_pe - ncount
+     endif
+  enddo
+  ! Make sure all PEs have the same number of grid points.
+#ifdef MPI
+  call MPI_ALLREDUCE(nr_pe,ii,1,MPI_INTEGER,MPI_MIN,peinf%comm,info)
+  nr_pe = ii
+#endif
+  deallocate(pol(1)%Zv)
+  !-------------------------------------------------------------------
+  ! Reopen file with polarizability eigenstates and prepare to
+  ! calculate Polarizability operator.
+  !
+  if (r_grp%master) then
+     write(6,*) ' Distributing grid points among PEs. '
+     write(6,*) nr_pe,' grid points per PE. '
+     open(pol_unit,file='pol_diag.dat',form='unformatted')
+     rewind(pol_unit)
+     read(pol_unit)
+     read(pol_unit)
+  endif
+
+  allocate(vr(nr_buff))
+  vr = Zzero
+  allocate(fr(nr_buff,nspin))
+  fr = Zzero
+  allocate(vrsum(nr_buff))
+  vrsum = Zzero
+  allocate(frsum(nr_buff,nspin))
+  frsum = Zzero
+  !-------------------------------------------------------------------
+  ! Calculate Polarizability operator:
+  ! W = conjg(X) * (E_tdlda ) * X
+  ! where E_tdlda, X are eigenvalues/eigenvectors of the TDLDA problem.
+  ! W is a global matrix.
+  !
+  ! For each representation, read the corresponding X on disk.
+  !
+  do jrp = 1, nrep/r_grp%num
+     irp = r_grp%g_rep(jrp)
+     if ( pol(irp)%ntr == 0 ) cycle
+
+     call Zget_pol(pol(irp),pol_unit,nrep,qpt%nk,irp,iq0,k_p(irp)%nn)
+
+     npol = pol(irp)%nn * r_grp%npes
+     mpol = pol(irp)%nn
+
+     allocate(wpolr(npol,mpol),stat=info)
+     call alccheck('wpolr','wpol0',npol*mpol,info)
+
+     allocate(ver(mpol,mpol),stat=info)
+     call alccheck('ver','wpol0',mpol*mpol,info)
+     allocate(vtrans(mpol,mpol),stat=info)
+     call alccheck('vtrans','wpol0',mpol*mpol,info)
+     allocate(vevtrans(mpol,mpol),stat=info)
+     call alccheck('vevtrans','wpol0',mpol*mpol,info)
+
+     ! W. Gao: calculate:
+     !   A_{vc,v'c'}=\sum_s X^s_vc sqrt(e_c-e_v/omega_s) X^s_v'c' sqrt(e_c'-e_v'/omega_s)/omega_s
+     !   A_{vc,v'c'} is stored in wpolr
+     ! each processor in the r_grp stores npol rows and mpol columns
+     do ipe = 0, r_grp%npes - 1
+
+        ver = Zzero
+        do jpol = 1, mpol
+           ipol = jpol + r_grp%inode*mpol
+           if (ipol > pol(irp)%ntr) exit
+           istart = 1 + ipe * mpol
+           xsum = Zone / pol(irp)%eig(ipol)
+           call Zcopy(mpol,pol(irp)%Ztv(jpol,istart),mpol,ver(1,jpol),1)
+           call Zscal(mpol,xsum,ver(1,jpol),1)
+        enddo
+        ver = MYCONJG(ver)
+
+        do jpe = 0, r_grp%npes - 1
+           vtrans = Zzero
+           do jpol = 1, mpol
+              ipol = jpol + jpe * mpol
+              call Zcopy(mpol,pol(irp)%Ztv(1,ipol),1,vtrans(1,jpol),1)
+           enddo
+
+           call Zgemm('n','n',mpol,mpol,mpol,Zone,ver,mpol, &
+                vtrans,mpol,Zzero,vevtrans,mpol)
+           call Zpsum(mpol*mpol,r_grp%npes,r_grp%comm,vevtrans)
+           if (r_grp%inode == jpe) then
+              do jpol = 1, mpol
+                 ipol = jpol + ipe * mpol
+                 call Zcopy(mpol,vevtrans(jpol,1),mpol,wpolr(ipol,1),npol)
+              enddo
+           endif
+        enddo
+     enddo
+
+     deallocate(ver, vtrans, vevtrans)
+     if (pol(irp)%ltv) then
+        deallocate(pol(irp)%Ztv)
+        pol(irp)%ltv = .false.
+     endif
+
+     npol = pol(irp)%ntr
+     allocate(fvc(npol,nr_pe,nspin),stat=info)
+     call alccheck('fvc','wpol0',npol*nr_pe*nspin,info)
+     fvc = Zzero
+     allocate(vvc(npol,nr_pe),stat=info)
+     call alccheck('vvc','wpol0',npol*nr_pe,info)
+     vvc = Zzero
+
+     ! each processor of r_grp store part of the grid points
+     istart = 1 + nr_pe*r_grp%inode ! inode keep the data starting from istart
+     ncount = nr_pe*(r_grp%inode + 1)
+     if (ncount > nr_buff) ncount = nr_buff
+     ncount = ncount - istart + 1
+
+     ! read v_vc and f_vc from TMPMATEL_**
+     do ipol = 1, npol
+        ipe = mod(ipol-1,r_grp%npes)
+        if ( r_grp%inode == ipe ) read(scratch) &
+             (vr(ig),ig=1,nr_buff),((fr(ig,ii),ig=1,nr_buff),ii=1,nspin)
+#ifdef MPI
+        call MPI_BCAST(vr, nr_buff, MPI_DOUBLE_SCALAR, &
+             ipe,r_grp%comm,info)
+        call MPI_BCAST(fr, nr_buff*nspin, MPI_DOUBLE_SCALAR, &
+             ipe,r_grp%comm,info)
+#endif
+        if (ncount > 0) then
+           call Zcopy(ncount,vr(istart),1,vvc(ipol,1),npol)
+           call Zcopy(ncount,fr(istart,1),1,fvc(ipol,1,1),npol)
+           if (nspin == 2) &
+                call Zcopy(ncount,fr(istart,2),1,fvc(ipol,1,2),npol)
+        endif
+#ifdef MPI
+        call MPI_BARRIER(r_grp%comm,info)
+#endif
+     enddo
+
+     vr = Zzero
+     fr = Zzero
+     allocate(rdum1(pol(irp)%nn * r_grp%npes,1+nspin))
+     allocate(rdum2(pol(irp)%nn,1+nspin))
+     
+     ! pol(irp)%nn * rgrp%npes >= pol%ntr, pol%ntr is the number of cv pairs??
+     do ipe = 0, r_grp%npes - 1
+        do ig = 1, nr_pe
+           rdum1 = Zzero
+           rdum2 = Zzero
+
+           ! copy vvc, fvc to rdum1, why do we do this?? is this efficient?
+           ! rdum1(1:npol,1) = vvc(1:npol,ig)  npol is the number of (v,c) pairs
+           ! rdum1(1:npol,2) = fvc(1:npol,ig,1)
+           ! rdum1(1:npol,3) = fvc(1:npol,ig,2)
+           if (ipe == r_grp%inode) then
+              call Zcopy(npol,vvc(1,ig),1,rdum1(1,1),1)
+              call Zcopy(npol,fvc(1,ig,1),1,rdum1(1,2),1)
+              if (nspin == 2) call Zcopy(npol,fvc(1,ig,2),1,rdum1(1,3),1)
+           endif
+#ifdef MPI
+           call MPI_BCAST(rdum1, pol(irp)%nn * r_grp%npes * (1+nspin), &
+                MPI_DOUBLE_SCALAR,ipe,r_grp%comm,info)
+#endif
+           istart = 1 + r_grp%inode * pol(irp)%nn
+           ncount = (1 + r_grp%inode) * pol(irp)%nn
+           if ( ncount > npol ) ncount = npol
+           ncount = ncount - istart + 1
+           ! copy part of rdum to rdum2
+           ! copy rdum1(istart:istart+ncount,1:3) to rdum2(istart:istart+ncount,1:3)
+           ! rdum2(istart:istart+ncount,1:3) = vvc(istart:istart+ncount), and fvc(istart:istart+ncount,1:2)
+           do ii = 1, 1 + nspin
+              if (ncount > 0) &
+                   call Zcopy(ncount,rdum1(istart,ii),1,rdum2(1,ii),1)
+           enddo
+
+           xsum = dot_product(rdum1(:,1),matmul(wpolr,rdum2(:,1)))
+           call Zpsum(1,r_grp%npes,r_grp%comm,xsum)
+           if (ipe == r_grp%inode) vr(ig) = -two*xsum
+           xsum = dot_product(rdum1(:,1),matmul(wpolr,rdum2(:,2)))
+           call Zpsum(1,r_grp%npes,r_grp%comm,xsum)
+           if (ipe == r_grp%inode) fr(ig,1) = -two*xsum
+           if (nspin == 2) then
+              xsum = dot_product(rdum1(:,1),matmul(wpolr,rdum2(:,3)))
+              call Zpsum(1,r_grp%npes,r_grp%comm,xsum)
+              if (ipe == r_grp%inode) fr(ig,2) = -two*xsum
+           endif
+           if (r_grp%master .and. (mod(ig,max(nr_pe/5,1)) == 0) ) then
+              call stopwatch(.true.,' vr/fr calculation')
+              write(6,'(i10,a,i10,a,i2,a,i4)') ig, ' out of ', nr_pe, &
+                   ' representation ', irp, ' processor ', ipe
+           endif
+        enddo ! ig 
+     enddo ! ipe
+
+     deallocate(rdum1)
+     deallocate(rdum2)
+
+     if (r_grp%master) then
+        istart = nr_pe*r_grp%inode
+        ncount = nr_pe*r_grp%inode + nr_pe
+        if (ncount > nr_buff) ncount = nr_buff
+        ncount = ncount - istart
+        call Zaxpy(ncount,Zone,vr,1,vrsum(1+istart),1)
+        call Zaxpy(ncount,Zone,fr(1,1),1,frsum(1,1+istart),1)
+        if (nspin == 2) &
+             call Zaxpy(ncount,Zone,fr(1,2),1,frsum(1+istart,2),1)
+     endif
+
+     ! The master node in each r_grp collect all the data in vrsum(1:nr_buff)
+#ifdef MPI
+     do ipe = 0, r_grp%npes - 1
+        if (.not. r_grp%master) then
+           if ( ipe == r_grp%inode ) then
+              call MPI_SEND(vr,nr_pe,MPI_DOUBLE_SCALAR, &
+                   r_grp%masterid,r_grp%inode,r_grp%comm,info)
+              call MPI_SEND(fr(1,1),nr_pe,MPI_DOUBLE_SCALAR, &
+                   r_grp%masterid,r_grp%inode,r_grp%comm,info)
+              if (nspin == 2) & 
+                   call MPI_SEND(fr(1,2),nr_pe,MPI_DOUBLE_SCALAR, &
+                   r_grp%masterid,r_grp%inode,r_grp%comm,info)
+           endif
+        else
+           if ( ipe /= r_grp%inode) then
+              call MPI_RECV(vr,nr_pe,MPI_DOUBLE_SCALAR, &
+                   ipe,ipe,r_grp%comm,status,info)
+              call MPI_RECV(fr(1,1),nr_pe,MPI_DOUBLE_SCALAR, &
+                   ipe,ipe,r_grp%comm,status,info)
+              if (nspin == 2) & 
+                   call MPI_RECV(fr(1,2),nr_pe,MPI_DOUBLE_SCALAR, &
+                   ipe,ipe,r_grp%comm,status,info)
+              istart = nr_pe*ipe
+              ncount = nr_pe*ipe + nr_pe
+              if (ncount > nr_buff) ncount = nr_buff
+              ncount = ncount - istart
+              call Zaxpy(ncount,Zone,vr,1,vrsum(1+istart),1)
+              call Zaxpy(ncount,Zone,fr(1,1),1,frsum(1+istart,1),1)
+              if (nspin == 2) &
+                   call Zaxpy(ncount,Zone,fr(1,2),1,frsum(1+istart,2),1)
+           endif
+        endif
+        call MPI_BARRIER(r_grp%comm,info)
+     enddo
+#endif
+
+     deallocate(vvc, fvc)
+     deallocate(wpolr)
+  enddo ! jrp = 1, nrep/r_grp%num
+
+  ! Only the master node in each r_grp call psum subroutine
+  if (r_grp%master) then
+     close(pol_unit)
+     call Zpsum(nr_buff,r_grp%num,r_grp%m_comm,vrsum)
+     call Zpsum(nr_buff*nspin,r_grp%num,r_grp%m_comm,frsum)
+  endif
+
+  vrsum = vrsum / real(kpt%nk,dp)
+  frsum = frsum / real(kpt%nk,dp)
+
+  !-------------------------------------------------------------------
+  ! Done. Delete scratch files and print files wpol0.dat and wpol0_rho.dat.
+  !
+  close(scratch, STATUS='DELETE')
+
+  if (peinf%master) then
+     vrsum = vrsum/real(nspin,dp)
+     frsum = frsum/real(nspin,dp)
+     open(out_unit,file='wpol0.dat',form='formatted')
+     write(out_unit,*) gvec%syms%ntrans*nr_pe*r_grp%npes,gvec%nr,nspin
+     open(out2_unit,file='wpol0_rho.dat',form='formatted')
+     do ig = 1, nr_pe * r_grp%npes
+        do irp = 1, gvec%syms%ntrans
+           call unfold(gvec%r(1,ig),gvec%syms%trans(1,1,irp),gvec%shift,rpt)
+#ifdef CPLX
+           write(out_unit,'(3i5,6g15.6)') (rpt(ii),ii=1,3), &
+                real(vrsum(ig),dp), aimag(vrsum(ig)), &
+                (real(frsum(ig,ii),dp), aimag(frsum(ig,ii)),ii=1,nspin)
+#else
+           write(out_unit,'(3i5,3g15.6)') (rpt(ii),ii=1,3),vrsum(ig), &
+                (frsum(ig,ii),ii=1,nspin)
+#endif
+        enddo
+        xsum = Zone*( kpt%rho(ig,1) + kpt%rho(ig,nspin) )*real(nspin,dp)/two
+#ifdef CPLX
+        write(out2_unit,'(7g15.6)') real(xsum,dp), real(vrsum(ig),dp), aimag(vrsum(ig)), &
+             (real(frsum(ig,ii),dp), aimag(frsum(ig,ii)),ii=1,nspin)
+#else
+        write(out2_unit,'(4g15.6)') xsum, vrsum(ig), (frsum(ig,ii),ii=1,nspin)
+#endif
+     enddo
+     write(out_unit,*) gvec%step
+     write(out_unit,*) gvec%shift
+     close(out_unit)
+     close(out2_unit)
+  endif
+
+  deallocate(fr, vr)
+  deallocate(frsum, vrsum)
+
+end subroutine Zwpol0
+!===================================================================

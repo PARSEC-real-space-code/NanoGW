@@ -1,0 +1,95 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Add the static remainder to sig%scsdiag (correlation) and
+! sig%sgsdiag (vertex). The static remainder in correlation is the
+! integral term in Eq. B3 of Tiago & Chelikowsky, PRB (2006). The
+! static remainder in vertex is the integral term in Eq. B6 of
+! Tiago & Chelikowsky, PRB (2006).
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zstatic(sig,wfn,ngrid,vr,fr)
+
+  use typedefs
+  use mpi_module
+  implicit none
+
+  ! arguments
+  ! self-energy
+  type (siginfo), intent(inout) :: sig
+  ! electron wavefunctions for the current k-point and spin channel
+  type (wavefunction), intent(in) :: wfn
+  ! number of points where the static potentials were calculated
+  integer, intent(in) :: ngrid
+  ! static potentials, the r' integrals in Eq. B3 and B6 respectively
+  SCALAR, intent(in) :: vr(ngrid), fr(ngrid)
+
+  ! local variables
+  integer :: isig, i1, i2, icol_pe, ipe
+  SCALAR :: wfn1(ngrid)
+  SCALAR, external :: Zdot_u
+  SCALAR, allocatable :: xdum(:,:)
+
+  !-------------------------------------------------------------------
+  ! Start with self-energy diagonal matrix elements.
+  !
+  if (sig%ndiag_s > 0) then
+     allocate(xdum(sig%ndiag_s,2),stat=i1)
+     call alccheck('xdum','static',sig%ndiag_s*2,i1)
+     xdum = Zzero
+     do icol_pe = 1, sig%ndiag_s, peinf%npes
+        do ipe = 0, w_grp%npes - 1
+           isig = icol_pe + ipe + &
+                w_grp%npes * w_grp%mygr + r_grp%npes * r_grp%mygr
+           if (isig > sig%ndiag_s) cycle
+           i1 = sig%map(sig%diag(isig))
+
+           call Zcopy(ngrid,wfn%Zwf(1,wfn%map(i1)),1,wfn1,1)
+           wfn1 = MYCONJG(wfn1)
+           call Zmultiply_vec(ngrid,wfn%Zwf(1,wfn%map(i1)),wfn1)
+
+           xdum(isig,1) = xdum(isig,1) + Zdot_u(ngrid,wfn1,1,vr,1)
+           xdum(isig,2) = xdum(isig,2) + Zdot_u(ngrid,wfn1,1,fr,1)
+        enddo
+     enddo
+     call Zpsum(sig%ndiag_s*2,peinf%npes,peinf%comm,xdum)
+     sig%scsdiag = sig%scsdiag + xdum(:,1)
+     sig%sgsdiag = sig%sgsdiag + xdum(:,2)
+     deallocate(xdum)
+  endif
+
+  !-------------------------------------------------------------------
+  ! Now, do self-energy off-diagonal matrix elements.
+  !
+  if (sig%noffd_s > 0) then
+     allocate(xdum(sig%noffd_s,2),stat=i1)
+     call alccheck('xdum','static',sig%noffd_s*2,i1)
+     xdum = Zzero
+     do icol_pe = 1, sig%noffd_s, peinf%npes
+        do ipe = 0, w_grp%npes - 1
+           isig = icol_pe + ipe + &
+                w_grp%npes * w_grp%mygr + r_grp%npes * r_grp%mygr
+           if (isig > sig%noffd_s) cycle
+           i1 = sig%map(sig%off1(isig))
+           i2 = sig%map(sig%off2(isig))
+           if ( wfn%irep(i1) /= wfn%irep(i2) ) cycle
+
+           call Zcopy(ngrid,wfn%Zwf(1,wfn%map(i1)),1,wfn1,1)
+           wfn1 = MYCONJG(wfn1)
+           call Zmultiply_vec(ngrid,wfn%Zwf(1,wfn%map(i2)),wfn1)
+
+           xdum(isig,1) = xdum(isig,1) + Zdot_u(ngrid,wfn1,1,vr,1)
+           xdum(isig,2) = xdum(isig,2) + Zdot_u(ngrid,wfn1,1,fr,1)
+        enddo
+     enddo
+     call Zpsum(sig%noffd_s*2,peinf%npes,peinf%comm,xdum)
+     sig%scsoffd = sig%scsoffd + xdum(:,1)
+     sig%sgsoffd = sig%sgsoffd + xdum(:,2)
+     deallocate(xdum)
+  endif
+
+end subroutine Zstatic
+!===================================================================

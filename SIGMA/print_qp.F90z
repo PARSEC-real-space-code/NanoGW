@@ -1,0 +1,257 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Rotate DFT orbitals and print new orbitals in parsec_qp.dat.
+!
+! Files parsec.dat and parsec_qp.dat differ in the value of
+! these quantities:
+!    kpt%rho
+!    wfn(:)%e0
+!    wfn(:)%occ0
+!    wfn(:)%jrep(0,:)   (representations in Abelian group)
+!    wfn(:)%wf
+!    gvec%r
+!    datelabel (time tag)
+!
+! Notice that self-consistent potential in parsec.dat is copied
+! to parsec_qp.dat as well, even though the ground state has
+! changed.
+!
+! The order of grid points may have changed inside read_wfn. For
+! that reason, we need to write down the current gvec%r list.
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!---------------------------------------------------------------
+subroutine Zprint_qp(nspin,ntrans,infile,outfile,gvec,kpt)
+
+  use typedefs
+  use mpi_module
+  implicit none
+#ifdef MPI
+  include 'mpif.h'
+#endif
+
+  ! arguments
+  integer, intent(in) :: &
+       nspin, &    ! number of spin channels
+       ntrans, &   ! number of symmetry representations
+       infile, &   ! input file (parsec.dat)
+       outfile     ! output file (parsec_qp.dat)
+  ! real-space grid
+  type (gspace), intent(in) :: gvec
+  ! k-points and electron wavefunctions
+  type (kptinfo), intent(in) :: kpt
+
+  ! other variables
+  character (len=26) :: datelabel  !  date/time tag
+  integer :: kpnum, ii, ik, jj, nn, isp, nord, stype(10)
+#ifdef MPI
+  integer :: info
+#endif
+
+  integer, allocatable :: idata(:), iord(:)
+  real(dp), allocatable :: rdata(:)
+  SCALAR, allocatable :: zdata(:)
+
+  !---------------------------------------------------------------
+  ! Print out grid data, symmetries etc.
+  !
+  if (peinf%master) then
+     open(infile,file='parsec.dat',form='unformatted',status='old')
+     write(6,*) ' Performing orbital rotation. Output file is parsec_qp.dat.'
+     open(outfile,file='parsec_qp.dat',form='unformatted',status='unknown')
+
+     read(infile) datelabel
+     write(6,*) ' File parsec.dat written on ',datelabel
+     call get_date(datelabel)
+     write(6,*) ' File parsec_qp.dat written on ',datelabel
+     write(outfile) datelabel
+     read(infile) stype
+     write(outfile) stype
+  endif
+#ifdef MPI
+  call MPI_BCAST(stype,10,MPI_INTEGER,peinf%masterid,peinf%comm,info)
+#endif
+
+  if (peinf%master) then
+     allocate(rdata(9))
+     allocate(idata(9))
+     if (stype(3) > 0) then
+        read(infile) (rdata(ii),ii=1,7)
+        write(outfile) (rdata(ii),ii=1,7)
+        read(infile) (rdata(ii),ii=1,9)
+        write(outfile) (rdata(ii),ii=1,9)
+        read(infile) ii
+        write(outfile) ii
+        read(infile) (idata(ii), ii=1,3)
+        write(outfile) (idata(ii), ii=1,3)
+        read(infile) (rdata(ii),ii=1,3)
+        write(outfile) (rdata(ii),ii=1,3)
+        read(infile) kpnum
+        write(outfile) kpnum
+        read(infile) ii
+        write(outfile) ii
+        read(infile) (idata(ii), ii=1,3)
+        write(outfile) (idata(ii), ii=1,3)
+        read(infile) (rdata(ii),ii=1,3)
+        write(outfile) (rdata(ii),ii=1,3)
+        deallocate(rdata)
+        allocate(rdata(3*kpnum))
+        read(infile) (rdata(ii),ii=1,3*kpnum)
+        write(outfile) (rdata(ii),ii=1,3*kpnum)
+        read(infile) (rdata(ii),ii=1,kpnum)
+        write(outfile) (rdata(ii),ii=1,kpnum)
+        deallocate(rdata)
+        allocate(rdata(9))
+     else
+        kpnum = 1
+        read(infile) (rdata(ii),ii=1,2)
+        write(outfile) (rdata(ii),ii=1,2)
+     endif
+  endif
+#ifdef MPI
+  call MPI_BCAST(kpnum,1,MPI_INTEGER,peinf%masterid,peinf%comm,info)
+#endif
+
+  if (peinf%master) then
+     read(infile) ii
+     write(outfile) ii
+     read(infile) (rdata(ii),ii=1,3)
+     write(outfile) (rdata(ii),ii=1,3)
+     read(infile)
+     write(outfile) gvec%nr,ntrans
+     deallocate(idata)
+     allocate(idata(3*3*ntrans))
+     deallocate(rdata)
+     allocate(rdata(3*3*ntrans))
+     read(infile) (idata(ii), ii=1,3*3*ntrans)
+     write(outfile) (idata(ii), ii=1,3*3*ntrans)
+     read(infile) (rdata(ii), ii=1,3*3*ntrans)
+     write(outfile) (rdata(ii), ii=1,3*3*ntrans)
+     read(infile) (rdata(ii), ii=1,3*ntrans)
+     write(outfile) (rdata(ii), ii=1,3*ntrans)
+     deallocate(rdata)
+     allocate(rdata(2*9))
+     read(infile) (rdata(ii), ii=1,2*9)
+     write(outfile) (rdata(ii), ii=1,2*9)
+     deallocate(rdata)
+     deallocate(idata)
+     allocate(idata(ntrans*ntrans))
+     read(infile) (idata(ii), ii=1,ntrans*ntrans)
+     write(outfile) (idata(ii), ii=1,ntrans*ntrans)
+     deallocate(idata)
+     read(infile)
+     write(outfile) (gvec%r(:,ii), ii=1,gvec%nr)
+  endif
+
+  !---------------------------------------------------------------
+  !  Print out eigenvalues for all k-points and spin channels.
+  !
+  do isp = 1, nspin
+     do ik = 1, kpnum
+        if (peinf%master) then
+           read(infile) ii
+           write(outfile) ii
+        endif
+#ifdef MPI
+        call MPI_BCAST(ii,1,MPI_INTEGER,peinf%masterid,peinf%comm,info)
+#endif
+
+        if (peinf%master) then
+           read(infile)
+           write(outfile) (kpt%wfn(isp,ik)%jrep(0,ii), ii=1,kpt%wfn(isp,ik)%nstate)
+           read(infile)
+           write(outfile) (kpt%wfn(isp,ik)%e0(ii), ii=1,kpt%wfn(isp,ik)%nstate)
+           read(infile)
+           write(outfile) (kpt%wfn(isp,ik)%occ0(ii), ii=1,kpt%wfn(isp,ik)%nstate)
+        endif
+     enddo
+
+     if (peinf%master) then
+        allocate(rdata(gvec%nr))
+        read(infile) (rdata(ii), ii=1,gvec%nr)
+        write(outfile) (rdata(ii), ii=1,gvec%nr)
+        deallocate(rdata)
+        read(infile)
+        write(outfile) (kpt%rho(ii,isp), ii=1,gvec%nr)
+     endif
+  enddo
+  !---------------------------------------------------------------
+  !  Print out wave-functions. With many k-points, must do it for all
+  !  k-points. Also, must print the irreducible wedge (different
+  !  k-points may have different wedges).
+  !
+  do isp = 1, nspin
+
+     do ik = 1, kpnum
+        if (peinf%master) then
+           read(infile)
+           write(outfile) gvec%nr,ntrans
+           allocate(idata(3*3*ntrans))
+           read(infile) (idata(ii), ii=1,3*3*ntrans)
+           write(outfile) (idata(ii), ii=1,3*3*ntrans)
+           allocate(rdata(3*3*ntrans))
+           read(infile) (rdata(ii), ii=1,3*3*ntrans)
+           write(outfile) (rdata(ii), ii=1,3*3*ntrans)
+           read(infile) (rdata(ii), ii=1,3*ntrans)
+           write(outfile) (rdata(ii), ii=1,3*ntrans)
+           deallocate(rdata)
+           allocate(rdata(2*9))
+           read(infile) (rdata(ii), ii=1,2*9)
+           write(outfile) (rdata(ii), ii=1,2*9)
+           deallocate(rdata)
+           deallocate(idata)
+           allocate(idata(ntrans*ntrans))
+           read(infile) (idata(ii), ii=1,ntrans*ntrans)
+           write(outfile) (idata(ii), ii=1,ntrans*ntrans)
+           deallocate(idata)
+           allocate(idata(3*gvec%nr))
+           read(infile)
+           write(outfile) (gvec%r(:,ii), ii=1,gvec%nr)
+           deallocate(idata)
+
+           read(infile) nord
+           write(outfile) nord
+           allocate(iord(nord))
+           read(infile) (iord(ii), ii=1,nord)
+           write(outfile) (iord(ii), ii=1,nord)
+        endif
+#ifdef MPI
+        call MPI_BCAST(nord,1,MPI_INTEGER,peinf%masterid,peinf%comm,info)
+#endif
+        if (.not. peinf%master) allocate(iord(nord))
+#ifdef MPI
+        call MPI_BCAST(iord,nord,MPI_INTEGER,peinf%masterid,peinf%comm,info)
+#endif
+
+        allocate(zdata(gvec%nr))
+        do nn = 1, nord
+           jj = kpt%wfn(isp,ik)%map(iord(nn))
+           if (jj == 0) then
+              if (peinf%master) then
+                 read(infile) (zdata(ii), ii=1,gvec%nr)
+                 write(outfile) (zdata(ii), ii=1,gvec%nr)
+              endif
+           else
+              zdata = Zzero
+              call Zcopy(w_grp%mydim,kpt%wfn(isp,ik)%Zwf(1,jj),1,zdata(1+w_grp%offset),1)
+              call Zpsum(gvec%nr,w_grp%npes,w_grp%comm,zdata)
+              if (peinf%master) then
+                 read(infile)
+                 write(outfile) (zdata(ii), ii=1,gvec%nr)
+              endif
+           endif
+        enddo
+     enddo
+     deallocate(iord)
+     deallocate(zdata)
+
+  enddo
+
+  close(infile)
+  close(outfile)
+
+end subroutine Zprint_qp
+!===================================================================

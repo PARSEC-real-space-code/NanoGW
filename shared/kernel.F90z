@@ -1,0 +1,429 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Calculate all necessary kernel integrals. The form of kernel
+! integrals is defined in Tiago and Chelikowsky, PRB 73, 205334, Eq. 6 and 7.
+!
+! This subroutine defines the value of k_mat%nn and allocates/calculates
+! k_mat%m. All other components of k_mat return with the same values they
+! had at input.
+! Notice that, if readflag =.false., k_mat%m is allocated but not calculated.
+!
+! kflag = 0 : calculate kernel K^x  ( Coulomb )
+!         1 :                  K^x + K^f ( Coulomb + 1/2 * F_xc )
+!         2 :                  K^f   ( 1/2 * F_xc )
+!         3 :                  K^t   ( 1/2 * F_xc for spin triplet )
+!
+! The actual calculation of integrals is done in subroutine k_integrate.
+! In this subroutine, the calculated integrals are sorted and sent from
+! the PE that calculated them to the PE that will use them (they are not
+! always the same).
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zkernel(gvec,kpt,k_mat,irp,kflag,nspin,qkt_in,distrib,readflag,&
+     isdf_in )
+
+  use typedefs
+  use mpi_module
+  implicit none
+
+#ifdef MPI
+  include 'mpif.h'
+#endif
+
+  ! arguments
+  ! real-space grid
+  type (gspace), intent(in) :: gvec
+  ! k-points and electron wavefunctions
+  type (kptinfo), intent(in) :: kpt
+  ! kernel structure
+  type (kernelinfo), intent(inout) :: k_mat
+  ! current q-vector, in units of reciprocal lattice vectors
+  real(dp), intent(in) :: qkt_in(3)
+  ! current representation, kernel flag (see above), number of spin components
+  integer, intent(in) :: irp, kflag, nspin
+  type (ISDF), intent(in) :: isdf_in
+  ! choice of distribution of k%m over PEs:
+  ! c : column-wise; PE # 0 has columns 1 through nn, PE # 1 has columns
+  !      nn+1 through 2*nn, etc.
+  ! r : row-wise,  PE # 0 has rows 1 through nn, PE # 1 has rows nn+1
+  !     through 2*nn, etc.
+  ! (blank) : no distribution, all PEs hold the entire kernel matrix
+  character (len=1), intent(in) :: distrib
+  ! true if kernel is initialized and calculated; false if kernel is
+  ! initialized but not calculated
+  logical, intent(in) :: readflag
+
+  ! local variables
+  type (kernel_scratch), allocatable :: k_tmp(:)
+  logical :: iswitch, verbose
+  integer :: ii, nn, m1, m2, m3, m4, k1, k2, k3, k4, rsp, csp, ipe, icount, &
+       nelem, nbuff, info, ioffc, ioffr, ncol, nrow, icol, irow, &
+       nbuff_max, iblock
+  integer, dimension(:), allocatable :: nblock
+  SCALAR :: matel
+  real(dp) :: tsec(2)
+  integer, dimension(:,:,:,:,:), allocatable :: imapc, imapr
+  integer, dimension(:,:), allocatable :: quadr
+  SCALAR, dimension(:), allocatable :: matrix_f
+  ! WG debug 
+  integer :: outdbg
+  
+  outdbg = peinf%inode+198812
+  verbose = .False.
+
+  !-------------------------------------------------------------------
+  ! Allocate output matrices according to distribution: row-wise or
+  ! column-wise.
+  !
+  if (distrib == 'c') then
+     ! column-wise distribution
+     ncol = k_mat%ncol/r_grp%npes
+     nrow = k_mat%nrow
+     if (ncol*r_grp%npes < k_mat%ncol) ncol = ncol + 1
+     k_mat%nn = ncol
+     ioffr = 0
+     ioffc = r_grp%inode*k_mat%nn
+  elseif (distrib == 'r') then
+     ! row-wise distribution
+     nrow = k_mat%nrow/r_grp%npes
+     ncol = k_mat%ncol
+     if (nrow*r_grp%npes < k_mat%nrow) nrow = nrow + 1
+     k_mat%nn = nrow
+     ioffc = 0
+     ioffr = r_grp%inode*k_mat%nn
+  else
+     ! global matrix
+     k_mat%nn = k_mat%nrow
+     ncol = k_mat%ncol
+     nrow = k_mat%nrow
+     ioffr = 0
+     ioffc = 0
+  endif
+  !write(outdbg,*) "peinf%inode = ",peinf%inode
+  !write(outdbg,*) "nrow = ", nrow
+  !write(outdbg,*) "ncol = ", ncol
+  !write(outdbg,*) "k_mat%nn = ncol = ", k_mat%nn
+  !write(outdbg,*) "r_grp%npes = ", r_grp%npes
+  !write(outdbg,*) "ioffc = ", ioffc
+  !write(outdbg,*) "ioffr = ", ioffr
+
+  if (.not. readflag) then
+     if (r_grp%master) write(6,'(/,a,/)') &
+          ' readmatrix: skipping reading of matrix elements '
+     allocate(k_mat%Zm(1,1))
+     return
+  endif
+
+  nbuff = max(k_mat%nbuff, int(k_mat%ncol*two))
+  !write(outdbg,*) "peinf%inode ",peinf%inode,", k_mat%nbuff ", k_mat%nbuff
+  if (r_grp%master) then
+     write(6,'(/,a,i12,a,/)') &
+          ' Calculating kernel matrix elements in blocks of ', &
+          nbuff,' (buffer size) '
+     select case(kflag)
+     case(0)
+        write(6,*) ' kernel K_x (Hartree/Exchange kernel)'
+     case(1)
+        write(6,*) ' kernel K_x + K_f (TDLDA spin singlet)'
+     case(2)
+        write(6,*) ' kernel K_f (TDLDA kernel)'
+     case(3)
+        write(6,*) ' kernel K_t (TDLDA spin triplet)'
+     end select
+  endif
+  !
+  ! If this kernel has more rows than columns, switch columns and
+  ! rows. At the end of calculation, switch back. This ensures the
+  ! smallest possible number of Poisson solver executions.
+  !
+  ! WG debug
+  if (verbose) then
+     if (r_grp%master) write(6,*) "dbg :", "k_mat%nrow=", k_mat%nrow, "k_mat%ncol=", k_mat%ncol
+     write(outdbg,*) "dbg  peinf%inode ",peinf%inode,"k_mat%row(1:4,:)"
+     do irow = 1, k_mat%nrow
+       write(outdbg,*) irow,k_mat%row(1,irow),k_mat%row(2,irow),k_mat%row(3,irow),k_mat%row(4,irow)
+     enddo
+     write(outdbg,*) "dbg  peinf%inode ",peinf%inode,"k_mat%col(1:4,:)"
+     do icol = 1, k_mat%ncol
+       write(outdbg,*) icol,k_mat%col(1,icol),k_mat%col(2,icol),k_mat%col(3,icol),k_mat%col(4,icol)
+     enddo
+  endif 
+  if (k_mat%nrow > k_mat%ncol) then
+     iswitch = .true.
+     nn = k_mat%nrow
+     allocate(quadr(4,nn))
+     quadr = k_mat%row
+     deallocate(k_mat%row)
+     k_mat%nrow = k_mat%ncol
+     allocate(k_mat%row(4,k_mat%nrow))
+     k_mat%row(1,:) = k_mat%col(2,:)
+     k_mat%row(2,:) = k_mat%col(1,:)
+     k_mat%row(3,:) = k_mat%col(4,:)
+     k_mat%row(4,:) = k_mat%col(3,:)
+     deallocate(k_mat%col)
+     k_mat%ncol = nn
+     allocate(k_mat%col(4,k_mat%ncol))
+     k_mat%col(1,:) = quadr(2,:)
+     k_mat%col(2,:) = quadr(1,:)
+     k_mat%col(3,:) = quadr(4,:)
+     k_mat%col(4,:) = quadr(3,:)
+     deallocate(quadr)
+     nn = k_mat%nrow_up
+     k_mat%nrow_up = k_mat%ncol_up
+     k_mat%ncol_up = nn
+  else
+     iswitch = .false.
+  endif
+
+  !-------------------------------------------------------------------
+  ! Allocate scratch space.
+  !
+  nbuff_max = k_mat%nrow / r_grp%npes + 1 + nspin*nspin
+  ! W. Gao: don't understand the following ??
+  nbuff_max = max(nbuff_max,nbuff_max * k_mat%ncol / nbuff + 1) + 5
+  allocate(k_tmp(nbuff_max))
+  k_tmp(:)%nblock = -1
+  k_tmp(:)%nblock_max = nbuff
+  if (r_grp%master) &
+       write(6,*) 'Using ',nbuff_max,' data blocks to store matrix elements.'
+  write(6, *) "allocate(k_tmp(nbuff_max)), where nbuff_max = ", nbuff_max
+  write(6, *) "k_tmp(:)%nblock_max = nbuff = ", nbuff
+
+  !-------------------------------------------------------------------
+  ! Calculate all necessary matrix elements.
+  !
+  call timacc(63,1,tsec)
+  if(k_mat%isdf) then
+    if(isdf_in%fastselect) then
+      write(*,*) "call k_integrate_isdf_fastselect"
+      call Zk_integrate_isdf_fastselect(gvec,kpt,k_mat,k_tmp,irp,kflag,nspin,nbuff_max,qkt_in,&
+         isdf_in)
+    else
+      write(*,*) "call k_integrate_isdf"
+      call Zk_integrate_isdf(gvec,kpt,k_mat,k_tmp,irp,kflag,nspin,nbuff_max,qkt_in,&
+         isdf_in)
+    endif
+  else
+    write(*,*) "call k_integrate"
+    call Zk_integrate(gvec,kpt,k_mat,k_tmp,irp,kflag,nspin,nbuff_max,qkt_in)
+  endif
+  call timacc(63,2,tsec)
+  !
+  ! Switch back columns and rows of the kernel.
+  !
+  if (iswitch) then
+     iswitch = .true.
+     nn = k_mat%nrow
+     allocate(quadr(4,nn))
+     quadr = k_mat%row
+     deallocate(k_mat%row)
+     k_mat%nrow = k_mat%ncol
+     allocate(k_mat%row(4,k_mat%nrow))
+     k_mat%row(1,:) = k_mat%col(2,:)
+     k_mat%row(2,:) = k_mat%col(1,:)
+     k_mat%row(3,:) = k_mat%col(4,:)
+     k_mat%row(4,:) = k_mat%col(3,:)
+     deallocate(k_mat%col)
+     k_mat%ncol = nn
+     allocate(k_mat%col(4,k_mat%ncol))
+     k_mat%col(1,:) = quadr(2,:)
+     k_mat%col(2,:) = quadr(1,:)
+     k_mat%col(3,:) = quadr(4,:)
+     k_mat%col(4,:) = quadr(3,:)
+     deallocate(quadr)
+     nn = k_mat%nrow_up
+     k_mat%nrow_up = k_mat%ncol_up
+     k_mat%ncol_up = nn
+  endif
+
+#ifdef MPI
+  call MPI_BARRIER(r_grp%comm,info)
+#endif
+
+  !-------------------------------------------------------------------
+  ! All rows for the current block are done.
+  ! Read temporary files and reconstruct kernel.
+  !
+  allocate(k_mat%Zm(nrow,ncol),stat=info)
+  call alccheck('k_mat%m','kernel',nrow*ncol,info)
+
+  ! Build inverse maps.
+  ii = maxval(kpt%wfn(1:nspin,1:kpt%nk)%nstate)
+  allocate(imapc(ii,ii,kpt%nk,kpt%nk,nspin))
+  allocate(imapr(ii,ii,kpt%nk,kpt%nk,nspin))
+  imapc = 0
+  do icol = ioffc + 1, ioffc + ncol
+     if ( icol > k_mat%ncol ) exit
+     csp = 1
+     if ( icol > k_mat%ncol_up ) csp = 2
+     imapc(k_mat%col(1,icol),k_mat%col(2,icol),k_mat%col(3,icol), &
+           k_mat%col(4,icol),csp) = icol - ioffc
+  enddo
+  imapr = 0
+  do irow = ioffr + 1, ioffr + nrow
+     if ( irow > k_mat%nrow ) exit
+     rsp = 1
+     if ( irow > k_mat%nrow_up ) rsp = 2
+     imapr(k_mat%row(1,irow),k_mat%row(2,irow),k_mat%row(3,irow), &
+           k_mat%row(4,irow),rsp) = irow - ioffr
+  enddo
+
+  allocate(nblock(nbuff_max))
+  if (r_grp%master) write(6,*) ' Reconstructing kernel in blocks of ', &
+      nbuff,' matrix elements'
+  allocate(quadr(10,nbuff))
+  allocate(matrix_f(nbuff))
+
+  k_mat%Zm = Zzero
+  icount = 0
+  do ipe = 0, r_grp%npes - 1
+
+     if (ipe == r_grp%inode) then
+        do ii = 1, nbuff_max
+           nblock(ii) = k_tmp(ii)%nblock
+        enddo
+     endif
+#ifdef MPI
+     call MPI_BCAST(nblock,nbuff_max,MPI_INTEGER,ipe,r_grp%comm,info)
+     !if (r_grp%inode .eq. ipe) write(6,*) "ipe ", ipe, " bcast 1"
+#endif
+     do iblock = 1, nbuff_max
+        nelem = nblock(iblock)
+        if (nelem < 1) then
+           if (ipe == r_grp%inode .and. nelem == 0) then
+              deallocate(k_tmp(iblock)%quadr)
+              deallocate(k_tmp(iblock)%Zm_f)
+           endif
+           cycle
+        endif
+        if (ipe == r_grp%inode) then
+           quadr(:,1:nelem) = k_tmp(iblock)%quadr(:,1:nelem)
+           call Zcopy(nelem,k_tmp(iblock)%Zm_f,1,matrix_f,1)
+        endif
+#ifdef MPI
+        call MPI_BCAST(quadr,10*nelem,MPI_INTEGER,ipe,r_grp%comm,info)
+        !if (r_grp%inode .eq. ipe) write(6,*) "ipe ", ipe, " iblock ", iblock, " bcast 2"
+        call MPI_BCAST(matrix_f,nelem,MPI_DOUBLE_SCALAR,ipe,r_grp%comm,info)
+        !if (r_grp%inode .eq. ipe) write(6,*) "ipe ", ipe, " iblock ", iblock, " bcast 3"
+        call MPI_BARRIER(r_grp%comm,info)
+#endif
+        call timacc(64,1,tsec)
+        do ii = 1, nelem
+           m1 = quadr(1,ii)
+           m2 = quadr(2,ii)
+           m3 = quadr(3,ii)
+           m4 = quadr(4,ii)
+           k1 = quadr(5,ii)
+           k2 = quadr(6,ii)
+           k3 = quadr(7,ii)
+           k4 = quadr(8,ii)
+           rsp = quadr(9,ii)
+           csp = quadr(10,ii)
+           matel = matrix_f(ii)
+
+           ! K_12^34 = K_12^34
+           irow = imapr(m1,m2,k1,k2,rsp)
+           icol = imapc(m3,m4,k3,k4,csp)
+           if (icol*irow /= 0) then
+              k_mat%Zm(irow,icol) = matel
+              icount = icount + 1
+!#ifdef DEBUG
+!              call Zk_print(peinf%inode,m1,m2,m3,m4,k1,k2,k3,k4,rsp,csp,matel)
+!#endif
+           endif
+           ! K_12^34 = K_21^43
+           irow = imapr(m2,m1,k2,k1,rsp)
+           icol = imapc(m4,m3,k4,k3,csp)
+           if (icol*irow /= 0) then
+              k_mat%Zm(irow,icol) = MYCONJG(matel)
+              icount = icount + 1
+!#ifdef DEBUG
+!              call Zk_print(peinf%inode,m2,m1,m4,m3,k2,k1,k4,k3,rsp,csp,MYCONJG(matel))
+!#endif
+           endif
+           ! K_12^34 = K_34^12
+           irow = imapr(m3,m4,k3,k4,csp)
+           icol = imapc(m1,m2,k1,k2,rsp)
+           if (icol*irow /= 0) then
+              k_mat%Zm(irow,icol) = MYCONJG(matel)
+              icount = icount + 1
+!#ifdef DEBUG
+!              call Zk_print(peinf%inode,m3,m4,m1,m2,k3,k4,k1,k2,csp,rsp,MYCONJG(matel))
+!#endif
+           endif
+           ! K_12^34 = K_43^21
+           irow = imapr(m4,m3,k4,k3,csp)
+           icol = imapc(m2,m1,k2,k1,rsp)
+           if (icol*irow /= 0) then
+              k_mat%Zm(irow,icol) = matel
+              icount = icount + 1
+!#ifdef DEBUG
+!              call Zk_print(peinf%inode,m4,m3,m2,m1,k4,k3,k2,k1,csp,rsp,matel)
+!#endif
+           endif
+#ifndef CPLX
+           ! K_12^34 = K_21^34
+           irow = imapr(m2,m1,k2,k1,rsp)
+           icol = imapc(m3,m4,k3,k4,csp)
+           if (icol*irow /= 0) then
+              k_mat%dm(irow,icol) = matel
+              icount = icount + 1
+!#ifdef DEBUG
+!              call Zk_print(peinf%inode,m2,m1,m3,m4,k2,k1,k3,k4,rsp,csp,matel)
+!#endif
+           endif
+           ! K_12^34 = K_12^43
+           irow = imapr(m1,m2,k1,k2,rsp)
+           icol = imapc(m4,m3,k4,k3,csp)
+           if (icol*irow /= 0) then
+              k_mat%dm(irow,icol) = matel
+              icount = icount + 1
+!#ifdef DEBUG
+!              call Zk_print(peinf%inode,m1,m2,m4,m3,k1,k2,k4,k3,rsp,csp,matel)
+!#endif
+           endif
+           ! K_12^34 = K_43^12
+           irow = imapr(m4,m3,k4,k3,csp)
+           icol = imapc(m1,m2,k1,k2,rsp)
+           if (icol*irow /= 0) then
+              k_mat%dm(irow,icol) = matel
+              icount = icount + 1
+!#ifdef DEBUG
+!              call Zk_print(peinf%inode,m4,m3,m1,m2,k4,k3,k1,k2,csp,rsp,matel)
+!#endif
+           endif
+           ! K_12^34 = K_34^21
+           irow = imapr(m3,m4,k3,k4,csp)
+           icol = imapc(m2,m1,k2,k1,rsp)
+           if (icol*irow /= 0) then
+              k_mat%dm(irow,icol) = matel
+              icount = icount + 1
+!#ifdef DEBUG
+!              call Zk_print(peinf%inode,m3,m4,m2,m1,k3,k4,k2,k1,csp,rsp,matel)
+!#endif
+           endif
+#endif
+        enddo
+        if (ipe == r_grp%inode) then
+           deallocate(k_tmp(iblock)%quadr)
+           deallocate(k_tmp(iblock)%Zm_f)
+        endif
+        call timacc(64,2,tsec)
+     enddo
+  enddo
+  deallocate(matrix_f)
+  deallocate(quadr)
+  deallocate(imapr)
+  deallocate(imapc)
+  deallocate(k_tmp)
+
+#ifdef MPI
+  call MPI_BARRIER(r_grp%comm,info)
+#endif
+
+end subroutine Zkernel
+!===================================================================

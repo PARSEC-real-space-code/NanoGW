@@ -1,0 +1,50 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+!  Performs matrix-vector multiplications in 3-d arrays. This
+!  should be used in place of matmul (which assumes both arguments
+!  to be matrices). Input is 3x3 matrix M and vector V. Output is
+!  vector MV.
+!  If op='T', performs MV = transpose(M)*V
+!  If op='N', performs MV = M*V
+!
+!  Vec and mvec can point to the same address in parent routine.
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!---------------------------------------------------------------
+subroutine Zmatvec3(op,mat,vec,mvec)
+
+  use myconstants
+  implicit none
+
+  ! arguments:
+  !  operation: transpose(M) or M
+  character (len=1), intent(in) :: op
+  !  input matrix
+  real(dp), intent(in) :: mat(3,3)
+  !  input vector V
+  SCALAR, intent(in) :: vec(3)
+  !  output vector MV = op(M)*V
+  SCALAR, intent(out) :: mvec(3)
+
+  ! local variables:
+  integer :: ii
+  SCALAR :: vtmp(3), matline(3)
+
+  !---------------------------------------------------------------
+
+  do ii = 1, 3
+     if (op == 'N') then
+        matline = Zone*mat(ii,:)
+        vtmp(ii) = dot_product(matline,vec)
+     elseif (op == 'T') then
+        matline = Zone*mat(:,ii)
+        vtmp(ii) = dot_product(matline,vec)
+     endif
+  enddo
+  mvec = vtmp
+
+end subroutine Zmatvec3
+!===================================================================

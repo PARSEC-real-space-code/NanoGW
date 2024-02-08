@@ -1,0 +1,918 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>RGWBS Manual</title>
+<META NAME ="keywords" CONTENT="rgwbs, gw approximation, murilo, tiago, electronic structure, condensed matter physics, bethe-salpeter">
+</head>
+<body bgcolor="#ffffff">
+<h1><center>RGWBS MANUAL</center></h1>
+
+<hr>
+<h3> Contents </h3>
+<ol>
+    <li> <a href="#intro"> What it is</a>
+    </li><li> <a href="#distrib"> Getting the package</a>
+    </li><li> <a href="#compile"> Compiling the package</a>
+    <ol>
+        <li> <a href="#libraries"> Dependencies with external libraries</a>
+        <li> <a href="#porting"> Porting issues</a>
+    </li></ol>
+    </li><li> <a href="#compatibilities"> Compatibilities</a>
+    <ol>
+        <li> <a href="#dft_code"> DFT codes</a>
+        <li> <a href="#pseudopotentials"> Pseudopotentials</a>
+    </li></ol>
+    </li><li> <a href="#tdlda"> The <tt>tdlda</tt> executable: time-dependent DFT-LDA</a>
+    <ol>
+        <li> <a href="#tdlda_desc"> Description</a>
+        </li><li> <a href="#tdlda_in"> Input files</a>
+        </li><li> <a href="#tdlda_rgwbs_in"> Usable parameters in <tt>rgwbs.in</tt></a>
+        </li><li> <a href="#tdlda_out"> Output files</a>
+    </li></ol>
+    </li><li> <a href="#sigma"> The <tt>sigma</tt> executable: self-energy in the family of GW approximations</a>
+    <ol>
+        <li> <a href="#sigma_desc"> Description</a>
+        </li><li> <a href="#sigma_in"> Input files</a>
+        </li><li> <a href="#sigma_rgwbs_in"> Usable parameters in <tt>rgwbs.in</tt></a>
+        </li><li> <a href="#sigma_out"> Output files</a>
+    </li></ol>
+    </li><li> <a href="#bse"> The <tt>bsesolv</tt> executable: Bethe-Salpeter equation</a>.
+    <ol>
+        <li> <a href="#bse_desc"> Description</a>
+        </li><li> <a href="#bse_in"> Input files</a>
+        </li><li> <a href="#bse_rgwbs_in"> Usable parameters in <tt>rgwbs.in</tt></a>
+        </li><li> <a href="#bse_out"> Output files</a>
+    </li></ol>
+    </li><li> <a href="#post_process"> Post-processing tools</a>
+    </li><li> <a href="#examples"> Examples</a>
+    <ol>
+        <li> <a href="#example_1"> Example 1: convergence in TDLDA</a>
+        </li><li> <a href="#example_2"> Example 2: analyzing the self-energy</a>
+        </li><li> <a href="#example_3"> Example 3: macroscopic dielectric function in solids</a>
+        </li><li> <a href="#example_4"> Example 4: role of different kernels</a>
+        </li><li> <a href="#example_5"> Example 5: extra point group symmetries, BLIP transformation</a>
+    </li></ol>
+    </li><li> <a href="#faq"> Frequently asked questions</a>
+  </li></ol>
+<ul>
+    </li><li> <a href="#references"> References</a>
+  </li></ul>
+
+<hr>
+
+<a name="intro"></a> <h2>1. What it is</h2>
+
+<p>RGWBS is a suite of ALDA and GW-BSE codes developed by me (Murilo L. Tiago). Its purpose is to calculate several related quantities:</p>
+
+<ul>
+<li>electron polarizability,</li>
+<li>self-energy,</li>
+<li>excited states (charged and neutral) of an electronic system,</li>
+<li>quasiparticle wavefunctions,</li>
+<li>linear optical spectra.</li>
+</ul>
+
+<p>It is based on two major theories, and users are expected to have a minimal experience with both: density-functional theory (see <i>e.g.</i> <a href="#Martin">Martin's book</a>) and many-body Green functions (see <a href="#AulburJW00">Aulbur <i>et al.</i></a>). The methodology implemented in RGWBS can be found in <a href="#TiagoC06">Tiago and Chelikowsky</a>. Several executables are included in this package in an integrated fashion: output data of one executable is input data of another, some input data is shared among several executables. Development of the package started in 2004. All source files are written in Fortran 95. Below, each portion of the package is discussed in more detail.</p>
+
+<hr>
+
+<a name="distrib"></a> <h2>2. Getting the package</h2>
+
+<p>RGWBS is distributed free of charge, under the GNU General Public License (GPLv1). It can be downloaded from my personal <a href="http://users.ices.utexas.edu/~mtiago">web page</a>. Other mirror sites could become available in the future. Users are allowed and encouraged to improve the package to fit their own purposes, and they should leave improvements (and also bug fixes) available to the community. Please contact the <a href="mailto:mtiago@ices.utexas.edu">author </a> if you want to report bugs, send or receive updated versions of the package. Users should be aware that I cannot offer technical support and that I do not promise to reply to requests in a timely fashion.</p>
+
+<hr>
+
+<a name="compile"></a> <h2>3. Compiling the package</h2>
+
+This package has been tested in several different architectures with different compilers, mostly the compilers distributed by IBM, Intel and PGI. It has been tested with GFortran as well. This is how compilation works step-by-step:
+
+<ol>
+<li> Look at the list of available machine-dependent parameter files under subdirectory <tt>config</tt>. Pick the one that best matches your machine and make modifications if necessary. The name of the parameter file defines the machine type. For instance, file <tt>make.gfortran.h</tt> was built for machine type <tt>gfortran</tt>. If needed, create a new file corresponding to your computer.</li>
+
+<li> The parent directory has a driver <tt>Makefile</tt>. In that file, you must define the value of <tt>MACH</tt> as the machine type. For example, if you use gfortran in a basic linux box, you probably need this:
+
+<p> <tt>MACH = gfortran</tt></p>
+
+<li> Type <tt>make</tt> for available options. Type <tt>make all</tt> if you want to compile everything. Most executable files have extension <tt>.mpi</tt> (with MPI) or <tt>.ser</tt> (serial, no MPI).</li>
+</ol>
+
+<a name="libraries"></a> <h3>3.1. Dependencies with external libraries</h3>
+
+<h4>3.1.1. Message passing</h4>
+
+<p>Use <a href="http://www-unix.mcs.anl.gov/mpi">MPI</a> to enable parallel computation. This suite is compliant with the MPI-1 standard. In your <tt>make.*.h</tt> file, add macro <tt>-DMPI</tt>.</p>
+
+<h4>3.1.2. Linear algebra</h4>
+
+<p>Operations with dense matrices is done using <a href="http://www.netlib.org/blas/">BLAS</a> and <a href="http://www.netlib.org/lapack/">LAPACK</a>. You must have these libraries available. If necessary, define the location of these libraries in your <tt>make.*.h</tt> file.</p>
+
+<h4>3.1.3. Distributed linear algebra</h4>
+
+<p>Diagonalization of dense matrices can be done in parallel if <a href="http://www.netlib.org/scalapack/">ScaLAPACK</a> is available. If necessary, define the location of these libraries in your <tt>make.*.h</tt> file. If you want to use MPI but do not want to use ScaLAPACK, add <tt>-DNOSCALA</tt> to the list of macros in your <tt>make.*.h</tt> file.</p>
+
+<h4>3.1.4. Fast Fourier Transform (FFT)</h4>
+
+<p>This package makes extensive use of FFTs, even if the electronic system is confined (see <a href="#OnidaRGDA95">Onida <i>et al.</i></a>). FFTs are done by external libraries, so you need one of those. There is existing interface with these libraries:</p>
+
+<ul>
+<li><a href="http://www.fftw.org">FFTW 3</a>: this is arguably the most used free-software FFT library out there. Add macro <tt>-DUSEFFTW3</tt>.</li>
+<li><a href="http://www.fftw.org/fftw2_doc/">FFTW 2.*</a>: an older version of FFTW. Add macro <tt>-DUSEFFTW2</tt>.</li>
+<li>MKL (Math Kernel Library): the proprietary math library distributed by Intel. Add macro <tt>-DUSEMKL</tt>.</li>
+<li>ESSL (Engineering Scientific Subroutine Library): another proprietary math library, from IBM. Add macro <tt>-DUSEESSL</tt>.</li>
+</ul>
+
+<h4>3.1.5. Exchange-correlation functional</h4>
+
+<p>Tools to calculate exchange-correlation functionals are an essential part of DFT codes. Most of them use locally developed tools. Fortunately, there are now GPL libraries. This package uses two libraries developed by the <a href="http://www.tddft.org/programs/octopus">Octopus team</a>: <tt>libxc</tt>, which is the main XC library, and <tt>libstring</tt>, which is a string conversion tool. Contact the Octopus developers (preferred) or myself (backup) if you need a copy of the libraries. You also need to define the location of the libraries in your <tt>make.*.h</tt> file.</p>
+
+<a name="porting"></a> <h3>3.2. Porting issues</h3>
+
+<p>As long as you use a decent fortran compiler and the environment is properly defined, porting to new machines should be painless. There are no major machine-dependent functions in the source code. If you use GFortran, you may have problems with BLAS dot product functions. In that case, add the auxiliary source file <tt>aux_gfortran.f90</tt> (see <tt>make.gfortran.h</tt>). Otherwise, add the generic wrapper <tt>aux_generic.f90</tt> found under subdirectory <tt>shared</tt>.</p>
+
+<hr>
+
+<a name="compatibilities"></a> <h2>4. Compatibilities</h2>
+
+<a name="dft_code"></a> <h3>4.1. DFT codes</h3>
+
+<p>Although based on first principles theories, RGWBS needs some input information (actually, a lot of it!) from elsewhere. DFT eigenvectors and eigenvalues must be provided by some DFT code. Also, norm-conserving pseudopotentials are necessary. Currently, there is interface with two DFT codes: <a href="http://parsec.ices.utexas.edu">PARSEC</a> and <a href="http://www.nersc.gov/projects/paratec">PARATEC</a>. Support for different DFT code can be built as long as it produces wavefunctions that can be expressed in real space on a regular grid without loss of relevant information (plane-wave codes and regular-grid codes are easy in that aspect, Gaussian basis codes can be challenging). See section on <a href="#other_dft_codes"> how to built interfaces with other DFT codes</a> for more information.</p>
+
+<p>PARSEC is a real-space DFT code developed at the University of Texas at Austin. It is a convenient code because it generates wavefunctions on a regular grid, which is the same layout used internally in RGWBS. Also, it handles confined electronic systems and systems with mixed periodicity (wires and slabs). RGWBS is compatible with versions 1.1 and newer versions of PARSEC. Some of the 1.3* versions provide support for mixed boundary conditions, but not the older ones. Contact the developers of PARSEC if you have inquiries about their code or want to use it.</p>
+
+<p>PARATEC is a plane-wave DFT code, continuously improved and maintained at the University of California at Berkeley. It is distributed free of charge but download requires registration. Please consult the developers at <a href="http://www.nersc.gov/projects/paratec">http://www.nersc.gov/projects/paratec</a> for distribution, usage etc. </p>
+
+<a name="pseudopotentials"></a> <h3>4.2. Pseudopotentials</h3>
+
+<p>RGWBS uses norm-conserving pseudopotentials out of convenience. With them, the electron wavefunctions can be expressed on a regular grid with a spacing between points that is not too small. Of course, the type of pseudopotential depends on what your DFT code uses. Unfortunately, there is no standard for pseudopotential format yet. It seems that each developer of DFT codes takes pride in defining his/her own format and hope that it becomes the standard. But there are some good pseudopotential generators, for example <a href="http://opium.sourceforge.net">Opium</a>. Currently, RGWBS has built-in support for three formats:
+
+<ul>
+<li>Martins: generated by the code of <a href="http://bohr.inesc-mn.pt/~jlm/">Prof. J. L. Martins</a>. His generator produces non-relativistic, scalar-relativistic and spin-orbit pseudopotentials. This format is the native format used in PARSEC. See more details about it in the <a href="http://parsec.ices.utexas.edu/pseudopotentials/index.html">PARSEC webpage</a>. Used with the PARSEC and PARATEC interfaces.</li>
+<li>FHI: from the <a href="http://www.FHI-Berlin.MPG.DE/th/fhi98md/fhi98PP">Fritz-Haber-Institut</a>, in Germany. This format is also supported by <a href="http://www.abinit.org">Abinit</a> with one <i>caveat</i>: the header lines needed by Abinit should be removed. RGWBS uses the original FHI format. Used with the PARSEC interface.</li>
+<li>Martins-Wang: format used in the <a href="https://hpcrd.lbl.gov/~linwang/PEtot/PEtot.html">PEtot code</a>. It is very similar to Martins' format. Used with the PARSEC interface.</li>
+</ul>
+
+<hr>
+
+<a name="tdlda"></a> <h2>5. The <tt>tdlda</tt> executable: electron polarizability</h2>
+
+<a name="tdlda_desc"></a> <h3>5.1. Description</h3>
+
+<p>This executable calculates the polarizability of the electronic system in energy representation. It follows the energy-orbital formulation popularized by <a href="#Casida95">M. Casida</a>. For a set of occupied and unoccupied electronic orbitals given at input, it computes the eigenmodes of neutral excitations in the system. These eigenmodes are the excited states the system can go to when disturbed by an electric field of well defined energy. In a few words, if the system has charge density &rho; and is disturbed by an electric potential V, then the response function is the polarizability &Pi; = &delta;&rho;&frasl;&delta;V. Instead of calculating &Pi; directly, the code assumes that &Pi; can be expanded in a sum over normal modes and calculates eigenvalues and eigenvectors of a suitably defined Hermitian matrix (see section II.A of <a href="#TiagoC06">Tiago and Chelikowsky</a>). In a periodic system, <tt>tdlda</tt> calculates the polarizability resolved in crystal momenta, &Pi;<sub><b>q</b></sub>, for the list of crystal momenta <b>q</b> given at input. More details about the polarizability can be found in <a href="#TiagoC06">Tiago and Chelikowsky</a> and references therein.</p>
+
+<p>The polarizability can be calculated under two approximations, depending on what type of exchange-correlation interactions are included:</p>
+
+<ul>
+<li>ALDA (adiabatic local density approximation): in this approximation, the exchange-correlation in the polarizability is calculated assuming the LDA kernel. This is the default polarizability.</li>
+<li>RPA (random phase approximation): in this approximation, exchange-correlation in the polarizability is ignored. This is the most popular type of polarizability used in GW calculations. See <a href="#no_lda_kernel"><tt>no_lda_kernel</tt></a>.</li>
+</ul>
+
+<a name="tdlda_in"></a> <h3>5.2. Input files</h3>
+
+<ul>
+<li><tt>rgwbs.in</tt>: this is an ASCII file with input parameters. All the possible input parameters (see below) have default values, so this file is optional. If it is not provided, the code will take all DFT wavefunctions and calculate the polarizability using the ALDA. Add this file if you want to set restrictions such as: ignore some DFT orbitals, ignore some transitions with high energy, or calculate the polarizability at crystal momenta different from <b>q</b>=0 (in periodic systems).</li>
+<li>All the input and output of your DFT code. For PARSEC users, that means: pseudopotentials, <tt>parsec.in</tt>, <tt>parsec.dat</tt> (version 1.2* or later) or <tt>wfn.dat</tt> (versions 1.1*). For PARATEC users, that means: pseudopotentials, <tt>input</tt> and <tt>GWC</tt>.</li>
+<li><tt>pol_diag.dat</tt>: checkpoint file. Use it as input only if you want to restart the calculation from an interrupted run.</li>
+</ul>
+
+<a name="tdlda_rgwbs_in"></a> <h3>5.3 Input parameters in <tt>rgwbs.in</tt></h3>
+
+<ul>
+<li><a name="tdlda_cutoff"></a><tt>tdlda_cutoff</tt> (<i>physical</i>), default = infinitely large, default unit = <tt>eV</tt>
+<p>Defines an energy cut-off in the electronic transitions. With that, the polarizability is calculated taking only transitions from occupied orbitals to unoccupied orbitals such that the difference between DFT eigenvalues of those orbitals is less than the cut-off. This is useful if it happens that some high-energy transitions give very little contribution to the polarizability.</p>
+
+<li><a name="buffer_size"></a><tt>buffer_size</tt> (<i>real</i>), default value = <tt>0.38</tt> (approximately 50,000 matrix elements)
+<p>Maximum amount of CPU memory used to store kernel matrix elements, in MB. This is an optimization parameter. It should be smaller than the cache memory but not too small. Small values cause frequent request of heap memory. Large values reduce the frequency of requests but may lead to unused heap memory.</p></li>
+
+<li><a name="cache_size"></a><tt>cache_size</tt> (<i>real</i>), default value = <tt>4000</tt>
+<p>Size of grid-point blocks used in real-space integrations. This parameter is an optimization parameter. It should be chosen smaller than the actual cache size of your computer. Default value is 4000, which means that around 4x32 kB of cache are used to do integrations.</p></li>
+
+<li><a name="no_lda_kernel"></a><tt>no_lda_kernel</tt> (<i>logical</i>), default = absent
+<p>By default, the polarizability is calculated within the adiabatic local approximation (ALDA). If this line is found, the polarizability is calculated within the random-phase approximation (RPA) instead. See <a href="#TiagoC06">Tiago and Chelikowsky</a> or <a href="#OnidaRR02">Onida <i>et al.</i></a> for more details about the RPA.</p></li>
+
+<li><a name="tamm_dancoff"></a><tt>tamm_dancoff</tt> (<i>logical</i>), default = absent
+<p>Enables the use of the Tamm-Dancoff approximation in the calculation of TDLDA polarizability. The Tamm-Dancoff approximation assumes that excitations from the ground state of an electronic system can only happen by removing electrons from occupied orbitals or adding electrons in unoccupied orbitals. Excitations that involve removing electrons from unoccupied orbitals or adding electrons in occupied orbitals are forbidden. It sounds unusual but actually it is possible to excite an electronic system from its ground state by adding one electron in an occupied orbital, because the ground state of the system is usually not expressible as a single Slater determinant. By default, the Tamm-Dancoff approximation is not used in non-periodic systems but it is used in periodic systems. Actually, the polarizability in periodic systems is <i>always</i> calculated using this approximation because it simplifies calculations dramatically and does not affect accuracy significantly.</p></li>
+
+<li><a name="distribute_representations"></a><tt>distribute_representations</tt> (<i>integer</i>), default = <tt>1</tt>
+<p>Enables the distribution of a specified number of representations among processors. If the number of blocks of representations is not a factor of the number of processors, then the block size is reduced until the new block size is a factor (so that blocks are assigned to groups of processors with the same size). Small values hurt parallelization performance but make checkpointing more frequent. Of course, this is useful only if there is more than one irreducible representation, which can happen only in non-periodic systems.</p></li>
+
+<li><a name="dft_program"></a><tt>dft_program</tt> (<i>string</i>), default = <tt>parsec</tt>
+<p>Choice of DFT program. Available options are <tt>parsec</tt> and <tt>paratec</tt>. For each choice, the user must provide all input and output files. See <a href="#dft_code"> dft codes</a>.</p></li>
+
+<li><a name="distribute_wavefunctions"></a><tt>distribute_wavefunctions</tt> (<i>integer</i>), default = <tt>1</tt>
+<p>Enables the distribution of wavefunctions over a specified number of processors. Default value is such that wavefunctions are not distributed. If a value <i>x</i> &gt; 1 is specified instead, then the values of input wavefunctions on the grid are distributed among <i>x</i> processors. Each processor handles a small number of grid points. The value of <i>x</i> must be a factor of the total number of processors divided by the number of representation groups, specified in <a href="#distribute_representations">distribute_representations</a>. If that is not true, then <i>x</i> is reduced until the new value is a factor. Small values of <i>x</i> reduce the amount of MPI communication but increase memory usage. A rule of thumb is that the size of the wavefunction file (<tt>parsec.dat</tt> or <tt>wfn.dat</tt> etc.) divided by <i>x</i> should be less than half the amount of CPU memory available per processor. If the wavefunction file is too large because the grid spacing is small or because there are too many orbitals, then you should better distribute wavefunctions to avoid memory shortage.</p></li>
+
+<li><a name="tdlda_valence"></a><tt>tdlda_valence</tt> (<i>block</i>), default = empty
+<p>Defines the set of occupied orbitals (or valence bands in a periodic system) used to calculate the polarizability calculation. Relevant only in spin-unpolarized systems. By default, all existing occupied orbitals are used. Inside the block, you can either list orbitals one-per-line or give a range:</p>
+<tt>
+<p> begin tdlda_valence </p>
+<p> 1 </p>
+<p> range 3 5 </p>
+<p> end tdlda_valence </p>
+</tt>
+<p>The example above means that orbitals 1, 3, 4 and 5 are defined.</p>
+</li>
+
+<li><a name="tdlda_valence_up"></a><tt>tdlda_valence_up</tt> (<i>block</i>), default = empty
+<p>Defines the set of occupied orbitals in the majority spin channel ("spin up") of a spin-polarized system. It is similar to <a href="#tdlda_valence">tdlda_valence</a> and follows the same convention. Relevant only in spin-polarized systems.</p></li>
+
+<li><a name="tdlda_valence_down"></a><tt>tdlda_valence_down</tt> (<i>block</i>), default = empty
+<p>Similar to <a href="#tdlda_valence_up">tdlda_valence_up</a> but now for the minority spin channel ("spin_down"). Relevant only in spin-polarized systems.</p></li>
+
+<li><a name="tdlda_conduction"></a><tt>tdlda_conduction</tt> (<i>block</i>), default = empty
+<p>Defines the set of unoccupied orbitals (or conduction bands in a periodic system) used to calculate the polarizability calculation. By default, all existing unoccupied orbitals are used. Inside the block, you can either list orbitals one-per-line or give a range, just like in <a href="#tdlda_valence">tdlda_valence</a>. Relevant only in spin-unpolarized systems.</a></p>
+</li>
+
+<li><a name="tdlda_conduction_up"></a><tt>tdlda_conduction_up</tt> (<i>block</i>), default = empty
+<p>Similar to <a href="#tdlda_conduction">tdlda_conduction</a> but now for the majority spin channel of a spin-polarized system. Relevant only in spin-polarized systems.</p></li>
+
+<li><a name="tdlda_conduction_down"></a><tt>tdlda_conduction_down</tt> (<i>block</i>), default = empty
+<p>Similar to <a href="#tdlda_conduction">tdlda_conduction</a> but now for the minority spin channel of a spin-polarized system. Relevant only in spin-polarized systems.</p></li>
+
+<li><a name="qpoints"></a><tt>qpoints</tt> (<i>block</i>), default value = empty
+<p>List of crystal momenta ("<b>q</b> points") for which the polarizability is calculated. Coordinates are given in units of reciprocal lattice vectors only. This is relevant only in periodic systems. Each line has 5 floating point numbers. The first 3 numbers are the coordinates of each momentum (the last coordinates are not used in partially periodic systems but they must be input). The next number is an overall divisor. The last number is either 0 or 1: 0 for non-zero momenta, 1 for zero crystal momentum. For example:</p>
+<tt>
+<p> begin qpoints </p>
+<p> 0.0 0.0 0.0 1.0 1 </p>
+<p> 0.0 0.0 0.5 1.0 0 </p>
+<p> 0.0 0.0 1.0 3.0 0 </p>
+<p> end qpoints </p>
+</tt>
+<p>The above block defines three momenta: the first one is (0,0,0) and flagged as having zero length, the second one is (0,0,0.5) and the last one is (0,0,1&frasl;3). The last two momenta are flagged as having non-zero length. The divisor is useful if you want to input coordinates that are infinite fractions like 1&frasl;3 or 2&frasl;7. The zero-length flag is necessary because the polarizability at zero momentum has special behavior. See <a href="#Hanke78">Hanke's article</a>.</p
+</li>
+
+<li><a name="scissors"></a><tt>scissors</tt> (<i>block</i>), default = empty
+<p>Define a scissors operator in input orbital energies. This could be useful for example if you want to modify the DFT eigenvalues so that the band gap is not underestimated. Each line in this block defines a different operator. This block should have 6 numbers on each line with this format:</p>
+<p><tt> spin  band_min band_max const ref slope </tt></p>
+<p> where</p>
+<ul><p>
+<li><tt>spin</tt> : spin channel of orbitals to which this operator is applied (value <tt>1</tt> or <tt>2</tt>). In non-polarized systems, value <tt>1</tt> applies to both spin channels.</li>
+<li><tt>band_min</tt> : order of lowest orbital to which this operator is applied. Integer.</li>
+<li><tt>band_max</tt> : order of highest orbital to which this operator is applied. Integer.</li>
+<li><tt>const</tt> : constant value added to the energy of orbitals included in this operator. Real (float), units are <tt>eV</tt>.</li>
+<li><tt>ref</tt> : reference energy used to add a "stretch" to the energy of orbitals. Real (float), units are <tt>eV</tt>.</li>
+<li><tt>slope</tt> : amount of "stretch" applied to energy of orbitals. Real (float) value.</li>
+</p></ul></li>
+<p>One example is the pair of operators below:</p>
+<p><tt>begin scissors</tt></p>
+<p><tt>1 1 4  0.0 10 -0.1</tt></p>
+<p><tt>1 5 10 1.0 11 0.2</tt></p>
+<p><tt>end scissors</tt></p>
+<p>It specifies that the energy of bands 1 through 4 is changed according to the rule E<sub>new</sub> = E<sub>old</sub> &minus; 0.1&times;(E<sub>old</sub> &minus; 10 eV) and the energy of bands 5 through 10 is changed according to the rule E<sub>new</sub> = E<sub>old</sub> + 1 eV + 0.2&times;(E<sub>old</sub> &minus; 11 eV).</p>
+
+<li><a name="point_group_tables"></a><tt>point_group_tables</tt> (<i>block</i>), default = empty
+<p>Specifies additional point groups to be used. Each line in this block contains the name of an input file with the specifications of the point group. Usually, additional point groups lead to modest gains in performance. This is more useful to calculate <a href="#example_5">BLIP transformed wavefunctions.</p></li>
+
+<li><a name="rpa_spectrum_only"></a><tt>rpa_spectrum_only</tt> (<i>logical</i>), default = absent
+<p>This flag actually forces the skip of polarizability calculation almost entirely. With that, only oscillator strengths of uncorrelated transitions are calculated and file <tt>eigenvalues_rpa</tt> is printed out. This is useful if you want to study the convergence of sum rule. See <a href="#example_1">example_1</a>.</p></li>
+
+<li><a name="tdlda_triplet_kernel"></a><tt>tdlda_triplet_kernel</tt> (<i>logical</i>), default = absent
+<p>Calculates the polarizability for spin-triplet excitations instead of spin-singlet excitations (the ones that are actually accessible in linear optics). This flag is useful only in non-spin polarized systems. See <a href="#VasilievOC02">Vasiliev <i>et al.</i></a> for more details about spin-triplet excitations.</p></li>
+
+<li><a name="no_exchange"></a><tt>no_exchange</tt> (<i>logical</i>), default = absent
+<p>Removes the Hartree term (sometimes called "exchange" or "Coulomb") term of the exchange-correlation kernel. This term is the <b>K</b><sup>x</sup> of Equation 4 in <a href="#TiagoC06">Tiago and Chelikowsky</a>. If this input flag is used with <tt>bsesolv</tt>, the same Hartree term (K<sup>x</sup> of Equation 36 in <a href="#TiagoC06">Tiago and Chelikowsky</a>) is removed from the BSE.</p></li>
+
+<li><a name="truncate_coulomb"></a><tt>truncate_coulomb</tt> (<i>logical</i>), default = absent
+<p>Remove the long-wavelength portion of the Hartree term when the polarizability for zero crystal momentum is calculated. This is relevant in periodic systems only. <a href="#Hanke78">Hanke</a> shows that the polarizability with long-wavelength Hartree is the "full polarizability" (jargon from quantum field theory) and it leads to the inverse dielectric function. The polarizability without long-wavelength Hartree is the "reduced polarizability" and it leads to the dielectric function. If you wish to calculate the dielectric function of a solid, you probably want to use this flag.</p></li>
+
+</ul>
+
+<a name="tdlda_out"></a> <h3>5.4. Output files</h3>
+
+<ul>
+<li>Standard output sent to screen: among other things, it contains the first few polarizability eigenvalues, sum rule and static susceptibility.
+</li>
+
+<li><tt>eigenvalues_lda</tt>: list of eigenvalues of the polarizability (in eV) for each eigenmode, followed by the corresponding oscillator strengths along the three Cartesian directions (or along the three major crystalline directions, in periodic systems). The oscillator strength is defined in Equation 9 of <a href="#TiagoC06">Tiago and Chelikowsky</a>. It can be used to calculate <a href="#absp">absorption spectra</a>.
+</li>
+
+<li><tt>eigenvalues_rpa</tt>: contrary to what the name seems to indicate, this is just the set of uncorrelated excitation energies (difference between energy of occupied orbitals and unoccupied orbitals for each excitation), followed by the corresponding oscillator strengths.
+</li>
+
+<li><tt>pol_diag.dat</tt>: binary file with all polarizability eigenvectors. The format is compatible with codes <tt>sigma</tt> and <tt>bsesolv</tt> and it can be used as input to them. It could also be useful for <a href="#proj_pol">post-processing</a>.
+</ul>
+
+<hr>
+
+<a name="sigma"></a> <h2>6. The <tt>sigma</tt> code: self-energy in the family of GW approximations</h2>
+
+<a name="sigma_desc"></a> <h3>6.1. Description</h3>
+
+<p>This executable calculates the electron self-energy and quasiparticle energies. The purpose of this code is to determine electronic orbitals (both wavefunctions and energies) that are more realistic than the DFT eigenvectors and eigenvalues. One strategy is to replace the DFT eigenvalue equation with a quasi-particle eigenvalue equation, where the exchange-correlation functional is replaced with a self-energy (the formalism is presented in great detail for example in <a href="#AulburJW00">Aulbur <i>et al.</i></a>). Inside the code, the self-energy &Sigma;(<b>r</b>,<b>r</b>&prime;,<i>E</i>) is never calculated explicitly. Instead, what is calculated are matrix elements involving the self-energy and pairs of orbitals, &lang;i|&Sigma;|j&rang;, or pairs of Bloch functions &lang;i<b>k</b>|&Sigma;|j<b>k</b>&rang; (since the self-energy has crystal symmetry, matrix elements involving Bloch functions with different crystal momenta are zero). The user can specify in <tt>rgwbs.in</tt> which matrix elements are computed and how they are computed (which approximation, which parameters etc.). After the self-energy is calculated, the quasi-particle eigenvalue equation is diagonalized using the input electron orbitals as basis functions, and the resulting eigenvalues are saved in disk. The main output of this code is self-energy and quasi-particle eigenvalues. Other output information is: quasi-particle wavefunctions, a breakdown of self-energy matrix elements (useful for benchmarking or debugging), electron total energy, polarizability.</p>
+
+<p>Normally, the self-energy is calculated within the G<sub>0</sub>W<sub>f</sub> (sometimes referred to as G<sub>0</sub>W<sub>LDA</sub>&Gamma;<sub>LDA</sub>) approximation, non-self-consistent. In that approximation, the screened Coulomb interaction W is obtained within the time-dependent ALDA, a vertex insertion is calculated also within the ALDA, and G is simply the Kohn-Sham Green's function. Other types of self-energies can be calculated as well: self-consistent GW<sub>f</sub>, G<sub>0</sub>W<sub>RPA</sub> (RPA screened Coulomb interaction, no vertex insertion) or its self-consistent counterpart. At a lower level of approximation, one can calculate exchange and correlation functions that are approximations to the self-energy. There are two classes of approximations of that type: Hartree-Fock (equivalent to removing correlation for the self-energy), or model DFT functionals. See <a href="#exchange_correlation"><tt>exchange_correlation</tt></a> for a list of available options.</p>
+
+<p>In order to calculate the GW self-energy, one must have the polarizability calculated (notice that many GW codes calculate the dielectric matrix instead, which is anyway related to the polarizability). Users have two options: they can run the <tt>tdlda</tt> code before <tt>sigma</tt> and use file <tt>pol_diag.dat</tt> as input; or they can run <tt>sigma</tt> right away. If file <tt>pol_diag.dat</tt> is not present, then the code will calculate the polarizability before actually calculating the self-energy. Be careful if you prefer to run <tt>tdlda</tt> beforehand and the electronic system has crystal periodicity: <tt>tddla</tt> must calculate the polarizability at a full Monkhorst-Pack grid (see <a href="#qpoints_sigma"><tt>qpoints</tt></a>), one of the <b>q</b> points must have zero length <i>and</i> the Coulomb potential must not be truncated (do <i>not</i> use <a href="#truncate_coulomb"><tt>truncate_coulomb</tt></a>).</p>
+
+<p>Regarding numerical complexity, calculating the self-energy is not trivial. It is hard to quantify the computational cost, but one can easily expect self-energy calculations to be anything from 10 to 1000 times more demanding than DFT calculations for the same system. Fortunately, <tt>sigma</tt> makes good use of parallelization even in machines with hundreds of processors. Also, memory is distributed with little communication overhead. A <tt>sigma</tt> run can be done using information from previous, incomplete calculations (see <a href="#read_checkpoint"><tt>read_checkpoint</tt></a>).</p>
+
+<a name="sigma_in"></a> <h3>6.2. Input</h3>
+
+<ul>
+<li><tt>rgwbs.in</tt>: this is an ASCII file with input parameters. All the possible input parameters (see below) have default values, so this file is optional. If it is not provided, the code will calculate self-energy matrix elements for all wavefunctions found in input file. Add this file only if you want to set restrictions in the matrix elements to be calculated, enable flags, or specify your own values for input parameters.</li>
+<li>All the input and output of your DFT code. For PARSEC users, that means: pseudopotentials, <tt>parsec.in</tt>, <tt>parsec.dat</tt> (version 1.2* or later) or <tt>wfn.dat</tt> (versions 1.1*). For PARATEC users, that means: pseudopotentials, <tt>input</tt> and <tt>GWC</tt>.</li>
+<li><tt>pol_diag.dat</tt>: if available, the <tt>sigma</tt> code will skip the calculation of polarizability. See <a href="#read_checkpoint"><tt>read_checkpoint</tt></a>. Optional.</li>
+<li><tt>sigma.chkpt.dat</tt>: checkpoint file. This file is usually created and updated several times during a calculation. Leave it available if you wish to restart from an incomplete previous calculation. See <a href="#read_checkpoint"><tt>read_checkpoint</tt></a>. Optional.</li>
+<li><a name="#wpol0.dat"></a><tt>wpol0.dat</tt>: file with the COHSEX screened interaction. The GW self-energy here is corrected with a static remainder, as discussed in Appendix B of <a href="#TiagoC06">Tiago and Chelikowsky</a>. This file has the potential W(<b>r</b>) defined in equation B2 and a similar potential for the vertex self-energy, both of them computed on all points in the real-space grid. If this file is available, the static remainder is calculated from the contents of this file instead of calculated from scratch. Optional.</li>
+<li>group table files: see <a href="#point_group_tables"><tt>point_group_tables</tt></a>. Optional.</li>
+<li><tt>occup.in</tt>: see <a href="#read_orbital_occupancies"><tt>read_orbital_occupancies</tt></a>. Optional.</li>
+</ul>
+
+<a name="sigma_rgwbs_in"></a> <h3>6.3 Input parameters in <tt>rgwbs.in</tt></h3>
+
+<ul>
+<li><a href="#tdlda_cutoff"><tt>tdlda_cutoff</tt></a></li>
+
+<li><a href="#buffer_size"><tt>buffer_size</tt></a></li>
+
+<li><a href="#cache_size"><tt>cache_size</tt></a></li>
+
+<li><a href="#no_lda_kernel"><tt>no_lda_kernel</tt></a> (<i>logical</i>), default = absent
+<p>In <tt>sigma</tt> calculations, this flag also removes the LDA kernel, Equation 30 of <a href="#TiagoC06">Tiago and Chelikowsky</a>. With this flag, the self-energy is calculated in the so-called G<sub>0</sub>W<sub>RPA</sub> (without self-consistency) or GW<sub>RPA</sub> approximation (with self-consistency). By default, the self-energy is calculated under G<sub>0</sub>W<sub>LDA</sub>&Gamma;<sub>LDA</sub> (without self-consistency) or GW<sub>LDA</sub>&Gamma;<sub>LDA</sub> approximations (with self-consistency).</p></li>
+
+<li><a href="#tamm_dancoff"><tt>tamm_dancoff</tt></a></li>
+
+<li><a href="#distribute_representations"><tt>distribute_representations</tt></a></li>
+
+<li><a href="#dft_program"><tt>dft_program</tt></a></li>
+
+<li><a href="#distribute_wavefunctions"><tt>distribute_wavefunctions</tt></a></li>
+
+<li><a href="#tdlda_valence"><tt>tdlda_valence</tt></a></li>
+
+<li><a href="#tdlda_valence_up"><tt>tdlda_valence_up</tt></a></li>
+
+<li><a href="#tdlda_valence_down"><tt>tdlda_valence_down</tt></a></li>
+
+<li><a href="#tdlda_conduction"><tt>tdlda_conduction</tt></a></li>
+
+<li><a href="#tdlda_conduction_up"><tt>tdlda_conduction_up</tt></a></li>
+
+<li><a href="#tdlda_conduction_down"><tt>tdlda_conduction_down</tt></a></li>
+
+<li><a href="#qpoints"><tt>qpoints</tt></a>
+<a name="qpoints_sigma"></a><p>List of crystal momenta for which the polarizability is calculated. For the <tt>sigma</tt> code, this list must contain a complete Monkhorst-Pack grid (<i>i.e.</i> the <b>q</b> points must form a regular mesh covering the entire first Brillouin zone, including points related to each other by symmetry operations).</p>
+</li>
+
+<li><a href="#scissors"><tt>scissors</tt></a></li>
+
+<li><a href="#point_group_tables"><tt>point_group_tables</tt></a></li>
+
+<li><a name="max_number_states"></a><tt>max_number_states</tt> (<i>integer</i>), default value = maximum possible
+<p>Highest orbital included in Green's function summation. This parameter defines where to stop the sum over <i>n</i> in Equations 24 and 30 of <a href="#TiagoC06">Tiago and Chelikowsky</a>. If not specified, use all orbitals in the wavefunction file.</p></li>
+
+<li><a name="max_number_states_cohsex"></a><tt>max_number_states_cohsex</tt> (<i>integer</i>), default value = maximum possible
+<p>Highest state for which the self-energy is computed under the COHSEX approximation. States below this order have self-energy calculated within the COHSEX approximation unless self-energy matrix elements are requested explicitly with blocks "<a href="#diag"><tt>diag</tt></a>" and "<a href="#offdiag"><tt>offdiag</tt></a>".</p></li>
+
+<li><a name="energy_range"></a><tt>energy_range</tt> (<i>physical</i>), default value = <tt>20</tt>, default unit = <tt>eV</tt>
+<p>Energy range used to calculate self-energy. Used together with <a href="#energy_data_points"><tt>energy_data_points</tt></a>. If user inputs "<tt>energy_range = </tt>&Delta;" and "<tt>energy_data_points = N</tt>", then the self-energy is evaluated at <tt>N</tt> values  of energy regularly spaced between E<sub>in</sub> &minus; &Delta;&frasl;2 and E<sub>in</sub> + &Delta;&frasl;2 (E<sub>in</sub> is the input energy eigenvalue), including the bounds.</p></li>
+
+<li><a name="energy_data_points"></a><tt>energy_data_points</tt> (<i>integer</i>), default value = <tt>21</tt>
+<p>Number of data points used to calculate self-energy. Used together with <a href="#energy_range"><tt>energy_range</tt></a>. If user inputs <tt>energy_range = </tt>&Delta; and <tt>energy_data_points = N</tt>, then the self-energy is evaluated at <tt>N</tt> values of energy regularly spaced between E<sub>in</sub> &minus; &Delta;&frasl;2 and E<sub>in</sub> + &Delta;&frasl;2 (E<sub>in</sub> is the energy in input wavefunction file), including the bounds. As shown for example in Equation 35 of <a href="#HybertsenL86">Hybertsen and Louie</a>, the self-energy should be calculated at the quasi-particle energy, which is not known beforehand. This code determines the actual quasi-particle energy by solving Equation 35 using a Newton-Raphson method. The self-energy is calculated in between points of the energy grid using spline interpolation. The energy range should be such that the final quasi-particle energy is inside the energy range, |E<sub>qp</sub> &minus; E<sub>in</sub>| &lt; &Delta;&frasl;2. The number of data points should be small enough so that the spline interpolation is numerically stable. If anything goes wrong, you will see some warning in standard output like "<tt>ERROR!! Newton-Raphson exceeded maximum number of iterations</tt>". </p></li>
+
+<li><a name="renormalize_sumrule"></a><tt>renormalize_sumrule</tt> (<i>logical</i>), default = absent
+<p>With this flag, the polarizability eigenvalues are rescaled so that the sum rule is set to one and the static susceptibility is kept fixed. This is an <i>ad hoc</i> trick to improve the accuracy of the polarizability but there is no guarantee it actually improves anything. Use it with caution.</p></li>
+
+<li><a name="number_iterations"></a><tt>number_iterations</tt> (<i>integer</i>), default value = <tt>0</tt>
+<p>Maximum number of self-consistent iterations to be performed. Setting a value greater than 0 enables self-consistency in the calculation of self-energy. In general, every iteration consumes the same amount of memory and CPU time.</p></li>
+
+<li><a name="convergence_potential"></a><tt>convergence_potential</tt> (<i>physical</i>), default value = <tt>0.001</tt>, default unit = <tt>eV</tt>
+<p>Maximum difference between old and new interaction potential (= &Sigma;<sub>out</sub> &minus; &Sigma;<sub>in</sub>) at convergence, where &Sigma;<sub>out</sub> is the self-energy at current iteration and &Sigma;<sub>in</sub> is the self-energy at the previous iteration (or V<sub>xc</sub> if there is no previous iteration). Used only in self-consistent GW calculations.</p></li>
+
+<li><a name="read_checkpoint"></a><tt>read_checkpoint</tt> (<i>logical</i>), default = absent
+<p>Enables the reading of checkpoint files (<tt>pol_diag.dat</tt>, <tt>sigma.chkpt.dat</tt>, <tt>wpol0.dat</tt>). If they do not exist, calculation proceeds normally. If they exist, their contents is stored in memory and not re-calculated. This is useful if you need to continue a <tt>sigma</tt> calculation that was interrupted for some reason. By default, checkpoint files are not read between one self-consistent GW iteration and the subsequent one. Also, checkpoint files are never read if the exchange-correlation type is not <tt>gw</tt> (for example, some model DFT exchange-correlation).</p></li>
+
+<li><a name="write_qp_wavefunctions"></a><tt>write_qp_wavefunctions</tt> (<i>logical</i>), default = absent
+<p>With this flag, the code prints out quasi-particle wavefunctions to file <tt>parsec_qp.dat</tt>. This file has the same format as <tt>parsec.dat</tt>, but it contains quasiparticle orbitals instead of DFT orbitals. In addition, this flag forces the write out the self-energy matrix elements to file <tt>sigma_mtxel_qp.dat</tt>. By default QP wavefunctions are never printed out. In self-consistent GW calculations, the QP wavefunctions are printed at each iteration. In self-consistent calculations with model exchange-correlations, the QP wavefunctions are printed only in the last iteration.</p></li>
+
+<li><a name="read_vxc_matrix_elements"></a><tt>read_vxc_matrix_elements</tt> (<i>logical</i>), default = absent
+<p>With this flag, the code reads matrix elements of the exchange-correlation operator from file <tt>sigma_mtxel.dat</tt>, instead of calculating them. This is useful if self-consistency is imposed and we want to restart a calculation from previous runs.</p></li>
+
+<li><a name="read_orbital_occupancies"></a><tt>read_orbital_occupancies</tt> (<i>logical</i>), default = absent
+<p>Forces the reading of orbital occupancies from file <tt>occup.in</tt> (compatible with PARSEC, see its documentation). This is useful in spin-polarized systems where DFT produces fractional or otherwise incorrect occupancies.</p></li>
+
+<li><a name="cohsex_approximation"></a><tt>cohsex_approximation</tt> (<i>logical</i>), default = absent
+<p>With this flag, the GW correlation is always calculated using the COHSEX approximation. This flag is useful for debugging purposes.</p></li>
+
+<li><a name="exchange_correlation"></a><tt>exchange_correlation</tt> (<i>string</i>), default value = <tt>gw</tt>
+<p>Defines different exchange-correlation types. By default, the GW approximation is used to calculate both exchange and correlation. Alternatively, one can also use simpler approximations such as the Hartree-Fock approximation (no correlation, exact exchange), or DFT with some type of exchange-correlation functional. In that case, the electron wavefunctions are calculated for the specified exchange-correlation type using the existing set of input wavefunctions to define a "Hilbert space". This is equivalent to solving the Hartree-Fock equations or the DFT equations in an explicit basis set. Of course, the accuracy of the calculation depends critically on the ability of input wavefunctions to span a sufficiently large Hilbert space. Exchange-correlation types other than GW are usually used with some sort of self-consistency. Available options are:</p>
+<ul><p>
+<li><tt>gw</tt>: GW exchange-correlation (default).</li>
+<li><tt>hartree_fock</tt>: Hartree-Fock exchange-correlation.</li>
+<li><tt>b3lyp</tt>: hybrid exchange-correlation functional, see <a href="#Martin">Martin's book</a>.</li>
+<li><tt>blyp</tt>: generalized-gradient exchange-correlation functional, see <a href="#Martin">Martin's book</a>.</li>
+<li><tt>lda_ca</tt>: local-density functional parametrized by Perdew and Zunger (1981), see <a href="#Martin">Martin's book</a>.</li>
+<li><tt>gga_pbe</tt>: generalized-gradient functional parametrized by Perdew, Burke and Ernzerhof (1996), see <a href="#Martin">Martin's book</a>.</li>
+</p></ul>
+</li>
+
+<li><a name="scratch_disk_size"></a><tt>scratch_disk_size</tt> (<i>physical</i>), default value = as large as necessary, default unit = <tt>MB</tt>
+<p>Maximum amount of disk space used to store real-space potentials, in MB. By default, this code uses all the necessary disk space such that 99.99% of the electron density is accounted for. The motivation behind this parameter is that quantities associated to the static polarizability (see Appendix B of <a href="#TiagoC06">Tiago and Chelikowsky</a>) are calculate in real space and they often involve dumping a huge amount of data to disk. If your computer happens to have small amount of disk space available, then you may need to specify an upper bound. Otherwise, let it use as much disk space as needed. The amount of data written to disk is printed in standard output around line beginning with "<tt>Calculating W_pol in static limit with</tt>".</p></li>
+
+<li><a name="dynamic_energy_resolution"></a><tt>dynamic_energy_resolution</tt> (<i>physical</i>), default value = <tt>0.1d0</tt>, default unit = <tt>Ry</tt>
+<p>Energy resolution used in energy denominators. The GW correlation has energy denominators (see <i>e.g.</i> Equations 24 and 30 of <a href="#TiagoC06">Tiago and Chelikowsky</a>) that can diverge if there is a match between polarizability eigenvalues and DFT eigenvalues. In order to prevent singularities, each energy denominator 1&frasl;E is replaced by the function E&frasl;(E<sup>2</sup> + ecut<sup>2</sup>), which has no singularity at E=0. For self-energy calculations, this parameter is expected to strongly affect quasi-particle energies of deep occupied orbitals. Orbitals around the gap are less affected. Values of the order of <tt>1 eV</tt> are typical. Large values lead to unphysically weak energy dependence of the self-energy. Small values lead to sharp divergences in the self-energy. See <a href="#example_2">example 2</a> for more details about this parameter.</p></li>
+
+<li><a name="qp_mixing_param"></a><tt>qp_mixing_param</tt> (<i>real</i>), default value = <tt>1</tt>
+<p>Amount of new self-energy correction (= &Sigma;<sub>out</sub> &minus; &Sigma;<sub>in</sub>) to be added to the input Hamiltonian. Its value should be chosen between zero and one. By default, the new self-energy replaces completely the old one (<tt>qp_mixing_param</tt> = 1). Using mixing parameters less than one may improve the stability of self-consistency cycles.</p></li>
+
+<li><a name="self_energy_cutoff"></a><tt>self_energy_cutoff</tt> (<i>physical</i>), default value = <tt>0</tt>, default unit = <tt>eV</tt>
+<p>If there is a large amount of numerical noise in the calculation of self-energy (for example because of underconverged numerical parameters), then the self-consistency cycles may become unstable. With a self-energy cut-off greater than zero, matrix elements of the operator &Sigma;<sub>out</sub> &minus; &Sigma;<sub>in</sub> with absolute value less than the specified cut-off are neglected.</p></li>
+
+<li><a name="sigma_energy"></a><tt>sigma_energy</tt> (<i>string</i>), default value = <tt>left</tt>
+<p>Since the self-energy is an energy-dependent operator, one cannot add it to a Hamiltonian and start diagonalizing the Hamiltonian before some approximations are assumed. Usually, the diagonal part of the self-energy is evaluated at the quasi-particle energy (see Equation 35 of <a href="#HybertsenL86">Hybertsen and Louie</a>) but there is no consensus about how to handle the off-diagonal part. By default, the off-diagonal part is evaluated at the energy of the orbital on the left side: &lang;i|&Sigma;|j&rang; = &lang;i|&Sigma;(E = E<sub>i</sub>)|j&rang;. Alternatively, one can evaluate it at the energy of the right-side orbital or at the average of the two energies. Possible choices are:</p>
+<ul><p>
+<li><tt>left</tt>: default</li>
+<li><tt>right</tt>: use the right orbital, &lang;i|&Sigma;|j&rang; = &lang;i|&Sigma;(E = E<sub>j</sub>)|j&rang;.</li>
+<li><tt>average</tt>: use the average energy, &lang;i|&Sigma;|j&rang; = &lang;i|&Sigma;(E = [E<sub>i</sub>+E<sub>j</sub>]&frasl;2)|j&rang;.</li>
+</p></ul>
+</li>
+
+<li><a name="no_hqp_symmetrize"></a><tt>no_hqp_symmetrize</tt> (<i>logical</i>), default = absent
+<p>When the self-energy is evaluated at specified energies, it may no longer be Hermitian, which makes the quasi-particle Hamiltonian non-Hermitian. By default, the off-diagonal part is explicitly symmetrized: &lang;i|&Sigma;|j&rang; = [ &lang;i|&Sigma;|j&rang; + complex conjugate ]&times;1&frasl;2. With this flag, symmetrization is suppressed. </p></li>
+
+<li><a name="sigma_kpoints"></a><tt>sigma_kpoints</tt> (<i>block</i>), default = absent
+<p>List of crystal momenta ("<b>k</b>-points") at which the self-energy is computed. This block is relevant only in periodic systems. If not found, only the self-energy at the &Gamma; point (<b>k</b> = 0) is computed. If found then more <b>k</b>-points are used. The format is similar to <a href="#qpoints">qpoints</a> but the zero-length flag is not necessary:</p>
+<tt>
+<p> begin sigma_kpoints </p>
+<p> 0.0 0.0 0.0 1.0 # &Gamma; point </p>
+<p> 0.0 0.0 0.5 1.0 # point (0, 0, 1&frasl;2) </p>
+<p> 0.0 0.0 1.0 3.0 # point (0, 0, 1&frasl;3) </p>
+<p> end sigma_kpoints </p>
+</tt>
+</li>
+
+<li><a name="diag"></a><tt>diag</tt> (<i>block</i>), default = absent
+<p>List of electronic orbitals (or bands) for which the diagonal part of the self-energy is computed. If not found, the code calculates the self-energy for all orbitals found in the wavefunction file. Like <a href="#tdlda_valence">tdlda_valence</a> block, one can either list separate orbitals or give the lower/upper bounds of a range of orbitals.</p></li>
+
+<li><a name="offdiag"></a><tt>offdiag</tt> (<i>block</i>), default = absent
+<p>List of electronic orbitals for which off-diagonal matrix elements of self-energy are computed. If not found, then calculate the self-energy for all orbitals found in the wavefunction file. Like <a href="#tdlda_valence">tdlda_valence</a> block, one can either list separate pairs of orbitals or give the lower/upper bounds of a range of orbitals.</p></li>
+
+</ul>
+
+<a name="sigma_out"></a> <h3>6.4. Output</h3>
+
+<p>A regular run generates output printed out to standard output (screen). The user may want to save that output. It contains information about input data (parameters from the DFT calculation, timings, estimate of memory usage etc.). The same output files produced by <tt>tdlda</tt> are generated as well: <tt>eigenvalues_rpa</tt>, <tt>eigenvalues_lda</tt>, <tt>pol_diag.dat</tt>. Additional output is written in these files:</p>
+
+<ul>
+<p>
+<li><tt>hmat_qp</tt>: quasiparticle eigenvalues. These are the eigenvalues obtained by diagonalizing the quasiparticle Hamiltonian (Equation 32 of <a href="#TiagoC06">Tiago and Chelikowsky</a>). Its format is appropriate to use by the <a href="#bse"><tt>bsesolv</tt></a> code. Data written in this file are:
+
+<ul>
+<p>
+<li>1<sup>st</sup> column: order of orbital <tt>i</tt>.</li>
+<li>2<sup>nd</sup> column: order of orbital <tt>j</tt>.</li>
+<li>3<sup>rd</sup> column: matrix element &lang;i<b>k</b>|&Sigma;|j<b>k</b>&rang;, in units of eV.</li>
+<li>4<sup>th</sup> column: spin orientation of orbitals <tt>i</tt> and <tt>j</tt>.</li>
+<li>5<sup>th</sup> column: <b>k</b>-point index of orbitals <tt>i</tt> and <tt>j</tt> (relative to the list of <b>k</b>-points present in the input wavefunction file).</li>
+<li>6<sup>th</sup> column: energy eigenvalue of orbital <tt>i</tt> as given in the input wavefunction file (column printed only for diagonal matrix elements, <tt>i</tt> = <tt>j</tt>).</li>
+<li>7<sup>th</sup> column: energy given in 6<sup>th</sup> column plus a scissors operator (if given).</li>
+</p>
+</ul>
+
+<li><tt>hmat_qp_nostatic</tt>: contains data similar to <tt>hmat_qp</tt> with the difference that the static remainder (see Appendix B of <a href="#TiagoC06">Tiago and Chelikowsky</a>) is not included. This is important only for debugging purposes.</li>
+
+<li><tt>eqp_*_*_*</tt>: these files also contain quasiparticle energies. Each file corresponds to a particular spin orientation (<tt>up</tt> or <tt>down</tt>, or blank for spin-unpolarized systems), <b>k</b>-point and iteration, indicated in that sequence in the file name. The contents is almost self-explanatory. Each line corresponds to a quasiparticle orbital with these data: orbital order, representation, occupancy, quasiparticle energy (<tt>E_0</tt>), &Sigma; &minus; &delta;V<sub>Hartree</sub> (<tt>V_xc + delta_Vh</tt>), &Delta;V<sub>Hartree</sub> (<tt>delta_Vh</tt>), imaginary part of the self-energy (<tt>Im{Sigma}</tt>). All energy quantities are given in electron-volts. Notice that, since the quasiparticle equation has been diagonalized, the code computes a new electron density using the quasiparticle wavefunctions. As a result, a new Hartree potential should be used with the new electron density. &delta;V<sub>Hartree</sub> is the difference between new and old Hartree potentials.</li>
+
+<li><tt>sigma_*_*_*</tt>: these files contain a breakdown of the self-energy, both diagonal and off-diagonal parts. Name convention is equal to <tt>eqp_*_*_*</tt> files. All energy quantities are given in eV. The first few lines correspond to diagonal matrix elements:
+
+<ul>
+<p>
+<li>1<sup>st</sup> column: order of orbital <tt>i</tt>.</li>
+<li>2<sup>nd</sup> column: occupancy of orbital <tt>i</tt>.</li>
+<li>3<sup>rd</sup> column: DFT energy eigenvalue (<i>i.e.</i> read from input wavefunction file).</li>
+<li>4<sup>th</sup> column: exchange-correlation matrix element &lang;i|V<sub>xc</sub>|i&rang;(or previous self-energy matrix element if this is part of a self-consistent calculation), where <tt>i</tt> is a DFT (input) orbital.</li>
+<li>5<sup>th</sup> column: exact (Fock) exchange &lang;i|&Sigma;<sub>x</sub>|i&rang;.</li>
+<li>6<sup>th</sup> column: screened exchange portion of self-energy. Printed out for debugging purposes.</li>
+<li>7<sup>th</sup> column: correlation self-energy &lang;i|&Sigma;<sub>c</sub>|i&rang; (omitting vertex contributions), as defined in Equation 24 of <a href="#TiagoC06">Tiago and Chelikowsky</a>.</li>
+<li>8<sup>th</sup> column: vertex self-energy &lang;i|&Sigma;<sub>f</sub>|i&rang;, as defined in Equation 30 of <a href="#TiagoC06">Tiago and Chelikowsky</a>.</li>
+<li>9<sup>th</sup> column: &lang;i|&Sigma; &minus; V<sub>xc</sub>|i&rang; matrix element.</li>
+<li>9<sup>th</sup> column: renormalization factor, z<sup>-1</sup> = 1 &minus; d&Sigma;&frasl;dE.</li>
+<li>10<sup>th</sup> column: DFT (input) energy eigenvalue of orbital <tt>i</tt> after applying any scissors operator defined in <tt>rgwbs.in</tt>.</li>
+<li>11<sup>th</sup> column: first approximation to quasiparticle energy, defined as the energy <i>E</i> such that <i>E</i><sub>i</sub> = E<sup>DFT</sup><sub>i</sub> + &lang;i|&Sigma;(<i>E</i><sub>i</sub>)&minus;V<sub>xc</sub>|i&rang;</i> (self-energy evaluated at energy <i>E</i><sub>i</sub>). This is the quantity present in the diagonal part of the quasiparticle Hamiltonian (Equation 32 of <a href="#TiagoC06">Tiago and Chelikowsky</a>).</li>
+</p>
+</ul>
+
+<p> The last lines have the off-diagonal part:
+
+<ul>
+<p>
+<li>1<sup>st</sup> column: order of <tt>i</tt>-th orbital.</li>
+<li>2<sup>nd</sup> column: order of <tt>j</tt>-th orbital.</li>
+<li>3<sup>rd</sup> column: DFT exchange correlation, &lang;i|V<sub>xc</sub>|j&rang; matrix element.</li>
+<li>4<sup>th</sup> column: Fock exchange, &lang;i|&Sigma;<sub>x</sub>|j&rang;.</li>
+<li>5<sup>th</sup> column: correlation, &lang;i|&Sigma;<sub>c</sub>|j&rang;, evaluated at the energy specified by <a href="#sigma_energy"><tt>sigma_energy</tt></a>.</li>
+<li>6<sup>th</sup> column: correlation, &lang;j|&Sigma;<sub>c</sub>|i&rang;, evaluated at the energy specified by <a href="#sigma_energy"><tt>sigma_energy</tt></a>.</li>
+<li>7<sup>th</sup> column: vertex, &lang;i|&Sigma;<sub>f</sub>|j&rang;, evaluated at the energy specified by <a href="#sigma_energy"><tt>sigma_energy</tt></a>.</li>
+<li>8<sup>th</sup> column: vertex, &lang;j|&Sigma;<sub>f</sub>|i&rang;, evaluated at the energy specified by <a href="#sigma_energy"><tt>sigma_energy</tt></a>.</li>
+<li>9<sup>th</sup> column: operator &lang;i|&Sigma; &minus; V<sub>xc</sub>|j&rang;, evaluated at the energy specified by <a href="#sigma_energy"><tt>sigma_energy</tt></a>.</li>
+<li>10<sup>th</sup> column: operator &lang;j|&Sigma; &minus; V<sub>xc</sub>|i&rang;, evaluated at the energy specified by <a href="#sigma_energy"><tt>sigma_energy</tt></a>. This and the previous matrix element are the off-diagonal part of the quasiparticle Hamiltonian, Equation 32 of <a href="#TiagoC06">Tiago and Chelikowsky</a>.</li>
+</p>
+</ul>
+
+If Hartree-Fock or a model exchange-correlation is used instead of GW (see <a href-"#exchange_correlation">exchange_correlation</a>), then some of the columns above are omitted.
+
+<li><tt>sigma_nostatic_*_*_*</tt>: similar to the previous but without the static remainder correction.</li>
+
+<li><tt>wpol0.dat</tt> and <tt>wpol_rho.dat</tt>: these files contain the COHSEX screened Coulomb interaction. See <a href="#wpol0.dat">wpol0.dat</a>.</li>
+
+</p></ul>
+
+<hr>
+
+<a name="bse"></a> <h2>7. The <tt>bsesolv</tt> executable: Bethe-Salpeter equation</h2>
+
+<a name="bse_desc"></a> <h3>7.1. Description</h3>
+
+<p>This code diagonalizes the Bethe-Salpeter equation and prints out excitation energies. The formalism behind this code is described is good detail in these articles: <a href="#OnidaRR02">Onida <i> et al.</i></a>, <a href="#RohlfingL00">Rohlfing and Louie</a> and <a href="#TiagoC06">Tiago and Chelikowsky</a>. Just like the <a href="#tdlda"><tt>tdlda</tt></a> code, <tt>bsesolv</tt> calculates the polarizability of the electronic system. But this polarizability is calculated within the many-body framework of the electron-hole Green's function and its dynamical equation (the Bethe-Salpeter equation).</p>
+
+<a name="bse_in"></a> <h3>7.2. Input</h3>
+
+<ul>
+<li><tt>rgwbs.in</tt>: this is an ASCII file with input parameters. All the possible input parameters (see below) have default values, so this file is optional. If it is not provided, the code will diagonalize the Bethe-Salpeter equation using all wavefunctions found in input file, using default values for input parameters (which are safe for most cases). Add this file only if you want to set restrictions in the BSE, enable flags, or specify your own values for input parameters.</li>
+<li>All the input and output of your DFT code. For PARSEC users, that means: pseudopotentials, <tt>parsec.in</tt>, <tt>parsec.dat</tt> (version 1.2* or later) or <tt>wfn.dat</tt> (versions 1.1*). For PARATEC users, that means: pseudopotentials, <tt>input</tt> and <tt>GWC</tt>.</li>
+<li><tt>pol_diag.dat</tt>: if available, the <tt>bsesolv</tt> code will skip the calculation of polarizability. Notice that this polarizability is the one used in the direct Kernel, <i>not</i> the one used to calculate excited states. Optional.</li>
+<li><tt>bse_chkpt.dat</tt>: checkpoint file. This file is usually created and updated several times during a calculation. Leave it available if you wish to restart from an incomplete previous calculation. Optional.</li>
+<li>group table files: see <a href="#point_group_tables"><tt>point_group_tables</tt></a>. Optional.</li>
+<li><tt>occup.in</tt>: see <a href="#read_orbital_occupancies"><tt>read_orbital_occupancies</tt></a>. Optional.</li>
+<li><tt>hmat_qp</tt>: file with the quasiparticle Hamiltonian calculated in the basis of input wavefunctions. Generated during a <tt>sigma</tt> calculation. Optional.</li>
+</ul>
+
+<a name="bse_rgwbs_in"></a> <h3>7.3 Input parameters in <tt>rgwbs.in</tt></h3>
+
+<ul>
+<li><a href="#tdlda_cutoff"><tt>tdlda_cutoff</tt></a></li>
+
+<li><a href="#buffer_size"><tt>buffer_size</tt></a></li>
+
+<li><a href="#cache_size"><tt>cache_size</tt></a></li>
+
+<li><a href="#no_lda_kernel"><tt>no_lda_kernel</tt></a> (<i>logical</i>), default = absent
+<p>In <tt>bsesolv</tt> calculations, this flag also removes the LDA kernel, Equation 30 of <a href="#TiagoC06">Tiago and Chelikowsky</a>. With this flag, the self-energy is calculated in the so-called G<sub>0</sub>W<sub>RPA</sub> (without self-consistency) or GW<sub>RPA</sub> approximation (with self-consistency). By default, the self-energy is calculated under G<sub>0</sub>W<sub>LDA</sub>&Gamma;<sub>LDA</sub> (without self-consistency) or GW<sub>LDA</sub>&Gamma;<sub>LDA</sub> approximations (with self-consistency). The self-energy is related to the BSE kernel through equation 35 of <a href="#TiagoC06">Tiago and Chelikowsky</a>.</p></li>
+
+<li><a href="#tamm_dancoff"><tt>tamm_dancoff</tt></a></li>
+
+<li><a href="#distribute_representations"><tt>distribute_representations</tt></a></li>
+
+<li><a href="#dft_program"><tt>dft_program</tt></a></li>
+
+<li><a href="#distribute_wavefunctions"><tt>distribute_wavefunctions</tt></a></li>
+
+<li><a href="#tdlda_valence"><tt>tdlda_valence</tt></a></li>
+
+<li><a href="#tdlda_valence_up"><tt>tdlda_valence_up</tt></a></li>
+
+<li><a href="#tdlda_valence_down"><tt>tdlda_valence_down</tt></a></li>
+
+<li><a href="#tdlda_conduction"><tt>tdlda_conduction</tt></a></li>
+
+<li><a href="#tdlda_conduction_up"><tt>tdlda_conduction_up</tt></a></li>
+
+<li><a href="#tdlda_conduction_down"><tt>tdlda_conduction_down</tt></a></li>
+
+<li><a href="#qpoints"><tt>qpoints</tt></a>
+<p>List of crystal momenta for which the polarizability is calculated. For the <tt>bsesolv</tt> code, this list must contain a complete Monkhorst-Pack grid (<i>i.e.</i> the <b>q</b> points must form a regular mesh covering the entire first Brillouin zone, including points related to each other by symmetry operations).</p>
+</li>
+
+<li><a href="#scissors"><tt>scissors</tt></a></li>
+
+<li><a href="#point_group_tables"><tt>point_group_tables</tt></a></li>
+
+<li><a name="energy_reference"></a><tt>energy_reference</tt> (<i>physical</i>), default value = undefined, default unit = <tt>eV</tt>
+<p>Energy reference for calculation of dynamical screened interaction. If absent, then the static screened interaction is calculated. That is the approximation discussed in section II.C of <a href="#TiagoC06">Tiago and Chelikowsky</a>. In reality, the screened interaction has dynamical effects (see Equation 23 of <a href="#RohlfingL00">Rohlfing and Louie</a>. If the energy reference is defined (&Omega;<sub>s</sub>) then screening is calculated at that fixed energy.</p></li>
+
+<li><a name="bse_cutoff"></a><tt>bse_cutoff</tt> (<i>physical</i>), default value = maximum possible, default unit = <tt>eV</tt>
+<p>Defines an energy cut-off in the BSE transitions. This parameter is similar to <a href="#tdlda_cutoff"><tt>tdlda_cutoff</tt></a> but it removes high energy transitions from the BSE polarizability only.</p></li>
+
+<li><a name="no_eigenvectors"></a><tt>no_eigenvectors</tt> (<i>logical</i>), default = absent
+<p>Suppresses the printout of BSE eigenvectors. By default, eigenvectors of the BSE equation are written in file <tt>bse_diag.dat</tt>. If this flag is present, the file is not written.</p></li>
+
+<li><a name="bse_triplet_kernel"></a><tt>bse_triplet_kernel</tt> (<i>logical</i>), default = absent
+<p>If this line is present, spin-triplet excitations are calculated instead of spin-singlet (as normally done). This is similar to <a href="#tdlda_triplet_kernel"><tt>tdlda_triplet_kernel</tt></a> in that it enables the calculation of polarizability for spin-triplet excitations. This is relevant only in spin-unpolarized systems.</p></li>
+
+<li><a href="#truncate_coulomb"><tt>truncate_coulomb</tt></a></li>
+
+<li><a name="use_mixing"></a><tt>use_mixing</tt> (<i>logical</i>), default = absent
+<p>This flag disables the Tamm-Dancoff approximation in BSE. Normally, the BSE is diagonalized assuming the Tamm-Dancoff approximation. With this flag present, the BSE is diagonalized with mixing between positive and negative energy transitions added (that is, no Tamm-Dancoff). See <a href="#OnidaRR02">Onida <i>et al.</i></a> or <a href="#RohlfingL00">Rohlfing and Louie</a> for more details about the impact of the Tamm-Dancoff approximation in the Bethe-Salpeter polarizability.</p></li>
+
+<li><a href="#no_exchange"><tt>no_exchange</tt></a></li>
+
+<li><a href="#renormalize_sumrule"><tt>renormalize_sumrule</tt></a></li>
+
+<li><a href="#read_orbital_occupancies"><tt>read_orbital_occupancies</tt></a></li>
+
+<li><a href="#exchange_correlation"><tt>exchange_correlation</tt></a>
+<p>In <tt>bsesolv</tt>, the implemented options are only <tt>gw</tt>(default) and <tt>Hartree_Fock</tt>.</p></li>
+
+<li><a name="bse_energy_resolution"></a><tt>bse_energy_resolution</tt> (<i>physcial</i>), default value = <tt>0</tt>, default unit = <tt>eV</tt>
+<p>Energy resolution used in energy denominators. Each energy denominator 1&frasl;E is replaced by the function E&frasl;(E<sup>2</sup> + ecut<sup>2</sup>), which has no singularity at E=0. For self-energy calculations, this parameter is expected to strongly affect quasi-particle energies of deep occupied levels; levels around the gap are less affected. This resolution is applied to the static and dynamic polarizability insertions in the BSE kernel.</p></li>
+
+<li><a name="bse_valence"></a><tt>bse_valence</tt> (<i>block</i>), default = absent
+<p>Defines the set of occupied orbitals (or valence bands in periodic systems) in the Bethe-Salpeter equation. If this block is absent, then all orbitals found in wavefunction file are included in the BSE. Just like <a href="#tdlda_valence"><tt>tdlda_valence</tt></a>, orbitals can be declared one at a line or a range of orbitals can be input.</p></li>
+
+<li><a name="bse_valence_up"></a><tt>bse_valence_up</tt> (<i>block</i>), default = absent
+<p>Defines the set of occupied orbitals (or valence bands in periodic systems) in the Bethe-Salpeter equation, majority spin channel. Follows the same convention as <a href="#bse_valence"><tt>bse_valence</tt></a>.</p></li>
+
+<li><a name="bse_valence_down"></a><tt>bse_valence_down</tt> (<i>block</i>), default = absent
+<p>Defines the set of occupied orbitals (or valence bands in periodic systems) in the Bethe-Salpeter equation, minority spin channel. Follows the same convention as <a href="#bse_valence"><tt>bse_valence</tt></a></p></li>
+
+<li><a name="bse_conduction"></a><tt>bse_conduction</tt> (<i>block</i>), default = absent
+<p>Defines the set of unoccupied orbitals (or conduction bands in periodic systems) in the Bethe-Salpeter equation. If this block is absent, then all orbitals found in wavefunction file are included in the BSE. Just like <a href="#tdlda_conduction"><tt>tdlda_conduction</tt></a>, orbitals can be declared one at a line or a range of orbitals can be input.</p></li>
+
+<li><a name="bse_conduction_up"></a><tt>bse_conduction_up</tt> (<i>block</i>), default = absent
+<p>Defines the set of unoccupied orbitals (or conductionbands in periodic systems) in the Bethe-Salpeter equation, majority spin channel. Follows the same convention as <a href="#bse_conduction"><tt>bse_conduction</tt></a>.</p></li>
+
+<li><a name="bse_conduction_down"></a><tt>bse_conduction_down</tt> (<i>block</i>), default = absent
+<p>Defines the set of unoccupied orbitals (or conduction bands in periodic systems) in the Bethe-Salpeter equation, minority spin channel. Follows the same convention as <a href="#bse_conduction"><tt>bse_conduction</tt></a>.</p></li>
+
+<li><a name="qpoints_bse"></a><tt>qpoints_bse</tt> (<i>block</i>), default = absent
+<p>Defines the <b>q</b> point (crystal momentum) for which the BSE polarizability is calculated. Just like <a href="#qpoints"><tt>qpoints</tt></a>, each line has 5 numbers: the three coordinates of <b>q</b> point, a common divisor, and the zero-length flag. Contrary to <a href="#qpoints"><tt>qpoints</tt></a>, <it>only one</i> point can be defined.</p></li>
+
+</ul>
+
+<a name="bse_out"></a> <h3>7.4. Output</h3>
+
+<p>A large amount of data is written in standard output (screen), and it is useful to save it for future reference. This code generates a TDLDA (or RPA) polarizability and the associated output files: <tt>eigenvalues_rpa</tt>, <tt>eigenvalues_lda</tt>, <tt>pol_diag.dat</tt>. Additional output files are:</p>
+
+<ul>
+<p>
+<li><tt>eigenvalues_bse</tt>: eigenvalues and associated oscillator strengths obtained by diagonalizing the Bethe-Salpeter equation, Equation 36 of <a href="#TiagoC06">Tiago and Chelikowsky</a>.</li>
+<li><tt>bse_diag.dat</tt>: eigenvectors of the BSE. This file is written in a format identical to <tt>pol_diag.dat</tt>, which makes post-processing and data analysis easier. Input flag <a href="#no_eigenvectors"><tt>no_eigenvectors</tt></a> suppresses the print out of this file.</li>
+</p>
+</ul>
+
+<hr>
+
+<a name="post_process"></a> <h2>8. Post-processing tools</h2>
+
+<a name="absp"></a> <h3>8.1 <tt>absp</tt></h3>
+
+<p>This code reads excitation energies and oscillator strengths from any of these files: <tt>eigenvalues_rpa</tt>, <tt>eigenvalues_lda</tt>, <tt>eigenvalues_bse</tt>. The user must rename the input file as <tt>eigenvalues</tt> and add a second number to the first line of that file. That number is the energy resolution &eta; (in eV) used in the widening of absorption lines. This code does not calculate line widths, which are important because all measured absorption lines have some finite width even if they are "monochromatic". Several quantities are printed in output: the absorption cross section (useful if the electronic system is confined), absorption spectrum (imaginary part of the dielectric function, or the polarizability). The coding is very simple, and any user should be able to read it if he/she wishes to know how each quantity is calculated.</p>
+
+<a name="proj_pol"></a> <h3>8.2 <tt>proj_pol</tt></h3>
+
+<p>In many situations, it is important to characterize absorption lines. If some absorption line is dominated by a single transition (meaning: one electron being promoted from an occupied orbital to an unoccupied orbital), then one often wants to know what is the dominant transition and its weight. This code prints out the weight of specified transitions in specified excitations. In other words, for specified occupied and unoccupied orbitals <tt>v</tt> and <tt>c</tt>, this code prints out the weight |F<sub>vc</sub><sup>i</sup>|<sup>2</sup> in <tt>i</tt>-th excitation. Input file is <tt>pol_diag.dat</tt>. One can also give a <tt>bse_diag.dat</tt> file as input but it must be renamed. The choices of orbitals are typed in standard input (keyboard in most cases). Once you compile the code, just run <tt>proj_pol</tt> in a shell window and type in the quantities it asks for.</p>
+
+<a name="chkpt_bin_asc"></a> <h3>8.3 <tt>chkpt_bin_asc</tt></h3>
+
+<p>This code transcribes the contents of file <tt>sigma.chkpt.dat</tt> into ASCII format. Input is file <tt>sigma.chkpt.dat</tt>. Output is file <tt>sigma.chkpt.dat.asc</tt>. Output file contains a detailed breakdown of self-energy components: DFT exchange-correlation matrix elements, Fock exchange, correlation part of self-energy in a wide range of energy values, real and imaginary parts of self-energy. This is useful if one wishes to study the imaginary part of the self-energy or identify satellites in the spectral function.</p>
+
+<hr>
+
+<a name="examples"></a> <h2>9. Examples</h2>
+
+<a name="example_1"></a> <h3>9.1. Example 1: convergence in TDLDA</h3>
+
+<p><b>Working directory = <tt>tutorial_1.</tt></b></p>
+<p><b>Estimated run time on a standard linux box = 20 min.</b></p>
+
+<p>Often, the low-energy end is the most important portion of the absorption spectrum, because it defines the absorption edge. Fortunately, it is also easier to ensure numerical accuracy for low-energy excitations rather than for high-energy excitations. One just needs to include electronic transitions with low energy. In this example, I show how to study convergence when we calculate the absorption spectrum of the silane molecule, SiH<sub>4</sub>.</p>
+
+<p>In the working directory, file <tt>rgwbs.in</tt> has a specified energy cut-off in TDLDA transitions. When you run <tt>tdlda</tt>, you should obtain an output on screen similar to the one in file <tt>tdlda.out_10eV</tt>. Rename file <tt>eigenvalues_lda</tt> as <tt>eigenvalues</tt>, add an energy resolution on the first line of that file and run tool <a href="#absp"><tt>absp</tt></a>. Important output is file <tt>across</tt>, which should be similar to <tt>across_10eV</tt> in the working directory. When you plot the first two columns of the file, you see that the absorption cross section has a first peak at 8.7 eV, which is around the absorption edge of silane.</p>
+
+<p>Now, increase the energy cut-off in <tt>rgwbs.in</tt> to 15 eV and run codes <tt>tdlda</tt> and <tt>absp</tt> just like you did in the previous step. Make sure you delete file <tt>pol_diag.dat</tt> so that the second run uses the new input parameter. Now, when you visualize the contents of file <tt>across</tt>, you see new absorption lines at high energy. They come from the transitions with energy between 10 eV and 15 eV. You can now repeat the procedure a third time with an even higher cut-off, 20 eV, or remove the cut-off altogether and see how the absorption lines change. Since there is a finite number of unoccupied orbitals in file <tt>parsec.dat</tt>, the spectrum is always truncated at some threshold energy. In the present example, there are missing absorption lines starting at 26 eV, which is the difference in energy between the highest unoccupied DFT orbital and the highest occupied DFT orbital. The absorption cross section without energy truncation is depicted in file <tt>across.gif</tt>.</p>
+
+<p>Another important issue regarding the absorption spectrum of finite systems is that unbound orbitals are very sensitive to the size of the real-space domain. The energy, density of states and spatial distribution of unbound orbitals change a lot when you change the boundary sphere radius. Oscillator strengths and excitation energies are often less sensitive, but it always important to ensure convergence of the final results with respect to the boundary sphere radius.</p>
+
+<p>Instead of testing convergence by visualizing the absorption cross section, one can quickly assess the converge of the TDLDA polarizability by looking at the static susceptibility and the <i>f</i>-sum rule. See Equations 8 and 10 of <a href="#TiagoC06">Tiago and Chelikowsky</a> to know how these quantities are calculated. Both parameters are printed in standard output on every <tt>tdlda</tt> run. Predictably, the numeric value of the <i>f</i>-sum rule approaches its exact value as more and more transitions (and more unoccupied orbitals) are added in the calculation. Since we use pseudopotentials, there is a non-local correction missing in the sum rule, but one should expect to see the numeric sum rule converge to within a few percent of the exact sum rule, either above or below it.</p>
+
+<a name="example_2"></a> <h3>9.2. Example 2: analyzing the self-energy</h3>
+
+<p><b>Working directory = <tt>tutorial_2.</tt></b></p>
+<p><b>Estimated run time on a standard linux box = 16 min.</b></p>
+
+<p>In this example, I show how to compute the self-energy in Na<sub>3</sub> and how to visualize satellites in the spectral function.</p>
+
+<p>You should find in the working directory the input files for codes <tt>parsec</tt> and <tt>sigma</tt>. Run those codes in sequence. You can also run <tt>tdlda</tt> between <tt>parsec</tt> and <tt>sigma</tt>. Nothing will change in the final results. Notice that <tt>rgwbs.in</tt> specifies a TDLDA cut-off but the numeric sum rule is already close to 100%. You can remove the cut-off and see how the final self-energies are affected. They should change by no more than a fraction of eV, which is typically the accuracy of GW self-energies. Also, the self-energy is calculated for only the low energy orbitals, and a large energy range is used. That is because we want to know the energy dependence of <i>&Sigma;(E)</i> for orbitals around the HOMO and LUMO. At the end of these calculations, you should see files <tt>sigma_up_001_0000</tt>, <tt>sigma_down_001_0000</tt> and <tt>sigma.chkpt.dat</tt>. In <tt>sigma_up_001_0000</tt> and <tt>sigma_down_001_0000</tt>, you see that the HOMO-LUMO gap increases from 0.525 eV (DFT-LDA) to 3.342 eV (GW). The last number does not change much after we diagonalize the quasiparticle Hamiltonian, as you see in files <tt>eqp_up_001_0000</tt> and <tt>eqp_down_001_0000</tt>.</p>
+
+<p>Now, run tool <tt>chkpt_bin_asc</tt> and visualize the data in <tt>sigma.chkpt.dat.asc</tt>. More specifically, we want to plot the self-energy at the HOMO, &lang;i|&Sigma;|i&rang; with <i>i = 2&uarr;</i>. Search for line <tt>"Sigma - V_xc + E0 diagonal, eV, spin  1"</tt> in that file and scroll down until you find the self-energy for <i>i=2</i> (in the example file the working directory, that self-energy starts at line number 15271). In the table you see, columns 3 and 4 are the real and imaginary parts respectively of the operator E<sub>DFT</sub> + &Sigma; &minus; V<sub>xc</sub></i>. When you plot those quantities as functions of energy, you see that the quasiparticle energy printed in <tt>sigma_up_001_0000</tt> (3.649 eV)  is such that <i>E = E<sub>DFT</sub> + &Sigma; &minus; V<sub>xc</sub></i>. That is how it is defined. The slope of the self-energy at <i>E</i> is around -0.33, which is a typical value. The renormalization factor is usually around 0.7 to 0.9. You can also compute the spectral function (see <a href="#AulburJW00">Aulbur <i>et al.</i></a>) as <i>A(E) = (1&frasl;&pi;)&times;Im{ G(E) }</i> where <i>G(E) = 1&frasl;{E &minus; [E<sub>DFT</sub> + &Sigma;(E) &minus; V<sub>xc</sub> ]}</i> is the Green's function evaluated at the HOMO, as a function of energy. The spectral function has a sharp peak at the quasiparticle energy, with half-width around 0.05 eV. The integral under this peak is around 0.66, very close to the renormalization factor. <a href="#AulburJW00">Aulbur <i>et al.</i></a> explain the meaning of this renormalization factor and what the spectral function is. The spectral function also shows satellites at energies -6.4 eV and -8.4 eV. They are extra quasiparticle modes created when a hole at the HOMO is scattered by neutral excitations (optical modes).</p>
+
+<p>The width of quasiparticle peak is somewhat arbitrary, as well as the width of peaks in the imaginary part of the self-energy. They are defined by the <a href="#dynamic_energy_resolution"><tt>dynamic_energy resolution</tt></a> given as input to <tt>sigma</tt>. Change the values of parameters <a href="#energy_data_points"><tt>energy_data_points</tt></a>, <a href="#energy_range"><tt>energy_range</tt></a> and <a href="#dynamic_energy_resolution"><tt>dynamic_energy_resolution</tt></a> to get a feeling of how the spectral function changes. With them, you have control over the resolution of the spectral function, and the energy range where used to calculate the spectral function. Typical profiles of the self-energy and spectral function for the HOMO are depicted in file <tt>sigma.gif</tt>.</p>
+
+<a name="example_3"></a> <h3>9.3. Example 3: macroscopic dielectric function in solids</h3>
+
+<p><b>Working directory = <tt>tutorial_3.</tt></b></p>
+<p><b>Estimated run time on a standard linux box = 31 min.</b></p>
+
+<p>Linear optical absorption in solids is often quantified by the imaginary part of the macroscopic dielectric function. One can compute it by first computing the inverse dielectric matrix in plane-wave representation and inverting the long-wavelength component afterward (see <a href="#Hanke78">Hanke</a>). Since this package does not compute the inverse dielectric matrix directly, we need to do some data analysis. In this example, I describe how to calculate the linear absorption spectrum in bulk silicon using the TDLDA (one can also do it with BSE, but that is more time consuming).</p>
+
+<p>In the working directory, you see input files for codes <tt>parsec</tt> and <tt>tdlda</tt>. Run these codes using the provided input files. They are set to calculate excited states with <b>q</b>=0, with a Monkhorst-Pack grid 5&times;5&times;5 and non-commensurate shift. The non-commensurate shift is important because it improves convergence of the absorption spectrum with respect to size of the <b>k</b>-point grid. Also, notice that there is a scissors operator defined in <tt>rgwbs.in</tt>. The operator leaves conduction bands unchanged but shifts valence bands to lower energy, and also stretches them by 10%. The purpose of this scissors operator is that, since we know that the energy gap is underestimated, we want to blue-shift the TDLDA absorption lines so that they fall more or less where they should (strictly speaking, this is not TDLDA absorption spectrum anymore but that is a terminology issue). The scissors operator does not correct the height of peaks though. Local field effects are included.</p>
+
+<p>Since this is a periodic system, you can also use a plane-wave DFT code to generate the wavefunction file. By now, you should be able to get the necessary input for a <tt>tdlda</tt> run. After you run <tt>tdlda</tt>, rename file <tt>eigenvalues_lda</tt> as <tt>eigenvalues</tt> and run <tt>absp</tt>. Use some energy resolution of maybe 0.1 eV to 0.5 eV. You should get file <tt>absorp</tt>. This file has the real and imaginary parts of the polarizability at zero photon momentum, with an additional volume factor. You obtain the macroscopic dielectric function from this polarizability by using the relationship <i>&epsilon; = 1 + 8&pi;<u>P</u>&frasl;(N<sub><b>k</b></sub>V</i>)</i>, where <i>V</i> is the volume of the unit cell, <i>N<sub><b>k</b></sub></i> is the number of <b>k</b>-points (125 in this example) and <i><u>P</u></i> is the truncated polarizability. The factor 8&pi; includes spin degeneracy. You should get something similar to the data shown in file <tt>si_epsilon.gif</tt>. <a href="#RohlfingL00">Rohlfing and Louie</a> explain what type of many-body effects are missing in this type of calculation and how to recover them.</p>
+
+<a name="example_4"></a> <h3>9.4. Example 4: role of different kernels</h3>
+
+<p><b>Working directory = <tt>tutorial_4.</tt></b></p>
+<p><b>Estimated run time on a standard linux box = 60 min.</b></p>
+
+<p>When written in the form of an eigenvalue equation (for example Equation 36 of <a href="#TiagoC06">Tiago and Chelikowsky</a>), the BSE contains an effective Hamiltonian for electron-hole pairs. This Hamiltonian has several terms. The first one is a diagonal quasiparticle term, which is essentially the transition energy between a hole orbital (occupied quasiparticle orbital) and a quasielectron orbital (unoccupied quasiparticle orbital). We call it <i>D</i>. The second term is commonly referred to as "exchange kernel", <i>K<sub>x</sub></i>. That is a misnomer because it actually originates from propagation of neutral excitations in the material. It is a response of the electron system upon application of an electromagnetic field. It creates plasmon modes, which can be seen both in extended and in confined systems. The third term is usually called "direct kernel", <i>K<sub>d</sub></i>. It describes electrostatic attraction between electrons and holes. This term depends on polarizability because the surrounding medium will screen the electrostatic attraction between electron and hole. The fourth term on the left-hand side of Equation 36 of <a href="#TiagoC06">Tiago and Chelikowsky</a> is a vertex contribution. In this example, I show how all these terms manifest themselves in the BSE absorption spectrum of silane.</p>
+
+<p>As usual, run parsec in order to get a wavefunction file. Now, run <tt>bsesolv</tt> using as input the files <tt>parsec.dat</tt> and <tt>rgwbs.in_hf</tt> (renamed as <tt>rgwbs.in</tt>). In this calculation, the energies of electrons and holes are taken from DFT plus a scissors operator. The input file also has two flags: <a href="#no_exchange"><tt>no_exchange</tt></a>, which removes the "exchange kernel" from the BSE, and <a href="#exchange_correlation"><tt>exchange_correlation hartree_fock</tt></a>, which removes screening from the direct kernel. When you run <tt>bsesolv</tt> with this input, the low-energy excitation modes have high oscillator strength. What happens is that the optical response of the electron distribution is removed. What remains is the response from electron-hole pairs, which is strong at low energy only. You recover the strong absorption lines at high energy by removing flag <a href="#exchange_correlation"><tt>exchange_correlation hartree_fock</tt></a> from input and re-running <tt>bsesolv</tt> (delete checkpoint file <tt>bse_chkpt.dat</tt> if you have it).</p>
+
+<p>Another problem with this run is that the resulting excitation energies are low. The lowest excitation energy is much smaller than the HOMO-LUMO gap (10.45 eV, after applying a scissors operator). That is because electrons and holes are binding with each other very strongly. There is no screening to weaken the electric field. What we need to do is include screening. For example, we can include the TDLDA polarizability. For that, run <tt>bsesolv</tt> using file <tt>rgwbs.in_tdlda</tt> as input. Please do not forget to delete any <tt>bse_chkpt.dat</tt> file before anything. If you look at the output, you see that many TDLDA excitations are now being computed. In the BSE, both the "exchange kernel" and "direct kernel" are included. The resulting excitation energies, shown in file <tt>eigenvalues_bse_tdlda</tt> are now higher.</p>
+
+<p>One can also use RPA screening instead of TDLDA. You just need to add flag <a href="#no_lda_kernel"><tt>no_lda_kernel</tt></a> in <tt>rgwbs.in</tt>. Use input file <tt>rgwbs.in_rpa</tt>, remove files <tt>pol_diag.dat</tt> and <tt>bse_chkpt.dat</tt>, and run <tt>bsesolv</tt> again. There is not much difference in the results. The BSE excitation energies are close to what TDLDA screening produced. Oscillator strengths are also similar and <i>f</i>-sum rule is about the same (the sum rule can be more than 100% if a scissors operator is used because this operator adds a non-local term in the Hamiltonian, that modifies the exact value of the <i>f</i>-sum rule). But you see that the run time is shorter. That is because matrix elements involving the LDA kernel are not being calculated anymore. This is a typical behavior.</p>
+
+<p>Finally, one can remove the Tamm-Dancoff approximation from the BSE. The input files are now <tt>parsec.dat</tt> and <tt>rgwbs.in_mix</tt>. Remove any files <tt>bse_chkpt.dat</tt> and <tt>pol_diag.dat</tt>. This input uses flag <a href="#no_mixing"><tt>no_mixing</tt></a>.</p>
+
+<p>All the runs in this example were done using a scissors operator to approximate the quasiparticle energies. I chose that just to reduce runtime. For more accurate results, you can calculate quasiparticle energies from first principles, which is actually the recommended procedure. You can do this calculation by running <tt>sigma</tt> before <tt>bsesolv</tt>. These are the steps:
+
+<ol>
+<p>
+<li>Run <tt>PARSEC</tt> using the input pseudopotential and file <tt>parsec.in</tt> in the working directory.</li>
+<li>Run <tt>sigma</tt> using as input the file <tt>parsec.dat</tt> (or <tt>wfn.dat</tt>, for older versions of PARSEC) and the PARSEC input files.</li>
+<li>Run <tt>bsesolv</tt> using as input these files as input: <tt>hmat_qp</tt>, <tt>pol_diag.dat</tt> plus all the input files from the previous step.</li>
+</p>
+</ol>
+
+<p>The BSE spectra obtained using files <tt>rgwbs.in_hf</tt>, <tt>rgws.in_tdlda</tt>  and the calculation without scissors operator are depicted in file <tt>bse.gif</tt>.
+
+<a name="example_5"></a> <h3>9.5. Example 5: extra point group symmetries, BLIP transformation</h3>
+
+<p><b>Working directory = <tt>tutorial_5.</tt></b></p>
+<p><b>Estimated run time on a standard linux box = 14 min.</b></p>
+
+<p>The purpose of this example is to explain how BLIP coefficients for electron wavefunctions are calculated with this package. This feature of RGWBS is not directly related to many-body calculations but it could be useful in applications where BLIP transformed wavefunctions are used instead of the actual wavefunctions.</p>
+
+<p>BLIP coefficients are calculated on real space on a regular grid. Executable <tt>w_blip</tt> is the executable that calculates these coefficients. In the working directory, you see the input files necessary to run PARSEC and <tt>w_blip</tt>. The structure is the benzene molecule. File <tt>rgwbs.in</tt> specifies that BLIP coefficients will be calculated for all bound orbitals plus the lowest 12 unbound orbitals. Besides the usual D<sub>2h</sub> point group, the point group I<sub>h</sub> is used to classify wavefunctions. You should be able to read file <tt>Ih</tt> and recognize the rotation matrices that define this group, characters of irreducible representations, and representation product table.</p>
+
+<p>Output of the <tt>w_blip</tt> code is file <tt>bwfn.data</tt>, which contains all BLIP coefficients for the specified orbitals. Standard output also has some information that could be useful:
+
+<ul>
+<p>
+<li>Projections of the input wavefunctions on all irreducible representations. These projections should be always zero or one, apart from loss of spatial resolution caused by the finite grid spacing.</li>
+<li>Kinetic energy of the input wavefunctions, calculated using BLIP coefficients. This is useful for debugging purposes.</li>
+</p>
+</ul>
+
+<hr>
+
+<a name="faq"></a> <h2>10. Frequently asked questions</h2>
+
+<ol>
+<li>Can I calculate the polarizability using the GGA, or some non-local approximation?
+
+<p>Not with this package. But if you are really serious about it, you need to calculate exchange-correlation kernels for the functional you have in mind (GGA or whatever) and implement them in the source code. Notice that most DFT software calculate the exchange-correlation functional and exchange-correlation potential (the first derivative of the functional with respect to density), but they do not normally calculate the kernel (the <i>second</i> derivative of the functional with respect to density).</p>
+</li>
+
+<li>Can I study systems with non-collinear spin, or systems where spin-orbit interactions are included at DFT level?
+
+<p>Not with this package. This package was designed for two classes of systems: non-polarized systems, and spin-polarized systems where the spin orientation is decoupled from real-space coordinates.</p>
+</li>
+
+<li>How expensive is a calculation of TDLDA polarizability? How does it scale with system size?
+
+<p>There are two major tasks involved in TDLDA. The first one is setting up the eigenvalue problem. That involves computing all matrix elements of the Hermitian matrix. Of course, the number of matrix elements to be computed is <i>N<sub>s</sub><sup>2</sup></i> where <i>N<sub>s</sub></i> is the number of single-electron transitions (usually the product between the number of occupied orbitals and the number of unoccupied orbitals, if no energy cut-off is defined). Matrix elements involving the Coulomb potential, like the ones in Equation 6 of <a href="#TiagoC06">Tiago and Chelikowsky</a>, scale as <i>N<sub>r</sub>log(N<sub>r</sub>)</i> where <i>N<sub>r</sub></i> is the number of real-space grid points. Matrix elements involving the LDA kernel, Equation 7 of <a href="#TiagoC06">Tiago and Chelikowsky</a>, are linear in <i>N<sub>r</sub></i>. As a very rough estimate, the calculation of matrix elements scales as <i>N<sup>5</sup></i> with system size.</p>
+
+<p>The second task involved in TDLDA is diagonalizing the eigenvalue problem. This is a straightforward diagonalization of a dense matrix, which scales as <i>N<sub>s</sub><sup>3</sup></i>, or approximately <i>N<sup>6</sup></i> with system size.</p>
+</li>
+
+<li>Can I simplify the calculation of TDLDA polarizability?
+
+<p>Yes. One strategy is by exploring symmetry properties. If the symmetry operations in the system form an Abelian group (which does not need to be the largest point group), then the code does not calculate matrix elements that are zero by selection rule. The scaling in calculation of matrix elements will become approximately <i>N<sup>5</sup>&frasl;N<sub>g</sub></i> where <i>N<sub>g</sub></i> is the order of the Abelian group. Symmetries are also used in the diagonalization of the TDLDA equation: the TDLDA matrix is rewritten in block form, with one block for each irreducible representation. The diagonalization step then scales as <i>N<sup>6</sup>&frasl;N<sub>g</sub><sup>2</sup></i>.</p>
+
+<p>Another strategy is parallel computation. Both the calculation of matrix elements and diagonalization are fairly well parallelized. Users should see good scaling with number of processors up to the range of several hundreds of processors. Of course, each calculation has its own particularities, so "your mileage may vary".</p>
+</li>
+
+<li>How does the <tt>sigma</tt> and <tt>bsesolv</tt> codes scale with system size?
+
+<p>In <tt>sigma</tt>, matrix elements involving electron transitions are calculated. If the system has <i>N<sub>s</sub></i> transitions, <i>N<sub>n</sub></i> DFT orbitals (used in the sum over poles of Green's function, for example Equation 24 of <a href="#TiagoC06">Tiago and Chelikowsky</a>), and we are computing self-energies for <i>N<sub>i</sub></i> orbitals, then the calculation of matrix elements scales as <i>N<sub>s</sub>&times;N<sub>n</sub>&times;N<sub>i</sub>&times;N<sub>r</sub>&frasl;N<sub>g</sub></i>. Again, the scaling is approximately <i>N<sup>5</sup></i> with system size. The <tt>bsesolv</tt> code has a similar <i>N<sup>5</sup></i> scaling.</p>
+</li>
+
+<li>Can I calculate quasiparticle energy using a desktop?
+
+<p>You may be able to run isolated atoms but not much more than that. Electron self-energy of macromolecules or nanostructures with thousands of atoms have not been calculated from first principles because it is not trivial, at least for the supercomputers we have now. But confined systems with a few tens of atoms, or periodic systems with around that many atoms in the unit cell, can be studied using this package in a parallel computer with moderate size.</p>
+</li>
+
+<li>I am running <tt>sigma</tt> with a Hartree-Fock exchange-correlation type and I am not reproducing the Gaussian basis benchmarks. What is happening?
+
+<p>These calculations use the input wavefunctions as basis. Therefore, the quality of output data is limited by the completeness of the basis.</p>
+</li>
+
+<li>I calculated the TDLDA polarizability some time ago but lost part of the input files. Now, I recalculated the wavefunction file (<tt>parsec.dat</tt>) but I am obtaining unreasonable self-energies. What is wrong?
+
+<p>The wavefunction file defines the basis. If you recalculated wavefunctions, then they could differ from the previous ones by global phases. The extra phases destroy coherence between orbitals. A single wavefunction file should be used to run codes <tt>tdlda</tt>, <tt>sigma</tt> and <tt>bsesolv</tt>.</p>
+</li>
+
+<li>Can I use Hartree-Fock orbitals instead of DFT orbitals as input wavefunctions in a <tt>sigma</tt> calculation?
+
+<p>In principle yes. You need two things: develop an appropriate interface to read in the HF data (look at the existing interfaces to codes <tt>PARSEC</tt> and <tt>PARATEC</tt>); and  calculate the exchange-correlation operator in the input wavefunctions properly, and plug it in the <i>V<sub>xc</sub></i> registers. The exchange-correlation operator is just the Fock exchange, of course.</p>
+</li>
+
+<li>The source files are distributed over several directories. Why?
+
+<p>Since this package contains different executables, the source files are correspondingly distributed over several subdirectories. This is a brief description of the contents of each subdirectory:</p>
+
+<ul>
+<p>
+<li><tt>BSE</tt> : source files specific to <tt>bsesolv</tt>.</li>
+<li><tt>SIGMA</tt> : source files specific to <tt>sigma</tt>.</li>
+<li><tt>TDLDA</tt> : source files specific to <tt>tdlda</tt>.</li>
+<li><tt>W_BLIP</tt> : source files specific to <tt>w_blip</tt> (BLIP transformation).</li>
+<li><tt>bin</tt> : location of all executable files.</li>
+<li><tt>shared</tt> : source files shared by multiple executables.</li>
+<li><tt>config</tt> : location of machine-dependent parameter files.</li>
+<li><tt>utils</tt> : set of post-processing tools and scripts for specialized self-consistent schemes. Each file has its own inline documentation.</li>
+<li><tt>example_*</tt> : subdirectories with example runs. Users who are building this package on a new machine and/or want to get acquainted with this package are advised to try and reproduce some of these runs.</li>
+</p>
+</ul>
+
+</li>
+
+<a name="other_dft_codes"></a><li>How to build interfaces with other DFT codes?
+
+<p>Look at source files for the existing interfaces. This is a brief description:
+
+<ul>
+<p>
+<li><tt>parsec_wfn</tt> : reads wavefunctions on a regular real-space grid and auxiliary data: energy eigenvalues, specification of the grid, numerical parameters used in the DFT calculation.</li>
+<li><tt>parsec_atoms</tt> : reads atom coordinates from file <tt>parsec.in</tt>.</li>
+<li><tt>parsec_xc</tt> : reads specification of the exchange-correlation functional from <tt>parsec.in</tt>.</li>
+<li><tt>paratec_wfn</tt> : reads wavefunctions on a plane-wave basis, energy eigenvalues and various numerical parameters (see source file).</li>
+<li><tt>paratec_atoms</tt> : reads atom coordinates from file <tt>input</tt>.</li>
+<li><tt>paratec_xc</tt> : reads specification of the exchange-correlation functional from <tt>input</tt>.</li>
+</p>
+</ul>
+
+<p>In addition, you may need to look at subroutine <tt>read_psp</tt> in module <tt>psp_module.F90z</tt>. This subroutine reads the pseudopotential files. You need to modify that module if you wish to define a new pseudopotential format.</p>
+
+</li>
+
+<li>How are the RGWBS codes parallelized?
+
+<p>RGWBS uses multilayer parallelization. In the outermost layer, processing units are distributed in "representation groups" (no relationship with irreducible representations of point groups) which I call <i>rgp</i>. Each <i>rgp</i> has the same number of processors and is assigned a set of irreducible representations in such a way that each <i>rgp</i> has the same number of representations. That ensures load balance. The number of representation groups is controlled by input flag <a href="#distribute_representations"><tt>distribute_representations</tt></a>. Grid points are distributed in the next layer of parallelization. In that layer, the processors belonging to each <i>rgp</i> group are distributed in "wavefunction groups", <i>wgp</i>. Again, all <i>wgp</i> groups have the same number of processors. The number of <i>wgp</i> groups is controlled by input option <a href="#distribute_wavefunctions"><tt>distribute_wavefunctions</tt></a>. Each <i>wgp</i> group is assigned a number of grid points, which is not necessarily the same for all groups. Internally, all these groups of processors are handled with the use of MPI groups. Module <tt>mpi_module.F90z</tt> contains the definitions of groups, layouts and most communication-related functions. Currently, there is no parallelization over k-points or q-points. Most input/output is done by one processor only.</p>
+</li>
+
+<li>What are those files with extension .F90z?
+
+<p>They are pre-processable Fortran 95 source files, written in such a way that they can generate source codes with and without support for complex algebra. Capital letter "Z" has special meaning in those files. File <tt>mycomplex.h</tt> has the replacement rules. Since operator overloading is not very advanced in Fortran, sometimes programmers are forced to build unusual workarounds.</p>
+</li>
+
+</ol>
+
+<hr>
+
+<a name="references"></a> <h2> References</h2>
+
+<p> <a name="Martin">R. W. Martin,</a>
+<i><a HREF="http://electronicstructure.org/">
+Electronic structure : basic theory and practical methods
+</a></i>,
+Cambridge University Press (Cambridge, UK, 2004).</p>
+
+<p> <a name="AulburJW00">W.G. Aulbur and L. Jonsson and J.W. Wilkins,</a><i>
+Quasiparticle calculations in solids
+</i>,
+in Solid State Physics (ed. F. Seitz, D. Turnbull, and H. Ehrenreich, Academic Press, New York, USA)  <b> 54</b>, page 1 (2000).</p>
+
+<p> <a name="TiagoC06">M. L. Tiago and J. R. Chelikowsky,</a>
+<i><a HREF="http://scitation.aip.org/getabs/servlet/GetabsServlet?prog=normal&id=PRBMDO000073000020205334000001&idtype=cvips&gifs=yes">
+Optical excitations in organic molecules, clusters, and defects studied by first-principles Green's function methods
+</a></i>,
+Phys. Rev. B <b> 73</b>,  205334 (2006).
+<!-- Note: the text above refers to many equations in this article. That is not because I ignore other (very good) articles on the subject, but because this article has the necessary equations written in a way that I understand and in a way that is more similar to the acutal coding. -->
+</p>
+
+<p> <a name="OnidaRGDA95">G. Onida, R. Reining, R. W. Godby, R. Del Sole and W.Andreoni,</a>
+<i><a HREF="http://prola.aps.org/abstract/PRL/v75/i5/p818_1">
+Ab Initio Calculations of the Quasiparticle and Absorption Spectra of Clusters: The Sodium Tetramer
+</a></i>,
+Phys. Rev. Lett. <b> 75</b>,  818 (1995).</p>
+
+<p> <a name="VasilievOC02">I. Vasiliev, S. Ogut and J. R. Chelikowsky,</a>
+<i><a HREF="http://prola.aps.org/abstract/PRB/v65/i11/e115416">
+First-principles density-functional calculations for optical spectra of clusters and nanocrystals
+</a></i>,
+Phys. Rev. B <b> 65</b>,  115416 (2002).</p>
+
+<p> <a name="Casida95">M. E. Casida,</a>
+in <i>Recent Advances in Density-Functional Methods, Part I</i>, page 155 (editor D. P. Chong, World Scientific, Singapore, 1995).</p>
+
+<p> <a name="HybertsenL86">M. S. Hybertsen and S. G. Louie,</a>
+<i><a HREF="http://prola.aps.org/abstract/PRB/v34/i8/p5390_1">
+Electron correlation in semiconductor and insulators: Band gaps and quasiparticle energies</a></i>,
+Phys. Rev. B <b>34</b>, 5390 (1986).</p>
+
+<p> <a name="OnidaRR02">G. Onida, L. Reining and A. Rubio,</a>
+<i><a HREF="http://prola.aps.org/abstract/RMP/v74/i2/p601_1">
+Electronic excitations: density-functional versus many-body Green's-function approaches</a></i>,
+Rev. Mod. Phys. <b>74</b>, 601 (2002).</p>
+
+<p> <a name="RohlfingL00">M. Rohlfing and S. G. Louie,</a>
+<i><a HREF="http://prola.aps.org/abstract/PRB/v62/i8/p4927_1">
+Electron-hole excitations and optical spectra from first principles</a></i>,
+Phys. Rev. B <b>62</b>, 4927 (2000).</p>
+
+<p> <a name="Hanke78">W. Hanke,</a>
+<i><a HREF="http://www.informaworld.com/smpp/content~content=a739246521~db=phys~order=page">
+Dielectric theory of elementary excitations in crystals
+</a></i>,
+Adv. Phys. <b>27</b>, 287 (1978).</p>
+
+<hr>
+
+<h4>Author of this manual: 
+<a href="http://users.ices.utexas.edu/~mtiago">Murilo Tiago </a>.</h4>
+
+<h4>Last modification: Monday, March 16, 2009.</h4>
+
+</body></html>

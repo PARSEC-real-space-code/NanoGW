@@ -1,0 +1,190 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Calculate various quantities related to symmetry groups: product
+! tables, representations of electronic orbitals, projections. The
+! Abelian group is handled differently because it is also used to
+! build the irreducible wedge and to define representations in the
+! TDLDA polarizability.
+!
+! INPUT:
+!  outfile : number of output file eig_rep.dat
+!  nspin : number of spin channels
+!  norb : number of electronic orbitals for which output is printed out
+!
+! OUTPUT:
+!   syms%nrep(syms%ngr)
+!   syms%prod(ntrans,ntrans)
+!   syms%g_prod(nrep_max,nrep_max,nrep_max,syms%ngr)
+!   kpt%wfn(:,:)%jrep(0,:)
+!   kpt%wfn(:,:)%proj(:,0)
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zcharac_group(syms,gvec,kpt,outfile,nspin,norb)
+
+  use typedefs
+  use mpi_module
+  implicit none
+
+#ifdef MPI
+  include 'mpif.h'
+#endif
+
+  ! arguments
+  type (symmetries), intent(inout) :: syms
+  type (gspace), intent(in) :: gvec
+  type (kptinfo), intent(inout) :: kpt
+  integer, intent(in) :: outfile, nspin, norb
+
+  ! local variables
+  ! input file for character tables
+  integer, parameter :: infile = 71
+  ! counters
+  integer :: igr, isp, ik, ii, jj, i1, i2, imax
+  ! strings of characters, used to build the product tables
+  integer :: tchi(syms%ntrans), dchi(syms%ntrans)
+  ! temporary array for product tables
+  integer, allocatable :: r_prod(:,:,:,:)
+
+  !-------------------------------------------------------------------
+  ! Retrieve info on symmetry groups.
+  !
+  call read_ptgroups(syms)
+  if (syms%ngr > 0) allocate(syms%nrep(syms%ngr))
+
+  !-------------------------------------------------------------------
+  ! Initialize output file. Determine the maximum group size and print it out.
+  !
+  if (peinf%master) then
+     open(outfile,file='eig_rep.dat')
+     write(outfile,*) &
+          ' Number of groups, spins, orbitals per spin, maximum group size'
+     imax = syms%ntrans
+     do igr = 1, syms%ngr
+        open(infile,file=trim(syms%grfilename(igr)),status='old',iostat=ii)
+        if (ii /= 0) then
+           write(6,*) ' ERROR: file ', trim(syms%grfilename(igr)), &
+                ' for group # ', igr, ' not found.'
+           call die('stop.')
+        endif
+        read(infile,*) i1
+        do i2 = 1, i1
+           read(infile,*)
+        enddo
+        read(infile,*) i1
+        if (i1 > imax) imax = i1
+        close(infile)
+     enddo
+     write(outfile,*) syms%ngr + 1, nspin, (norb,isp=1,nspin), imax
+  endif
+#ifdef MPI
+  call MPI_BCAST(imax,1,MPI_INTEGER,peinf%masterid,peinf%comm,ii)
+#endif
+
+  !-------------------------------------------------------------------
+  ! Construct table of products of representations in Abelian group.
+  !
+  allocate(syms%prod(syms%ntrans,syms%ntrans))
+  do ii = 1, syms%ntrans
+     do jj = 1, syms%ntrans
+        do i1 = 1, syms%ntrans
+           tchi(i1) = syms%chi(ii,i1) * syms%chi(jj,i1)
+        enddo
+        do i1 = 1, syms%ntrans
+           dchi = tchi - syms%chi(i1,:)
+           if (maxval(abs(dchi)) == 0) then
+              syms%prod(ii,jj) = i1
+              exit
+           endif
+        enddo
+     enddo
+  enddo
+
+  allocate(r_prod(imax,imax,imax,0:syms%ngr))
+  r_prod = 0
+  do ii = 1, syms%ntrans
+     do jj = 1, syms%ntrans
+        r_prod(ii,jj,syms%prod(ii,jj),0) = 1
+     enddo
+  enddo
+
+  !-------------------------------------------------------------------
+  ! Print product table for Abelian group.
+  !
+  if (peinf%master) then
+     write(outfile,*) &
+          ' Group Abelian, number of representations and character table'
+     write(outfile,*) syms%ntrans
+     jj = 1
+     write(outfile,'(9i5)') 0, (jj,igr=1,syms%ntrans)
+     do i1 = 1, syms%ntrans
+        write(outfile,'(9i5)') i1, (syms%chi(i1,ii),ii=1,syms%ntrans)
+     enddo
+     write(outfile,*) ' Product table, repr_1 * repr_2 = sum_repr'
+     do i1 = 1, syms%ntrans
+        do jj = 1, syms%ntrans
+           write(outfile,'(16i4)') i1, jj, (r_prod(i1,jj,ii,0),ii=1,syms%ntrans)
+        enddo
+     enddo
+     if (syms%ngr > 0) then
+        write(6,'(a,/,a,a)') ' Non-Abelian symmetry groups:', repeat('-',28)
+        write(6,'(/,a,i4,a)') &
+             ' Reading point group tables from ', syms%ngr, ' files:'
+        do igr = 1, syms%ngr
+           write(6,*) trim(syms%grfilename(igr))
+        enddo
+     endif
+  endif
+
+  !-------------------------------------------------------------------
+  ! Calculate representations of additional point groups and print them out.
+  ! For each group, calculate the sum of dimensions of representations.
+  !
+  do ik = 1, kpt%nk
+     do isp = 1, nspin
+        allocate(kpt%wfn(isp,ik)%jrep(0:syms%ngr,kpt%wfn(isp,ik)%nstate))
+        kpt%wfn(isp,ik)%jrep(0,:) = kpt%wfn(isp,ik)%irep(:)
+        allocate(kpt%wfn(isp,ik)%proj(kpt%wfn(isp,ik)%nstate,syms%ngr))
+        kpt%wfn(isp,ik)%proj = zero
+     enddo
+  enddo
+  do igr = 1, syms%ngr
+     call Zproj_calc(syms,gvec,kpt,nspin,igr,outfile,imax,jj,r_prod(1,1,1,igr))
+     syms%nrep(igr) = jj
+  enddo
+  if (peinf%master) then
+     call flush(outfile)
+     write(6,'(/,a,/)') repeat('-',65)
+  endif
+
+  !-------------------------------------------------------------------
+  ! Transfer product tables to syms structure.
+  ! Set g_prod(i,j,k,igr) = 1 if either i or j is zero, so that the
+  ! product of that representation with any other has projection on
+  ! all irreducible representations in the group. That way, selection
+  ! rules are effectively not applied if some representation (i or j)
+  ! is unknown.
+  !
+  if (syms%ngr > 0) then
+     ii = maxval(syms%nrep)
+     allocate(syms%g_prod(0:ii,0:ii,ii,syms%ngr))
+     syms%g_prod = 0
+     do igr = 1, syms%ngr
+        syms%g_prod(0,:,:,igr) = 1
+        syms%g_prod(:,0,:,igr) = 1
+        do ii = 1, syms%nrep(igr)
+           do jj = 1, syms%nrep(igr)
+              do i1 = 1, syms%nrep(igr)
+                 syms%g_prod(ii,jj,i1,igr) = r_prod(ii,jj,i1,igr)
+              enddo
+           enddo
+        enddo
+     enddo
+  endif
+  deallocate(r_prod)
+
+end subroutine Zcharac_group
+!===================================================================

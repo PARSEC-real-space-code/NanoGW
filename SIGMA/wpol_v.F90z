@@ -1,0 +1,203 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Calculate wpol=X in real space and write it on scratch files.
+! All the output of this subroutine is written to files TMPMATEL_*.
+! Value of input parameters is not modified.
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zwpol_v(gvec,kpt,pol,nolda,irp,nspin,nr_buff,itape,qcoord)
+
+  use typedefs
+  use mpi_module
+  use xc_functionals
+  use fft_module
+  implicit none
+
+  ! arguments
+  ! real-space grid
+  type (gspace), intent(inout) :: gvec
+  ! k-points and electron wavefunctions (from DFT)
+  type (kptinfo), intent(in) :: kpt
+  ! TDDFT polarizability
+  type (polinfo), intent(inout) :: pol
+  ! true if LDA kernel is ignored
+  logical, intent(in) :: nolda
+  integer, intent(in) :: &
+       irp, &         ! current representation
+       nspin, &       ! number of spin channels
+       nr_buff, &     ! length of output buffer (defines at how many
+                      ! points the static limit is calculated)
+       itape          ! output unit
+  ! coordinates of current q-vector, in units of reciprocal lattice vectors
+  real(dp) :: qcoord(3)
+
+  ! local variables
+  real(dp), parameter :: tol_l = 1.d-8
+  type(xc_type) :: xc_lda
+  integer :: ii, isp, jsp, info, ipol, ipe, m1, k1, m2, k2, &
+       m2old, k2old, ispold, ngrid, ngrid_pe, ipol_pe, ioff
+  real(dp) :: qkt(3), qkt_test(3)
+  SCALAR :: xtmp
+  SCALAR ,dimension(:), allocatable :: wfn1, wfn2, vr
+  SCALAR, dimension(:,:), allocatable :: fr, fr_distr
+  SCALAR, dimension(:,:,:), allocatable :: zxc
+  real(dp), dimension(:,:,:), allocatable :: fxc
+
+  ngrid_pe = w_grp%ldn * w_grp%npes
+  ngrid = w_grp%mydim
+  xtmp = Zone / gvec%hcub
+
+  !-------------------------------------------------------------------
+  ! Calculate coulomb interaction,
+  ! V_coul = 4*pi*e^2/q^2 (rydberg units, e^2 = 2).
+  !
+  qkt = zero
+  call Zinitialize_FFT(peinf%inode,fft_box)
+  if (gvec%per == 1) then
+     call Zcreate_coul_1D(peinf%inode,peinf%npes,peinf%comm,qcoord(1),gvec,fft_box)
+  elseif (gvec%per == 2) then
+     call Zcreate_coul_2D(gvec%bdot,qcoord(1),fft_box)
+  else
+     call Zcreate_coul_0D(gvec%bdot,qcoord,fft_box)
+  endif
+
+  !-------------------------------------------------------------------
+  ! Initialize arrays.
+  !
+  allocate(wfn1(ngrid_pe),stat=info)
+  call alccheck('wfn1','wpol_v',ngrid_pe,info)
+  wfn1 = Zzero
+  allocate(wfn2(ngrid),stat=info)
+  call alccheck('wfn2','wpol_v',ngrid,info)
+
+  allocate(vr(gvec%nr),stat=info)
+  call alccheck('vr','wpol_v',gvec%nr,info)
+  allocate(fr(gvec%nr,nspin),stat=info)
+  call alccheck('fr','wpol_v',gvec%nr*nspin,info)
+  allocate(fr_distr(ngrid_pe,nspin),stat=info)
+  call alccheck('fr_distr','wpol_v',ngrid_pe*nspin,info)
+  fr_distr = Zzero
+
+  !-------------------------------------------------------------------
+  ! Calculate LDA kernel.
+  !
+  allocate(zxc(ngrid,nspin,nspin),stat=info)
+  call alccheck('zxc','wpol_v',ngrid*nspin*nspin,info)
+  zxc = Zzero
+
+  if (nolda) then
+     if (r_grp%master) write(6,'(/,a,/,a,/,a,/)') repeat('=',65), &
+          ' WARNING !!!! f_lda = zero ', repeat('=',65)
+  else
+     allocate(fxc(ngrid,nspin,nspin),stat=info)
+     call alccheck('fxc','wpol_v',ngrid*nspin*nspin,info)
+     fxc = zero
+     do isp = 1, nspin
+        do ii = 1, ngrid
+           fxc(ii,isp,1) = kpt%rho(w_grp%offset+ii,isp)
+        enddo
+     enddo
+     call xc_init(nspin,XC_LDA_X,XC_LDA_C_PZ,0,zero,one,.false.,xc_lda)
+     xc_lda%has_grad = .false.
+     call fxc_get(xc_lda,nspin,ngrid,1,fxc)
+     zxc = fxc * Zone
+     call xc_end(xc_lda)
+     deallocate(fxc)
+  endif
+
+  !-------------------------------------------------------------------
+  ! Start calculating vvc, fvc.
+  !
+  call stopwatch(r_grp%master, &
+       ' Memory allocation done. Start calculating vvc,fvc.')
+  m2old = 0
+  k2old = 0
+  ispold = 0
+  do ipol_pe = 1, pol%ntr, r_grp%npes
+     do ipe = 0, w_grp%npes - 1
+        ipol = w_grp%mygr*w_grp%npes + ipol_pe + ipe
+        if (ipol > pol%ntr) exit
+        ioff = w_grp%ldn*ipe + 1
+        m2 = pol%tr(2,ipol)
+        k2 = pol%tr(4,ipol)
+        isp = 1
+        if (ipol > pol%n_up) isp = 2
+        if (m2 /= m2old .or. isp /= ispold .or. k2 /= k2old) then
+           ii = kpt%wfn(isp,k2)%map(m2)
+           wfn2(1:ngrid) = kpt%wfn(isp,k2)%Zwf(1:ngrid,ii)
+           m2old = m2
+           k2old = k2
+           ispold = isp
+        endif
+        m1 = pol%tr(1,ipol)
+        k1 = pol%tr(3,ipol)
+        ii = kpt%wfn(isp,k1)%map(m1)
+        wfn1(ioff:ioff + ngrid - 1) = MYCONJG(kpt%wfn(isp,k1)%Zwf(1:ngrid,ii))
+        call Zmultiply_vec(ngrid,wfn2,wfn1(ioff))
+        call Zscal(ngrid,xtmp,wfn1(ioff),1)
+        do jsp = 1, nspin
+           call Zcopy(w_grp%mydim,wfn1(ioff),1,fr_distr(ioff,jsp),1)
+           call Zmultiply_vec(ngrid,zxc(1,jsp,isp),fr_distr(ioff,jsp))
+        enddo
+     enddo
+     call Zgather(1,wfn1,vr)
+     do jsp = 1, nspin
+        call Zgather(1,fr_distr(1,jsp),fr(1,jsp))
+     enddo
+     ipol = w_grp%mygr*w_grp%npes + ipol_pe + w_grp%inode
+     if (ipol <= pol%ntr) then
+
+        ! If necessary, update the Coulomb interaction.
+        k1 = pol%tr(3,ipol)
+        k2 = pol%tr(4,ipol)
+        qkt_test = kpt%fk(:,k2) - kpt%fk(:,k1) - qkt
+
+        if (dot_product(qkt_test,qkt_test) > tol_l) then
+#ifdef DEBUG
+           if (peinf%master) then
+              write(6,*) ' WARNING: q-point has changed '
+              write(6,*) k1, kpt%fk(:,k1)
+              write(6,*) k2, kpt%fk(:,k2)
+              write(6,*) ' old q-vector ', qkt
+              write(6,*) ' new q-vector ', kpt%fk(:,k2) - kpt%fk(:,k1)
+           endif
+#endif
+           qkt = kpt%fk(:,k2) - kpt%fk(:,k1)
+           if (gvec%per == 1) then
+              call Zcreate_coul_1D(peinf%inode,peinf%npes,peinf%comm,qkt(1),gvec,fft_box)
+           elseif (gvec%per == 2) then
+              call Zcreate_coul_2D(gvec%bdot,qkt(1),fft_box)
+           else
+              call Zcreate_coul_0D(gvec%bdot,qkt,fft_box)
+           endif
+        endif
+
+        call Zpoisson(gvec,vr,irp)
+        write(itape) (vr(ii),ii=1,nr_buff), &
+             ((fr(ii,jsp),ii=1,nr_buff),jsp=1,nspin)
+     endif
+     if (peinf%master .and. (mod(ipol,max(pol%nn/5,1)) == 0) ) then
+        call stopwatch(.true.,' vvc/fvc calculation ')
+        write(6,'(i10,a,i10,a,i2,a,i2)') ipol, ' out of ', pol%nn, &
+             ' representation ', irp, ' spin ', isp
+     endif
+  enddo
+  call flush(6)
+
+  call Zfinalize_FFT(peinf%inode,fft_box)
+
+  deallocate(zxc)
+  deallocate(fr_distr)
+  deallocate(fr)
+  deallocate(vr)
+  deallocate(wfn2)
+  deallocate(wfn1)
+
+  call stopwatch(peinf%master,'Finished calculation of vvc/fvc.')
+
+end subroutine Zwpol_v
+!===================================================================

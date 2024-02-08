@@ -1,0 +1,16 @@
+
+#
+# energy cutoff in the BSE transition pairs, in eV.
+#
+bse_cutoff 10.0
+
+#
+# Flags to write BSE eigenvectors or not.
+#
+no_eigenvectors
+
+dynamic_energy_resolution 3.0 eV
+
+energy_range 30 eV
+energy_data_points 61
+

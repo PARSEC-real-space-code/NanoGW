@@ -1,0 +1,30 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Printing routine. Prints kernel matrix elements in fort.* files.
+! Useful only in debug mode.
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zk_print(inode,m1,m2,m3,m4,k1,k2,k3,k4,rsp,csp,matel)
+
+  use myconstants
+  implicit none
+  integer, intent(in) :: inode, m1, m2, m3, m4, k1, k2, k3, k4, rsp, csp
+  SCALAR, intent(in) :: matel
+
+  integer, parameter :: ntape = 84
+  integer :: nn
+
+  nn = ntape + inode
+  write(nn,'(4i6,6i3,2g20.10)') m1, m2, m3, m4, k1, k2, k3, k4, rsp, csp, &
+#ifdef CPLX
+       real(matel,dp), aimag(matel)
+#else
+       matel
+#endif
+
+end subroutine Zk_print
+!===================================================================

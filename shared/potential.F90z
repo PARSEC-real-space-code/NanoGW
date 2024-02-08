@@ -1,0 +1,108 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Constructs the fluctuation potential for both exchange (Coulomb) and
+! tdlda kernels. This potential is defined as:
+!
+! pot(n,ij) = int_dr dr' conjg( phi_i(r) ) * phi_j(r) * V(r,r') *
+!                        conjg( rho_n(r') )
+!
+!   where V is either Coulomb or TDLDA interaction kernel and
+!   rho_n is the fluctuation density from TDLDA eigenstate n. See
+! Eq. 25 and 31 in Tiago & Chelikowsky, PRB 73, 205334.
+!
+! Since pot, tvpol and K are distributed over PEs, we must perform the
+! matrix products and send the result to the correct PE:
+!
+! pot(n,ij) = Sum_vc  tvpol_vc^n  * K_vc^ij
+!     ^          ^       ^            ^
+!     |          |       |            |
+! local,         |     local,       local, vc-distributed
+! n-distributed  |   n-distributed
+!                |
+!           sum reduced over processors
+!
+! Output potential is distributed in the same way as the transposed
+! matrix of eigenvectors, tvpol.
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zpotential(npol,nn,tvpol,nij,kernel,pot)
+
+  use typedefs
+  use mpi_module
+  implicit none
+#ifdef MPI
+  include 'mpif.h'
+#endif
+
+  ! arguments
+  ! number of polarizability eigenvalues
+  integer, intent(in) :: npol
+  ! number of polarizability eigenvalues per PE
+  integer, intent(in) :: nn
+  ! number of (ij) pairs = number of columns in pot and Kernel
+  integer, intent(in) :: nij
+  ! polarizability eigenvectors in row-wise layout (transposed)
+  SCALAR, intent(in) ::  tvpol(nn,nn*r_grp%npes)
+  ! matrix of kernel integrals
+  SCALAR, intent(in) :: kernel(nn,nij)
+  ! potential V^s or F^s
+  SCALAR, intent(out) :: pot(nn,nij)
+
+  ! local variables
+  integer :: ipe, ioff, ncol
+  real(dp) :: xmax
+  SCALAR, allocatable :: kvpolt(:,:)
+#ifdef MPI
+  integer :: info
+  SCALAR :: tmp_v(nn,nn)
+#endif
+  !-------------------------------------------------------------------
+  !
+  ! Maximum memory used for auxiliary arrays is 100 MB.
+  !
+  xmax = 1024.d0*128.d0*100.0
+  ncol = min( nint(xmax/real(nn,dp)) ,nij)
+  allocate(kvpolt(nn,ncol))
+
+  do ipe = 0, r_grp%npes - 1
+  !-------------------------------------------------------------------
+  ! Each PE broadcasts the TDLDA eigenstates it has and lets all 
+  ! processors perform the summation over vc.
+  !
+#ifdef MPI
+     call MPI_SCATTER(tvpol,nn*nn,MPI_DOUBLE_SCALAR,tmp_v,nn*nn, &
+          MPI_DOUBLE_SCALAR,ipe,r_grp%comm,info)
+
+     if ( ( r_grp%inode + 1 )*nn > npol) then
+        ioff = npol - r_grp%inode*nn
+        if (ioff > 0 .and. ioff <= nn) tmp_v(1:nn,1+ioff:nn) = Zzero
+     endif
+#endif
+     ncol = min( nint(xmax/real(nn,dp)) ,nij)
+     ioff = 0
+     do
+        if (ioff + ncol > nij) ncol = nij - ioff
+     ! kvpolt(1:nn,1:ncol) = tmp_v(1:nn,1:nn)
+     !                            * kernel(1:nn,ioff+1:ioff+ncol)
+#ifdef MPI
+        call Zgemm('N','N',nn,ncol,nn,Zone, tmp_v, &
+            nn,kernel(1,ioff+1),nn,Zzero,kvpolt,nn)
+        call MPI_REDUCE(kvpolt,pot(1,ioff+1),nn*ncol, &
+             MPI_DOUBLE_SCALAR,MPI_SUM,ipe,r_grp%comm,info)
+#else
+        call Zgemm('N','N',nn,ncol,nn,Zone, tvpol, &
+            nn,kernel(1,ioff+1),nn,Zzero,kvpolt,nn)
+        call Zcopy(nn*ncol,kvpolt(1,1),1,pot(1,ioff+1),1)
+#endif
+        ioff = ioff + ncol
+        if (ioff == nij) exit
+     enddo
+  enddo        ! ipe = 0, r_grp%npes - 1
+  deallocate(kvpolt)
+
+end subroutine Zpotential
+!===================================================================

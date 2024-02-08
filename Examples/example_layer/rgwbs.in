@@ -1,0 +1,15 @@
+#
+# Flags to write BSE eigenvectors or not.
+#
+no_eigenvectors
+
+exchange_correlation b3lyp
+
+begin sigma_kpoints
+   0.00  0.00  0.00   4.00    ! gamma
+   1.00  0.00  0.00   4.00    ! gamma - M
+   2.00  0.00  0.00   4.00    ! M
+   1.00  1.00  0.00   4.00    ! gamma - M
+   2.00  2.00  0.00   4.00    ! gamma - M
+end sigma_kpoints
+

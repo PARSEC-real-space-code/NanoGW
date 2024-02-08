@@ -1,0 +1,51 @@
+ 265  SCFLOOP # H*Psi  AFTER ITERATION 5
+  paratec release paratecSGL-0.8    Date: 2006/06                    LSDA+U version                                                          
+
+
+ ------------ Iteration number:   0 ------------
+
+ number of symmetry operations: 48
+ total energy (not enthalpy) =   -15.8641352477
+
+ lattice vectors (a.u.)
+
+coord     0.00000000000000   5.13000000000000   5.13000000000000
+coord     5.13000000000000   0.00000000000000   5.13000000000000
+coord     5.13000000000000   5.13000000000000   0.00000000000000
+
+ volume   270.0113940000 au.
+
+ atomic positions:
+newtype Si   0.20000
+coord      -0.12500000000000 -0.12500000000000 -0.12500000000000
+coord       0.12500000000000  0.12500000000000  0.12500000000000
+
+ number of processors used:    1
+
+ grid of k-points:    2   2   2
+
+ k-grid shift:    0.4900   0.3100   0.9300
+
+ number of irreducible k-points:   8
+ energy cutoff [Ry]:      10.00000
+ gaussian smearing [eV]:   0.01000
+
+ antiferromagnetic moment [Bohr magneton]:   0.00000
+ magnetic energy:   0.00000
+
+ forces :               coord                   cartesian force [Ry/a.u.]
+            a1    a2    a3           -x-            -y-            -z-
+    1   -0.125-0.125-0.125    0.000000000000  0.000000000000  0.000000000000
+    2    0.125 0.125 0.125    0.000000000000  0.000000000000  0.000000000000
+
+
+ stress :                         sigma * v (ry)
+(cartes)  -xx-        -yy-        -zz-        -xy-        -yz-        -zx-
+         -0.17651    -0.17651    -0.17651     0.00000     0.00000     0.00000
+
+                                    sigma (gpa)
+          -xx-        -yy-        -zz-        -xy-        -yz-        -zx-
+         -9.61676    -9.61676    -9.61676     0.00000     0.00000     0.00000
+
+ total time:               2.58088s   =   0.00072h
+ 6  max_lbfgs

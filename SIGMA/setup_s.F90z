@@ -1,0 +1,401 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Initialize most fields in polarizability and kernel structures.
+! Also, calls dipole subroutines to calculate dipole matrix elements.
+! Initialize most fields in sigma structure, including the lists of
+! matrix elements to be calculated.
+!
+! All calculated quantities given in atomic units:
+!   energy --> rydbergs
+!   dipole --> Bohr radii
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zsetup_s(gvec,kpt,qpt,kpt_sig,sig_in,sig,pol_in,pol,k_p,k_c, &
+     nspin,tdldacut,readocc,verbose)
+
+  use typedefs
+  use mpi_module
+  implicit none
+
+  ! arguments
+  type (gspace), intent(in) :: gvec
+  type (kptinfo), intent(inout) :: kpt, kpt_sig
+  type (qptinfo), intent(inout) :: qpt
+  type (siginfo), intent(inout) :: sig_in
+  type (siginfo),dimension(nspin,kpt_sig%nk), intent(inout) :: sig
+  type (polinfo),dimension(2), intent(inout) :: pol_in
+  type (polinfo), dimension(gvec%syms%ntrans,qpt%nk), intent(inout) :: pol
+  type (kernelinfo), dimension(gvec%syms%ntrans,qpt%nk), intent(inout) :: &
+       k_p, k_c
+  ! number of spins
+  integer, intent(in) :: nspin
+  ! TDLDA cutoff, in Ry
+  real(dp), intent(in) :: tdldacut
+  ! true if DFT occupancy factors are overriden by data read from disk
+  logical, intent(in) :: readocc
+  ! output flag
+  logical, intent(in) :: verbose
+
+  ! local variables
+  integer :: ii, jj, nn, isp, ik, ikp, iq, jk, info, &
+       n_c, n_c_up, n_p, n_p_up, nvxc(2), nmax, nhomo
+  real(dp) :: tmp, ktmp(3)
+  logical, dimension(:,:), allocatable :: lmap
+  integer, dimension(:,:), allocatable :: map_c
+  real(dp), parameter :: tol_q = 1.d-8  ! tolerance in the matching of k-points
+
+  !-------------------------------------------------------------------
+  ! Define polarizability map.
+  !
+  if (sig_in%xc /= XC_GW) then
+     do isp = 1, nspin
+        allocate(kpt%wfn(isp,1)%mapd(2,kpt%wfn(isp,1)%nstate))
+        do ii = 1, kpt%wfn(isp,1)%nstate
+           kpt%wfn(isp,1)%mapd(:,ii) = ii
+        enddo
+     enddo
+     allocate(qpt%match(kpt%nk,qpt%nk))
+     call qpt_matching(kpt%nk,kpt%nk,qpt%nk,kpt%fk,kpt%fk,qpt%fk,gvec%bdot,qpt%match)
+     if (verbose .and. gvec%per > 0) then
+        write(6,*)
+        write(6,*) ' Matching k-points : '
+        do iq = 1, qpt%nk
+           write(6,'(a,i2,a,3f20.10)') ' q-point # ',iq,' = ',qpt%fk(:,iq)
+           write(6,*) ' k-point and (k-q) point '
+           do ik = 1, kpt%nk
+              if (qpt%match(ik,iq) > 0) write(6,'(3f10.4,5x,3f10.4)') &
+                   kpt%fk(:,ik), kpt%fk(:,qpt%match(ik,iq))
+           enddo
+        enddo
+     endif
+     if (minval(qpt%match) == 0) then
+        if (verbose) write(6,'(a,/,a,/,a)') &
+             ' ERROR: grids kpt and qpt are not regular!', &
+             ' Could not find matching between points kpt and qpt.', &
+             ' Make sure the k-point grid is a full regular (Monkhorst-Pack) grid.'
+        call die('Stop')
+     endif
+  else
+     call Zsetup_g(gvec,kpt,qpt,pol_in,pol,k_p,nspin,tdldacut,.false.)
+  endif
+  !
+  ! Do the q-vectors form a regular grid?
+  !
+  allocate(map_c(qpt%nk,qpt%nk))
+  call qpt_matching(qpt%nk,qpt%nk,qpt%nk,qpt%fk,qpt%fk,qpt%fk,gvec%bdot,map_c)
+  if (minval(qpt%match) == 0) then
+     if (verbose) write(6,'(a,/,a,/,a)') &
+          ' ERROR: qpt grid is not regular!', &
+          ' Could not find matching between points in qpt.', &
+          ' Make sure the q-point grid is a full regular (Monkhorst-Pack) grid.'
+     call die('Stop')
+  endif
+  deallocate(map_c)
+   
+  !-------------------------------------------------------------------
+  ! Search for k-points in kpt structure.
+  !
+  do ik = 1, kpt_sig%nk
+     sig(:,ik)%indxk = 0
+     do jk = 1, kpt%nk
+        ktmp = kpt%fk(:,jk) - kpt_sig%fk(:,ik)
+        if (abs(dot_product(ktmp,ktmp)) < tol_q) then
+           sig(:,ik)%indxk = jk
+           exit
+        endif
+     enddo
+     if (sig(1,ik)%indxk == 0) then
+        write(6,*) ' ERROR! k-point ', kpt_sig%fk(:,ik), ' not found.'
+        call die('Stop.')
+     endif
+  enddo
+  !-------------------------------------------------------------------
+  ! If no matrix elements are defined, calculate all of them.
+  ! Assume that occupied and unoccupied orbitals can be mixed.
+  !
+  if (sig_in%nmap < 0) then ! sig_in%nmap: total number of states for which self-energy is computed
+     sig_in%nmap = maxval(kpt%wfn(1,1)%mapd(:,:))
+     allocate(sig_in%map(sig_in%nmap))
+     do ii = 1, maxval(kpt%wfn(1,1)%mapd(:,:))
+        sig_in%map(ii) = ii
+     enddo
+     if (sig_in%ndiag_s <= 0) then
+        sig_in%ndiag_s = sig_in%nmap
+        sig_in%ndiag = sig_in%nmap
+        allocate(sig_in%diag(sig_in%ndiag_s))
+        do ii = 1, sig_in%nmap
+           sig_in%diag(ii) = ii
+        enddo
+     endif
+     nn = 0
+     if (sig_in%noffd_s < 0) then
+        allocate(map_c( maxval(kpt%wfn(1,1)%mapd(:,:))**2 ,2))
+        nvxc(1) = minval(kpt%wfn(1,1)%mapd(:,:))
+        nvxc(2) = maxval(kpt%wfn(1,1)%mapd(:,:))
+        do ii = nvxc(1), nvxc(2)
+           do jj = ii+1, nvxc(2)
+              nn = nn + 1
+              map_c(nn,1) = ii
+              map_c(nn,2) = jj
+           enddo
+        enddo
+        sig_in%noffd_s = nn
+        sig_in%noffd = nn
+        allocate(sig_in%off1(sig_in%noffd_s))
+        allocate(sig_in%off2(sig_in%noffd_s))
+        sig_in%off1 = map_c(1:nn,1)
+        sig_in%off2 = map_c(1:nn,2)
+        deallocate(map_c)
+     endif
+  endif
+  !-------------------------------------------------------------------
+  ! Initialize sig(1:nspin,1:nk).
+  !
+  do ik = 1, kpt_sig%nk
+     do isp = 1, nspin
+        if (sig_in%ndiag_s < 0) sig_in%ndiag_s = 0
+        if (sig_in%ndiag < 0) sig_in%ndiag = 0
+        if (sig_in%noffd_s < 0) sig_in%noffd_s = 0
+        if (sig_in%noffd < 0) sig_in%noffd = 0
+        if (sig_in%nmax_c < 0) sig_in%nmax_c = maxval(kpt%wfn(1,1)%mapd(:,:))
+
+        sig(isp,ik)%nmap = sig_in%nmap
+        allocate(sig(isp,ik)%map(sig(isp,ik)%nmap))
+        sig(isp,ik)%map = sig_in%map
+        sig(isp,ik)%ndiag = sig_in%ndiag
+        sig(isp,ik)%ndiag_s = sig_in%ndiag_s
+        if (sig(isp,ik)%ndiag_s > 0) then
+           allocate(sig(isp,ik)%diag(sig(isp,ik)%ndiag_s))
+           sig(isp,ik)%diag = sig_in%diag
+        endif
+        sig(isp,ik)%noffd = sig_in%noffd
+        sig(isp,ik)%noffd_s = sig_in%noffd_s
+        if (sig(isp,ik)%noffd_s > 0) then
+           allocate(sig(isp,ik)%off1(sig(isp,ik)%noffd_s))
+           sig(isp,ik)%off1 = sig_in%off1
+           allocate(sig(isp,ik)%off2(sig(isp,ik)%noffd_s))
+           sig(isp,ik)%off2 = sig_in%off2
+        endif
+     enddo
+  enddo
+
+  !-------------------------------------------------------------------
+  ! Define sets of orbitals for K_c: use (v,c;i,n) where "c" include
+  ! all unoccupied orbitals (pol_in%cmap), "n" include all orbitals
+  ! in Green's function (defined by sig%nmax_c); "v" and "i" are
+  ! as above.
+  !
+  if (sig_in%xc == XC_GW) then
+        nmax = sig_in%nmax_c
+        nn = 0
+        do ik = 1, kpt_sig%nk
+           do isp = 1, nspin
+              if (nn < sig(isp,ik)%nmap) nn = sig(isp,ik)%nmap
+           enddo
+        enddo
+        allocate(lmap(nn,2))
+        lmap = .false.
+        do ik = 1, kpt_sig%nk
+           do isp = 1, nspin
+              do ii = 1, sig(isp,ik)%ndiag
+                 lmap(sig(isp,ik)%diag(ii),isp) = .true.
+              enddo
+              do ii = 1, sig(isp,ik)%noffd
+                 lmap(sig(isp,ik)%off1(ii),isp) = .true.
+                 lmap(sig(isp,ik)%off2(ii),isp) = .true.
+              enddo
+           enddo
+        enddo
+
+        do iq = 1, qpt%nk
+           n_c = 0
+           do ik = 1, kpt_sig%nk
+              do isp = 1, nspin
+                 if (nmax == 0) nmax = maxval(kpt%wfn(isp,ik)%mapd(:,:))
+                 ! Assume HOMO always included in valence states for transition
+                 nhomo = maxval(pol_in(isp)%vmap(:))
+                 do jj = 1, sig(isp,ik)%nmap
+                    if (lmap(jj,isp)) then
+                      n_c = n_c + nmax  ! GW
+                    else
+                      n_c = n_c + nhomo ! COHSEX
+                    endif
+                 enddo
+              enddo
+           enddo
+           allocate(map_c(4,n_c))
+           n_c = 0
+           do ik = 1, kpt_sig%nk
+              do isp = 1, nspin
+                 jk = sig(isp,ik)%indxk
+                 ikp = qpt%match(jk,iq)
+                 do jj = 1, sig(isp,ik)%nmap ! GW, sum up to nmax
+                    if (.not. lmap(jj,isp)) cycle
+                    do ii = 1, nmax
+                       map_c(1,n_c+ii) = sig(isp,ik)%map(jj)
+                       map_c(2,n_c+ii) = ii
+                       map_c(3,n_c+ii) = jk
+                       map_c(4,n_c+ii) = ikp
+                    enddo
+                    n_c = n_c + nmax
+                 enddo
+                 do jj = 1, sig(isp,ik)%nmap ! COHSEX, sum over occupied states
+                    if (lmap(jj,isp)) cycle
+                    do ii = 1, nhomo
+                       map_c(1,n_c+ii) = sig(isp,ik)%map(jj)
+                       map_c(2,n_c+ii) = ii
+                       map_c(3,n_c+ii) = jk
+                       map_c(4,n_c+ii) = ikp
+                    enddo
+                    n_c = n_c + nhomo
+                 enddo
+                 if ( isp == 1 ) n_c_up = n_c
+              enddo
+           enddo
+           ! --- Weiwei Gao: debug ---
+           if ( peinf%master .and. verbose ) then
+              write(6,'(" In setup_s() ")')
+              write(6,'("  ii  map_c")')
+              do ii = 1, n_c
+                 write(6,'(5i8)') ii, map_c(1,ii), map_c(2,ii), &
+                   map_c(3,ii), map_c(4,ii)
+              enddo
+           endif
+           ! --------------------
+           do ii = 1, gvec%syms%ntrans
+              ! If ncol < 0, skip the construction of kernel
+              k_c(ii,iq)%ncol_up = 0
+              k_c(ii,iq)%nrow = 0
+              k_c(ii,iq)%nrow_up = 0
+              if (k_c(ii,iq)%ncol >= 0 .and. n_c > 0 .and. pol(ii,iq)%ntr > 0) &
+                   call define_kmap(gvec%syms,kpt,k_c(ii,iq),ii,n_c,map_c, &
+                   pol(ii,iq)%ntr,pol(ii,iq)%tr,n_c_up,pol(ii,iq)%n_up)
+           enddo
+
+           deallocate(map_c)
+        enddo
+        deallocate(lmap)
+
+  endif
+  ! Weiwei Gao: For debug, consider to remove later
+  call MPI_Barrier(peinf%comm, info)
+  if (sig_in%ndiag_s + sig_in%noffd_s == 0) return
+
+  do jk = 1, kpt%nk
+     do isp = 1, nspin
+        allocate(kpt%wfn(isp,jk)%occ1(kpt%wfn(isp,jk)%nstate))
+        kpt%wfn(isp,jk)%occ1 = kpt%wfn(isp,jk)%occ0
+     enddo
+  enddo
+  do ik = 1, kpt_sig%nk
+     jk = sig(1,ik)%indxk
+     !-------------------------------------------------------------------
+     ! Reduce the number of off-diagonal matrix elements by applying
+     ! selection rules based on irreducible representations.
+     !
+     do isp = 1, nspin
+        if ( sig(isp,ik)%noffd_s > 0) then
+           n_p = sig(isp,ik)%noffd_s
+           n_p_up = sig(isp,ik)%noffd
+           allocate(map_c(2,n_p))
+           map_c(1,:) = sig(isp,ik)%off1
+           map_c(2,:) = sig(isp,ik)%off2
+           deallocate(sig(isp,ik)%off1)
+           deallocate(sig(isp,ik)%off2)
+           nn = 0
+           do ii = 1, n_p_up
+              if (kpt%wfn(isp,jk)%irep(sig(isp,ik)%map(map_c(1,ii))) == &
+                   kpt%wfn(isp,jk)%irep(sig(isp,ik)%map(map_c(2,ii)))) then
+                 nn = nn + 1
+              endif
+           enddo
+           sig(isp,ik)%noffd = nn
+           do ii = n_p_up + 1, n_p
+              if (kpt%wfn(isp,jk)%irep(sig(isp,ik)%map(map_c(1,ii))) == &
+                   kpt%wfn(isp,jk)%irep(sig(isp,ik)%map(map_c(2,ii)))) then
+                 nn = nn + 1
+              endif
+           enddo
+           sig(isp,ik)%noffd_s = nn
+           if ( sig(isp,ik)%noffd_s > 0 ) then
+              allocate(sig(isp,ik)%off1(sig(isp,ik)%noffd_s))
+              allocate(sig(isp,ik)%off2(sig(isp,ik)%noffd_s))
+              nn = 0
+              do ii = 1, n_p
+                 if (kpt%wfn(isp,jk)%irep(sig(isp,ik)%map(map_c(1,ii))) == &
+                      kpt%wfn(isp,jk)%irep(sig(isp,ik)%map(map_c(2,ii)))) then
+                    nn = nn + 1
+                    sig(isp,ik)%off1(nn) = map_c(1,ii)
+                    sig(isp,ik)%off2(nn) = map_c(2,ii)
+                 endif
+              enddo
+           endif
+           deallocate(map_c)
+        endif
+     enddo
+
+     if (verbose) then
+        if (gvec%per > 0) write(6,'(/,a,3f10.4,i4)') ' k-point ', &
+             kpt_sig%fk(:,ik), sig(1,ik)%indxk
+        do isp = 1, nspin
+           if (nspin == 2) then
+              if (isp == 1) write(6,'(/,a)') '  Spin up channel:'
+              if (isp == 2) write(6,'(/,a)') '  Spin down chanel:'
+           endif
+           write(6,*) ' Calculating ', sig(isp,ik)%ndiag_s, &
+                ' diagonal matrix elements'
+           write(6,*) ' and ', sig(isp,ik)%noffd_s, &
+                ' off-diagonal matrix elements.'
+           write(6,*) ' Calculating ', sig(isp,ik)%ndiag, &
+                ' diagonal matrix elements'
+           write(6,*) ' and ', sig(isp,ik)%noffd, &
+                ' off-diagonal matrix elements beyond COHSEX.'
+        enddo
+     endif
+
+     !-------------------------------------------------------------------
+     ! Keep LDA occupancies for calculation of quasi-particle energy.
+     ! If desired, read occupancies from file occup.in (same format as
+     ! in parsec.in) and ignore the data read from wavefunction file.
+     !
+     if (readocc) then
+        if (verbose) write(6,'(/,a,/)') &
+             '  Reading occup.in and overriding orbital occupancies.'
+        open(90,file='occup.in',form='formatted',status='old',iostat=info)
+        if (info /= 0) call die('ERROR: occup.in file not found')
+        do isp = 1, nspin
+           tmp = zero
+           do ii = 1, kpt%wfn(isp,jk)%nstate
+              tmp = tmp + kpt%wfn(isp,jk)%occ1(ii)
+           enddo
+           if (verbose) write(6,'(a,i3,/,a,i3,a,g20.6)') ' Spin ', isp, &
+                ' Number of electrons with spin ', isp, ' = ', tmp
+           ! Skip title line.
+           read(90,*) 
+           ! Occupy all states up to some specified order.
+           read(90,*) jj
+           kpt%wfn(isp,jk)%occ1(1:jj) = one
+           kpt%wfn(isp,jk)%occ1(jj+1:kpt%wfn(isp,jk)%nstate) = zero
+           ! Read in manual over-ride for occupancy of specific states.
+           read(90,*) nn
+           do ii = 1, nn
+              read(90,*) jj, kpt%wfn(isp,jk)%occ1(jj)
+           enddo
+           ! Check if occupancy consistent with number of electrons.
+           tmp = zero
+           do ii = 1, kpt%wfn(isp,jk)%nstate
+              tmp = tmp + kpt%wfn(isp,jk)%occ1(ii)
+           enddo
+           if (verbose) write(6,'(a,i3,a,g20.6,/)') &
+                ' New number of electrons with spin ', isp, ' = ', tmp
+        enddo
+        close(90)
+     endif
+  enddo
+
+end subroutine Zsetup_s
+!===================================================================

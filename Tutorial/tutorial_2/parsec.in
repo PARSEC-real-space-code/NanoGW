@@ -1,0 +1,28 @@
+#
+# Ab-initio calculation by the finite-difference method
+
+Boundary_Sphere_Radius:  18.00
+Grid_Spacing:  0.7
+ 
+States_Num:  160
+
+output_all_states true
+
+eigensolver diagla
+
+spin_polarization true
+
+Atom_Types_Num:  1
+
+#------------ new atom type ---------------- 
+Atom_Type: Na
+Local_Component: s
+
+begin Atom_Coord
+   3.87175233334280700   -2.13463448966985148   0.000000000000000000
+  -3.87175233334280700   -2.13463448966985148   0.000000000000000000
+   0.00000000000000000    2.23652697933971334   0.000000000000000000
+end Atom_Coord
+
+#------------ end of atom type ------------- 
+
