@@ -12,7 +12,7 @@
 !-------------------------------------------------------------------
 subroutine input_g(pol_in,qpt,tdldacut,nbuff,lcache,wgr_npes, &
       nolda,tamm_d,rgr_num,dft_code,doisdf,n_intp,intp_type,isdf_type, &
-      lessmemory, fastselect, verbose)
+      lessmemory,fastselect,eigsolver,linear_algebra,nbl,verbose)
 
   use typedefs
   use esdf
@@ -36,6 +36,7 @@ subroutine input_g(pol_in,qpt,tdldacut,nbuff,lcache,wgr_npes, &
   logical, intent(out) :: &
        nolda, &      ! true if LDA kernel is not used
        tamm_d        ! true if Tamm-Dancof approximation is used
+  integer, intent(out) :: eigsolver, linear_algebra ! what eigensolver should we call
   logical, intent(in) :: verbose ! if true, prinout extra debug info
 
   ! local variables
@@ -45,9 +46,11 @@ subroutine input_g(pol_in,qpt,tdldacut,nbuff,lcache,wgr_npes, &
   integer, dimension(maxdata,2) :: vmap, cmap
 
   ! variables for ISDF method
-  logical, intent(out) :: doisdf, lessmemory, fastselect
+  logical, intent(out) :: doisdf, fastselect
+  integer, intent(out) :: lessmemory
   integer, intent(out) :: n_intp
   integer, intent(out) :: intp_type, isdf_type
+  integer, intent(out) :: nbl
 
   !-----------------------------------------------------------------------
   ! Initialize input info.
@@ -80,7 +83,8 @@ subroutine input_g(pol_in,qpt,tdldacut,nbuff,lcache,wgr_npes, &
   ! read variables for ISDF method
   doisdf = (esdf_defined('doisdf'))
 
-  lessmemory = (esdf_defined('lessmemory'))
+  ! lessmemory = (esdf_defined('lessmemory'))
+  lessmemory = esdf_integer('lessmemory',0)
 
   fastselect = (esdf_defined('fastselect'))
 
@@ -90,8 +94,34 @@ subroutine input_g(pol_in,qpt,tdldacut,nbuff,lcache,wgr_npes, &
 
   isdf_type = esdf_integer('isdf_type',1)
 
-  ! ------
-
+  ! new eigensolver 
+  strflag = esdf_reduce(esdf_string('eigsolver', 'scalapack_new'))
+  select case (trim(strflag))
+  case ('scalapack_new', 'Scalapack_new', 'SCALAPACK_NEW')
+     eigsolver = 1
+  case ('scalapack_old', 'Scalapack_old', 'SCALAPACK_OLD')
+     eigsolver = 0
+  case ('hipgpu', 'HIPGPU', 'GPU')
+     eigsolver = 2
+  case default
+     write(6, *) "Unknown eigsolver : ", trim(strflag)
+     eigsolver = 1 ! set to default
+  end select
+  ! use what to perform linear_algebra calculation (GPU or CPU)?
+  strflag = esdf_reduce(esdf_string('linear_algebra', 'cpu'))
+  select case (trim(strflag))
+  case ('cpu', 'CPU')
+     linear_algebra = 1
+  case ('gpu', 'GPU')
+     linear_algebra = 2
+     write(6, *) "Try to use gpu to do dgemm"
+  case default
+     write(6, *) "Unknown linear_algebra option : ", trim(strflag)
+     write(6, *) "Use default: CPU algo"
+     linear_algebra = 1
+  end select
+  if (peinf%master) print *, "linear_algebra ", linear_algebra
+  
   ii = 1
   rgr_num = esdf_integer('distribute_representations',ii)
 

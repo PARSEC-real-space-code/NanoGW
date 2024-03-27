@@ -8,6 +8,14 @@
 !-------------------------------------------------------------------
 subroutine header(namelabel)
 
+#ifdef _CUDA
+! Need to include a couple of modules:
+!   cublas: required to use generic BLAS interface
+!   cudafor: required to use CUDA runtime API routines (e.g. cudaDeviceSynchronize)
+!            not explicitly required if file has *.cuf suffix 
+  use cublas
+  use cudafor
+#endif
   use myconstants
   use mpi_module
   implicit none

@@ -42,10 +42,10 @@ subroutine Zvxc(nspin,gvec,kpt,sig,readvxc,ik,isp)
   if (peinf%master) then
      write(6,*) ' map defined ', sig%nmap, sig%ndiag, &
           sig%noffd, sig%ndiag_s, sig%noffd_s
-     write(6,*) sig%map
-     write(6,*) sig%diag
-     write(6,*) sig%off1
-     write(6,*) sig%off2
+     if (sig%nmap > 0) write(6,*) "sig%map", sig%map
+     if (sig%ndiag_s > 0) write(6,*) "sig%diag", sig%diag
+     if (sig%noffd_s > 0) write(6,*) "sig%off1", sig%off1
+     if (sig%noffd_s > 0) write(6,*) "sig%off2", sig%off2
   endif
 #endif
 

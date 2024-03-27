@@ -16,8 +16,8 @@ SRC	= alccheck.f90 define_kmap.f90 define_xc.f90 \
 	  timacc.f90 unfold.f90 $(AUX_SRC)
 PSRCZ	= charac_group.F90z calculate_bse.F90z calculate_tdlda.F90z \
 	  define_pmap.F90z diag_bse.F90z diag_bse_mix.F90z diag_pol.F90z dipole.F90z \
-	  direct_b.F90z direct_mix.F90z direct_s.F90z eigensolver.F90z \
-	  exchange_b.F90z get_pol.F90z \
+	  direct_b.F90z direct_mix.F90z direct_s.F90z eigensolver.F90z eigensolver_new.F90z\
+	  exchange_b.F90z get_pol.F90z eigensolver_hipMAGMA.F90z \
 	  group_reduce_bse.F90z k_integrate.F90z k_print.F90z kernel.F90z \
           k_integrate_isdf.F90z k_integrate_isdf_fastselect.F90z \
 	  matvec3.F90z multiply_vec.F90z potential.F90z \
@@ -40,7 +40,7 @@ VPATH	= ../shared:../BSE:$(AUX_PATH)
 
 bsesolv: module obj initial pobjz pobj
 	$(F90) $(OPTS) -o ../bin/bsesolv$(EXT) $(OBJ) $(POBJ) $(POBJZ) \
-	$(MODULE) $(INITIAL) $(LIBFFT) $(LIBLAPACK) $(LIBSCALAPACK) $(LIBXC)
+	$(MODULE) $(INITIAL) $(LIBFFT) $(LIBLAPACK) $(LIBSCALAPACK) $(LIBXC) $(LIBMAGMA)
 
 .SUFFIXES: .f90 .F90 .F90z $(SUFFIXES)
 

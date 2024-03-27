@@ -1,8 +1,13 @@
 ## Brief intro of NanoGW
 
-2020/05/20 Weiwei Gao
+2023/12/30 Weiwei Gao
 
-### Who are the developers
+### Updates
+In this branch, we implemented a Lanczos-based method to accelerate full-frequency GW calculations (named as LanczosGW).
+For now, we have demonstrate the great efficiency of LanczosGW method for finite systems (more details is discussed in 'https://arxiv.org/abs/2310.20103').
+The benchmark files discussed in 'https://arxiv.org/abs/2310.20103' are included under the "Benchmarks" directory.
+
+### developers
 The first version of NanoGW was developed by Murilo Tiago and James R. Chelikowsky between 2004 and 2009. Later it is developed and maintained by Linda Hung and Weiwei Gao. Weiwei Gao implemented a symmetry-adapted interpolative separable density fitting method to drastically speed up the evaluation of kernel matrix elements in the calculations performed with NanoGW. 
 NanoGW was originally named as RGWBS, which is more difficult to remember (so we changed the name to “NanoGW”). Since the main advantage of this package is for confined, nanoscale systems, so we call it NanoGW.
 

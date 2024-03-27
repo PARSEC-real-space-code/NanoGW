@@ -46,8 +46,25 @@
 !
 !-------------------------------------------------------------------
 program sigma
-
+#ifdef HIPMAGMA
+  use magma
+#endif
   use typedefs
+#ifdef DCU
+  use sub_module
+  use hipfort
+  use hipfort_check
+  use hipfort_types
+  use hipfort_hipblas
+#endif
+#ifdef _CUDA
+! Need to include a couple of modules:
+!   cublas: required to use generic BLAS interface
+!   cudafor: required to use CUDA runtime API routines (e.g. cudaDeviceSynchronize)
+!            not explicitly required if file has *.cuf suffix 
+  use cublas
+  use cudafor
+#endif
   use mpi_module
   implicit none
 #ifdef MPI
@@ -62,6 +79,7 @@ program sigma
   type (siginfo) :: sig_in
   type (siginfo), dimension(:,:), allocatable :: sig
   type (qpinfo), dimension(:,:,:), allocatable :: q_p
+  type (options) :: opt
 
   character (len=40), allocatable :: routnam(:)
 
@@ -84,7 +102,8 @@ program sigma
   integer :: n_intp, n_intp_r, maxnc, maxnv, ic, iv, ij, maxncv, &
            ihomo, ikp, intp_type, isdf_type, kflag, maxicc, maxivv, maxsig, ipt, &
            virp, cirp, vcirp, vvirp, ccirp, ivv, ivt, ict, icc, jrp, jj, mv, &
-           mc, n_dummy, igrid, jgrid
+           mc, n_dummy, igrid, jgrid, incr, ipe, res, pdgesv_nbl2d, &
+           lanczos_npoly, lanczos_niter, kk, jnblock
   ! cvt.f90
   integer, allocatable :: intp(:), pairmap(:,:,:,:,:), invpairmap(:,:,:,:,:), &
            nc(:,:,:), nv(:,:,:), ncv(:,:,:), ivlist(:,:,:,:), iclist(:,:,:,:), &
@@ -95,11 +114,27 @@ program sigma
   ! WG debug
   integer :: outdbg, rho_intp_dbg
   character (len=20) :: dbg_filename
+#ifdef DCU
+  integer :: ndevs, mydevice
+#endif
 
   !-------------------------------------------------------------------
   ! Initialization.
   !
   call header('SIGMA')
+#ifdef DCU
+  !if ( peinf%inode .eq. 0) call hipCheck(hipGetDeviceCount(ndevs))
+  !call MPI_BCAST( ndevs, 1, MPI_INTEGER, 0, peinf%comm, info)
+  ndevs = 1
+  print *, peinf%inode, " Number of devices ", ndevs
+  mydevice = mod(w_grp%inode, ndevs)
+  !mydevice = 0
+  print *, peinf%inode, " mydevice ", mydevice
+  call hipCheck(hipSetDevice(mydevice))
+  call MPI_BARRIER(peinf%comm, info)
+  print *, peinf%inode, "finished set device"
+#endif
+
   ! W Gao open dbg files
   write(dbg_filename,"(i7)") peinf%inode
   outdbg = peinf%inode+198812
@@ -110,13 +145,26 @@ program sigma
   !
   call input_g(pol_in,qpt,tdldacut,nbuff,lcache,w_grp%npes, &
        nolda,tamm_d,r_grp%num,dft_code,doisdf,n_intp,intp_type,isdf_type,&
-       isdf_in%lessmemory,isdf_in%fastselect,.false.)
-  write(6, *) "isdf_type = ", isdf_type
+       isdf_in%lessmemory,isdf_in%fastselect,opt%eigsolver,opt%linear_algebra,opt%pdgesv_nbl2d,.false.)
+  if(peinf%master) write (*,*) " input_g done" 
+  if (opt%linear_algebra .eq. 2 .or. opt%eigsolver .eq. 2) then
+#ifndef HIPMAGMA
+      write(6, *) "Not compiled with '-DHIPMAGMA', use cpu for ", &
+       " eigsolver and linear algebra !!"
+      opt%linear_algebra = 1
+      opt%eigsolver = 1
+#endif 
+  endif
+
   call MPI_BARRIER(peinf%comm,info)
   call input_s(sig_in,kpt_sig,snorm,writeqp,readvxc,readocc,cohsex, &
        nooffd,hqp_sym,n_it,chkpt_in,static_type,sig_en,max_conv,xbuff,ecuts, &
-       qpmix,sig_cut,.true.)
+       qpmix,sig_cut,pdgesv_nbl2d,lanczos_npoly,lanczos_niter,jnblock,.false.)
   call MPI_BARRIER(peinf%comm,info)
+  opt%pdgesv_nbl2d = pdgesv_nbl2d ! Defaul is 32, see input_s.F90
+  opt%lanczos_npoly = lanczos_npoly
+  opt%lanczos_niter = lanczos_niter
+  opt%jnblock = jnblock
 
   !-------------------------------------------------------------------
   ! Determine the set of wavefunctions to read: if n-th wavefunction is
@@ -135,11 +183,11 @@ program sigma
         allocate(wmap(1))
      endif
   else
-     write(6,*) " 1 nmap = ", nmap
+     !write(6,*) " 1 nmap = ", nmap
      if (max(pol_in(1)%ncond,pol_in(1)%nval,pol_in(2)%ncond,pol_in(2)%nval, &
           sig_in%nmax_c,sig_in%nmap) > 0) then
-        write(6,*) " sig_in%nmax_c = ", sig_in%nmax_c
-        write(6,*) " sig_in%nmap = ", sig_in%nmap
+        !write(6,*) " sig_in%nmax_c = ", sig_in%nmax_c
+        !write(6,*) " sig_in%nmap = ", sig_in%nmap
         nmap = max(sig_in%nmax_c,sig_in%nmap)
         if (pol_in(1)%ncond > 0) nmap = max(nmap,maxval(pol_in(1)%cmap))
         if (pol_in(1)%nval > 0) nmap = max(nmap,maxval(pol_in(1)%vmap))
@@ -165,15 +213,15 @@ program sigma
      else
         allocate(wmap(1))
      endif
-     write(6,*) " 2 nmap = ", nmap
-     write(6,*) pol_in(1)%ncond,pol_in(1)%nval,pol_in(2)%ncond,pol_in(2)%nval
+     !write(6,*) " 2 nmap = ", nmap
+     !write(6,*) pol_in(1)%ncond,pol_in(1)%nval,pol_in(2)%ncond,pol_in(2)%nval
      if (min(pol_in(1)%ncond,pol_in(1)%nval,pol_in(2)%ncond,pol_in(2)%nval, &
           sig_in%nmax_c,sig_in%nmap) < 0) then
         deallocate(wmap)
         allocate(wmap(1))
         nmap = 0
      endif
-     write(6,*) " 3 nmap = ", nmap
+     !write(6,*) " 3 nmap = ", nmap
   endif
 
   !-------------------------------------------------------------------
@@ -186,7 +234,8 @@ program sigma
      call parsec_wfn(gvec,kpt,nmap,nspin,wmap,init_gr)
   endif
   deallocate(wmap)
-
+  call MPI_BARRIER(peinf%comm, info)
+  call stopwatch(peinf%master,'finished parsec_wfn')
   !
   !-------------------------------------------------------------------
   ! Calculate characters of representations.
@@ -238,11 +287,30 @@ program sigma
   call stopwatch(peinf%master,'Calling setup_s')
   if (kpt%lcplx) then
      call zsetup_s(gvec,kpt,qpt,kpt_sig,sig_in,sig,pol_in,pol,k_p,k_c, &
-          nspin,tdldacut,readocc,peinf%master)
+          nspin,tdldacut,readocc,isdf_in,peinf%master)
   else
      call dsetup_s(gvec,kpt,qpt,kpt_sig,sig_in,sig,pol_in,pol,k_p,k_c, &
-          nspin,tdldacut,readocc,peinf%master)
+          nspin,tdldacut,readocc,isdf_in,peinf%master)
   endif
+  ! WG: debug
+!  if (peinf%master) then
+!    write(6,*) "k_p%col"
+!    do ij = 1, k_p(1,1)%ncol
+!       write(6,'(5i4)') ij, k_p(1,1)%col(1:4,ij)
+!    enddo 
+!    write(6,*) "k_p%row"
+!    do ij = 1, k_p(1,1)%nrow
+!       write(6,'(5i4)') ij, k_p(1,1)%row(1:4,ij)      
+!    enddo 
+!    write(6,*) "k_c%col"
+!    do ij = 1, k_c(1,1)%ncol
+!       write(6,'(5i4)') ij, k_c(1,1)%col(1:4,ij)      
+!    enddo 
+!    write(6,*) "k_c%row"
+!    do ij = 1, k_c(1,1)%nrow
+!       write(6,'(5i4)') ij, k_c(1,1)%row(1:4,ij)      
+!    enddo 
+!  endif
   call timacc(2,2,tsec)
 
   if (doisdf) then
@@ -350,12 +418,19 @@ program sigma
      not_duplicate(sort_idx(n_intp_r)) = .True.
      n_dummy = n_dummy + 1
      if (peinf%master) write(rho_intp_dbg, '(i7,i7,f30.23,a)') &
-         sort_idx(n_intp_r), &
-         intp_r_tmp(sort_idx(n_intp_r)), &
-         rho_at_intp_r(sort_idx(n_intp_r)), 'T'
+        sort_idx(n_intp_r), &
+        intp_r_tmp(sort_idx(n_intp_r)), &
+        rho_at_intp_r(sort_idx(n_intp_r)), 'T'
      if (peinf%master) then
         write(6, *) "Original n_intp_r =", n_intp_r
         write(6, *) "After removing duplicated points, n_intp_r =", n_dummy
+     endif
+     ! make sure n_intp_r is a multiple of w_grp%npes 
+     if (isdf_in%lessmemory .eq. 2 .or. &
+         isdf_in%lessmemory .eq. 3 .or. &
+         isdf_in%lessmemory .eq. 4) then
+        res = mod(n_dummy, w_grp%npes) 
+        n_dummy = n_dummy - res
      endif
      allocate(intp_r(n_dummy))
      ii = 0
@@ -364,7 +439,13 @@ program sigma
            ii = ii + 1
            intp_r(ii) = intp_r_tmp(ipt)
         endif
+        if (ii .eq. n_dummy) exit
      enddo
+     if (peinf%master) then
+         write(6, *) "Making sure n_intp_r is a multiple of w_grp%npes ", &
+           w_grp%npes
+         write(6, *) "n_intp_r = ", n_dummy
+     endif
      n_intp_r = n_dummy
      deallocate(intp_r_tmp)
      deallocate(rho_at_intp_r)
@@ -422,14 +503,18 @@ program sigma
      maxnc  = maxval( nc )
      maxncv = maxval( ncv )
      ! obtain nv(isp), ivlist(nv(isp),isp), nc(isp) and iclist(nc(isp),isp)
-     allocate ( pairmap ( maxivv, maxicc, nspin, kpt%nk, gvec%syms%ntrans ))
      allocate ( ivlist  ( maxnv, nspin, kpt%nk, gvec%syms%ntrans ))
      allocate ( iclist  ( maxnc, nspin, kpt%nk, gvec%syms%ntrans ))
-     allocate ( invpairmap ( 2, maxncv, nspin, kpt%nk, gvec%syms%ntrans ))
-     pairmap = 0
      ivlist  = 0
      iclist  = 0
+     if ( isdf_in%lessmemory .ne. 4 ) then
+     !
+     allocate ( pairmap ( maxivv, maxicc, nspin, kpt%nk, gvec%syms%ntrans ))
+     allocate ( invpairmap ( 2, maxncv, nspin, kpt%nk, gvec%syms%ntrans ))
+     pairmap = 0
      invpairmap = 0
+     !
+     endif
      do ikp = 1, kpt%nk
        do isp = 1, nspin 
          ! For now, I assume all the valance states are included, this is not necessarily true in all cases
@@ -454,6 +539,8 @@ program sigma
            idum(irp) = idum(irp) + 1
            iclist(idum(irp), isp, ikp, irp) = ic
          enddo ! ic
+         if (isdf_in%lessmemory .ne. 4) then
+         !
          icv = 0
          do iv = 1, mv
            do ic = 1, mc
@@ -464,41 +551,48 @@ program sigma
              pairmap(iv, ic, isp, ikp, vcirp) = icv(vcirp)
              invpairmap(1, icv(vcirp), isp, ikp, vcirp) = iv
              invpairmap(2, icv(vcirp), isp, ikp, vcirp) = ic
-           enddo
-         enddo
+           enddo ! ic
+         enddo ! iv
+         !
+         endif ! isdf_in%lessmemory
        enddo ! isp
      enddo ! ikp
      if(peinf%master) then
-        do irp = 1, gvec%syms%ntrans
-        write(outdbg,*) "irp=",irp," isp    iv   ivlist " 
-        do isp = 1, nspin
-           do iv = 1,maxnv
-              write(outdbg, '(4I7)') isp, iv, ivlist(iv,isp,1,irp)
-           enddo
-        enddo
-        enddo
+        !do irp = 1, gvec%syms%ntrans
+        !write(outdbg,*) "irp=",irp," isp    iv   ivlist " 
+        !do isp = 1, nspin
+        !   do iv = 1,maxnv
+        !      write(outdbg, '(4I7)') isp, iv, ivlist(iv,isp,1,irp)
+        !   enddo
+        !enddo
+        !enddo
      endif
      if(peinf%master) then
-       do irp = 1, gvec%syms%ntrans
-       write(outdbg,*) "irp=",irp," isp    ic   iclist " 
-       do isp = 1, nspin
-         do ic = 1,maxnc
-           write(outdbg, '(4I7)') isp, ic, iclist(ic,isp,1,irp)
-         enddo
-       enddo
-       enddo
+       !do irp = 1, gvec%syms%ntrans
+       !write(outdbg,*) "irp=",irp," isp    ic   iclist " 
+       !do isp = 1, nspin
+       !  do ic = 1,maxnc
+       !    write(outdbg, '(4I7)') isp, ic, iclist(ic,isp,1,irp)
+       !  enddo
+       !enddo
+       !enddo
      endif
      if(peinf%master) then
-       do irp = 1, gvec%syms%ntrans
-       write(outdbg,*) "irp=",irp," isp    i    j    pairmap"
-       do isp = 1, nspin
-         do iv = 1,mv
-           do ic = 1,mc
-             write(outdbg, '(4I7)') isp, iv, ic, pairmap(iv,ic,isp,1,irp)
-           enddo
-         enddo
-       enddo
-       enddo
+       !do irp = 1, gvec%syms%ntrans
+       !write(outdbg,*) "irp=",irp," isp    i    j    pairmap"
+       !do isp = 1, nspin
+       !  do iv = 1,mv
+       !    do ic = 1,mc
+       !      write(outdbg, '(4I7)') isp, iv, ic, pairmap(iv,ic,isp,1,irp)
+       !    enddo
+       !  enddo
+       !enddo
+       !enddo
+       print *, "maxivv", maxivv
+       print *, "maxicc", maxicc
+       print *, "maxncv", maxncv
+       print *, "maxnc", maxnc
+       print *, "maxnv", maxnv
      endif
      !
      isdf_in%maxivv      = maxivv
@@ -509,10 +603,12 @@ program sigma
      !
      allocate(isdf_in%ncv ( nspin, kpt%nk, gvec%syms%ntrans ))
      isdf_in%ncv         = ncv
+     if ( isdf_in%lessmemory .ne. 4 ) then
      allocate(isdf_in%invpairmap ( 2, maxncv, nspin, kpt%nk, gvec%syms%ntrans ))
      isdf_in%invpairmap  = invpairmap
      allocate(isdf_in%pairmap ( maxivv, maxicc, nspin, kpt%nk, gvec%syms%ntrans ))
      isdf_in%pairmap     = pairmap
+     endif ! isdf_in%lessmemory
      allocate(isdf_in%nv( nspin, kpt%nk, gvec%syms%ntrans ))
      isdf_in%nv          = nv
      allocate(isdf_in%ivlist( maxnv, nspin, kpt%nk, gvec%syms%ntrans ))
@@ -525,11 +621,35 @@ program sigma
      !call MPI_BARRIER(peinf%comm, info)
      !stop
      !
-     isdf_in%n_slice     = 7
+     !isdf_in%n_slice     = 7
      isdf_in%n_intp_r    = n_intp_r
      allocate(isdf_in%intp_r( n_intp_r ))
      isdf_in%intp_r      = intp_r
-     if ( isdf_in%lessmemory ) then
+     ! set up parameters of w_grp:
+     ! 
+     w_grp%n_intp_r = isdf_in%n_intp_r
+     incr = w_grp%n_intp_r/w_grp%npes
+     res  = mod(w_grp%n_intp_r, w_grp%npes)
+     if (res .gt. 0) then
+       w_grp%ldn_intp_r = incr+1 
+     else ! res .eq. 0
+       w_grp%ldn_intp_r = incr
+     endif
+     ALLOCATE(w_grp%n_intp_start(0:w_grp%npes-1))
+     ALLOCATE(w_grp%n_intp_end(0:w_grp%npes-1)) 
+     do ipe = 0, w_grp%npes-1
+       if (ipe .lt. res) then
+         w_grp%n_intp_start(ipe) = ipe*(incr+1)+1
+         w_grp%n_intp_end(ipe)   = ipe*(incr+1)+incr+1
+       else
+         w_grp%n_intp_start(ipe) = res*(incr+1)+(ipe-res)*incr+1
+         w_grp%n_intp_end(ipe)   = res*(incr+1)+(ipe-res)*incr+incr
+       endif
+       if (w_grp%inode .eq. ipe) then
+         w_grp%myn_intp_r = w_grp%n_intp_end(ipe) - w_grp%n_intp_start(ipe) + 1
+       endif
+     enddo ! ipe
+     if ( isdf_in%lessmemory .eq. 1) then
        do isp = 1, nspin
          do ikp = 1, kpt%nk
            if (kpt%wfn(isp,ikp)%nmem .ne. kpt%wfn(1,1)%nmem) then
@@ -539,18 +659,32 @@ program sigma
            endif
          enddo ! ikp
        enddo ! isp
-       allocate(isdf_in%Psi_intp( n_intp_r, kpt%wfn(1,1)%nmem,nspin,kpt%nk ))
+       allocate(isdf_in%Psi_intp( n_intp_r, kpt%wfn(1,1)%nmem, nspin, kpt%nk ))
+       allocate(isdf_in%Mmtrx( n_intp_r, n_intp_r, nspin, nspin, kpt%nk, 2, gvec%syms%ntrans ))
        isdf_in%Psi_intp = zero
+       isdf_in%Mmtrx = zero
+     else if ( isdf_in%lessmemory .eq. 2 .or. &
+               isdf_in%lessmemory .eq. 3 .or. &
+               isdf_in%lessmemory .eq. 4 ) then
+       ! print *, " w_grp%myn_intp_r ", w_grp%myn_intp_r 
+       allocate(isdf_in%Psi_intp_loc( w_grp%myn_intp_r, kpt%wfn(1,1)%nmem, nspin, kpt%nk ))
+       isdf_in%Psi_intp_loc = zero
+       allocate(isdf_in%Mmtrx_loc( w_grp%myn_intp_r, n_intp_r, nspin, nspin, kpt%nk, 2, gvec%syms%ntrans ))
+       isdf_in%Mmtrx_loc = zero
+       ! for lessmemory .eq. 4 we need to allocate PsiV_intp_bl and PsiC_intp_bl
      else ! do not save memory
        ! Cmtrx will be intialized with zeros in isdf_parallel.f90
        allocate(isdf_in%Cmtrx( n_intp_r, maxncv, nspin, kpt%nk, gvec%syms%ntrans ))
+       allocate(isdf_in%Mmtrx( n_intp_r, n_intp_r, nspin, nspin, kpt%nk, 2, gvec%syms%ntrans ))
+       isdf_in%Mmtrx = zero
      endif
-     allocate(isdf_in%Mmtrx( n_intp_r, n_intp_r, nspin, nspin, kpt%nk, 2, gvec%syms%ntrans ))
      !
      deallocate(intp_r)
      deallocate(ncv)
+     if ( isdf_in%lessmemory .ne. 4 ) then
      deallocate(invpairmap)
      deallocate(pairmap)
+     endif ! isdf_in%lessmemory 
      deallocate(nv)
      deallocate(ivlist)
      deallocate(nc)
@@ -564,10 +698,21 @@ program sigma
      if ( nolda ) kflag = 0
      call timacc(52,1,tsec)
      verbose = .FALSE.
-     if (isdf_in%lessmemory) then
-       if(peinf%master) write(*,*) " call isdf_parallel_sym_lessmemory" 
-       call isdf_parallel_sym_lessmemory(gvec, pol_in, kpt, nspin, isdf_in, kflag, verbose)
+     if (isdf_in%lessmemory .eq. 1) then
+       if(peinf%master) write(*,*) " call isdf_parallel_sym_lessmemory2" 
+       call isdf_parallel_sym_lessmemory2(gvec, pol_in, kpt, nspin, isdf_in, kflag, opt, verbose)
        if(peinf%master) write(*,*) " done isdf"
+     else if (isdf_in%lessmemory .eq. 2 .or. &
+              isdf_in%lessmemory .eq. 3 .or. &
+              isdf_in%lessmemory .eq. 4) then
+       if(peinf%master) write(*,*) " call isdf_parallel_sym_UltraLowMem" 
+       call isdf_parallel_sym_UltraLowMem(gvec, pol_in, kpt, nspin, isdf_in, kflag, opt, verbose)
+       if(peinf%master) write(*,*) " done isdf"
+       do kk = 91, 92
+         jj = 3
+         call timacc(kk, jj, tsec)
+         if (peinf%master) print *, kk, tsec(1), tsec(2), "sec", jj
+       enddo
      else
        if(peinf%master) write(6,*) " Call isdf_parallel_sym"
        call isdf_parallel_sym(gvec, pol_in, kpt, nspin, isdf_in, kflag, verbose)
@@ -785,33 +930,109 @@ program sigma
            call zvxc(nspin,gvec,kpt,sig(isp,ik),readvxc,ik,isp)
         enddo
      enddo
-     call zetotal(gvec,kpt,nspin)
+     !call zetotal(gvec,kpt,nspin)
   else
      do ik = 1, kpt_sig%nk
         do isp = 1, nspin
            call dvxc(nspin,gvec,kpt,sig(isp,ik),readvxc,ik,isp)
         enddo
      enddo
-     call detotal(gvec,kpt,nspin)
+     !call detotal(gvec,kpt,nspin)
   endif
+  if (peinf%master) write(6,*) " done vxc "
 
   !-------------------------------------------------------------------
   ! Start iterations.
   !
+  if (sig_in%lanczos) then
+    ALLOCATE(w_grp%ncv_start(0:w_grp%npes-1))
+    ALLOCATE(w_grp%ncv_end(0:w_grp%npes-1))
+    w_grp%ncv = k_p(1,1)%ncol
+    if (isdf_in%lessmemory .eq. 4) then
+      ! do nothing
+      !w_grp%ncv_start, w_grp%ncv_end, ldncv will be defined in
+      ! calculate_sigma_lanczos_lowcomm_new
+    else ! isdf_in%lessmemory .ne. 4
+      incr = w_grp%ncv/w_grp%npes
+      res  = mod(w_grp%ncv, w_grp%npes)
+      if (res .gt. 0) then
+        w_grp%ldncv = incr + 1
+      else
+        w_grp%ldncv = incr
+      endif
+      !print *, "incr ", incr, " res ", res
+      do ipe = 0, peinf%npes-1
+        if (ipe .lt. res) then
+          w_grp%ncv_start(ipe) = ipe*(incr+1)+1
+          w_grp%ncv_end(ipe)   = ipe*(incr+1)+incr+1
+        else
+          w_grp%ncv_start(ipe) = res*(incr+1)+(ipe-res)*incr + 1
+          w_grp%ncv_end(ipe)   = res*(incr+1)+(ipe-res)*incr + incr
+        endif
+        if (w_grp%master) print *, ipe, " ncv_start ", w_grp%ncv_start(ipe), " ncv_end ", w_grp%ncv_end(ipe)
+        ! local number of (v,c) orbital pairs index
+        if (w_grp%inode .eq. ipe) then
+          w_grp%myncv = w_grp%ncv_end(ipe) - w_grp%ncv_start(ipe) + 1
+        endif
+      enddo
+    endif
+  endif
   do it_scf = 0, n_it
-
      if (kpt%lcplx) then
         call zcalculate_sigma(nspin,kpt_sig%nk,n_it,it_scf,nr_buff,static_type, &
              sig_en,dft_code,chkpt_in,gvec,kpt,qpt,k_c,k_p,pol,sig_in, &
              sig,q_p,nolda,tamm_d,writeqp,snorm,cohsex,hqp_sym,lstop, &
              ecuts,qpmix,sig_cut,max_sig,&
-             isdf_in, doisdf )
+             isdf_in,doisdf,opt)
      else
-        call dcalculate_sigma(nspin,kpt_sig%nk,n_it,it_scf,nr_buff,static_type, &
+        if (sig_in%lanczos) then
+          if ( isdf_in%lessmemory .eq. 2) then
+            if (peinf%master) print *, "call calculate_sigma_lanczos_UltraLowMem"
+            call dcalculate_sigma_lanczos_UltraLowMem(nspin,kpt_sig%nk, &
+               sig_en,dft_code,gvec,kpt,qpt,k_c,k_p,sig_in, &
+               sig,q_p,nolda,tamm_d,writeqp,snorm,cohsex,lstop, &
+               ecuts,sig_cut,max_sig,&
+               isdf_in,doisdf,opt)
+          else if ( isdf_in%lessmemory .eq. 3) then
+            if (peinf%master) print *, "call calculate_sigma_lanczos_BLOCK "
+            call dcalculate_sigma_lanczos_BLOCK(nspin,kpt_sig%nk, &
+               sig_en,dft_code,gvec,kpt,qpt,k_c,k_p,sig_in, &
+               sig,q_p,nolda,tamm_d,writeqp,snorm,cohsex, &
+               ecuts,sig_cut,max_sig,&
+               isdf_in,doisdf,opt)
+            lstop = .true.
+          else if ( isdf_in%lessmemory .eq. 4) then
+            if (gvec%syms%ntrans .eq. 1) then
+              if (peinf%master) print *, "call calculate_sigma_lanczos_lowcom "
+              call dcalculate_sigma_lanczos_lowcom(nspin,kpt_sig%nk, &
+                 sig_en,dft_code,gvec,kpt,qpt,k_c,k_p,sig_in, &
+                 sig,q_p,nolda,tamm_d,writeqp,snorm,cohsex, &
+                 ecuts,sig_cut,max_sig,&
+                 isdf_in,doisdf,opt)
+            else
+              if (peinf%master) print *, "call calculate_sigma_lanczos_lowcomsym "
+              call dcalculate_sigma_lanczos_lowcomsym(nspin,kpt_sig%nk, &
+                 sig_en,dft_code,gvec,kpt,qpt,k_c,k_p,sig_in, &
+                 sig,q_p,nolda,tamm_d,writeqp,snorm,cohsex, &
+                 ecuts,sig_cut,max_sig,&
+                 isdf_in,doisdf,opt)
+            endif
+            lstop = .true.
+          else 
+            if (peinf%master) print *, "call calculate_sigma_lanczos"
+            call dcalculate_sigma_lanczos(nspin,kpt_sig%nk, &
+               sig_en,dft_code,gvec,kpt,qpt,k_c,k_p,sig_in, &
+               sig,q_p,nolda,tamm_d,writeqp,snorm,cohsex,lstop, &
+               ecuts,sig_cut,max_sig,&
+               isdf_in,doisdf,opt)
+          endif
+        else
+          call dcalculate_sigma(nspin,kpt_sig%nk,n_it,it_scf,nr_buff,static_type, &
              sig_en,dft_code,chkpt_in,gvec,kpt,qpt,k_c,k_p,pol,sig_in, &
              sig,q_p,nolda,tamm_d,writeqp,snorm,cohsex,hqp_sym,lstop, &
              ecuts,qpmix,sig_cut,max_sig,&
-             isdf_in, doisdf )
+             isdf_in,doisdf,opt)
+        endif
      endif
 
      if (lstop) then
@@ -831,24 +1052,39 @@ program sigma
         exit
      endif
   enddo
+  if (peinf%master) print *, " finished calculate sigma"
 
   ! Deallocate arrays for ISDF method
   if(doisdf) then
     deallocate(isdf_in%ncv)
+    if (isdf_in%lessmemory .ne. 4) then
     deallocate(isdf_in%pairmap)
+    deallocate(isdf_in%invpairmap)
+    endif ! isdf_in%lessmemory
     deallocate(isdf_in%nv)
     deallocate(isdf_in%ivlist)
     deallocate(isdf_in%nc)
     deallocate(isdf_in%iclist)
-    if ( isdf_in%lessmemory ) then
+    if ( isdf_in%lessmemory .eq. 1) then
       deallocate(isdf_in%Psi_intp)
+    else if ( isdf_in%lessmemory .eq. 2 .or. &
+              isdf_in%lessmemory .eq. 3 .or. &
+              isdf_in%lessmemory .eq. 4) then
+      deallocate(isdf_in%Psi_intp_loc)
     else
       deallocate(isdf_in%Cmtrx)
     endif
-    deallocate(isdf_in%Mmtrx)
+    if ( isdf_in%lessmemory .eq. 2 .or. &
+         isdf_in%lessmemory .eq. 3 .or. &
+         isdf_in%lessmemory .eq. 4 ) then
+      deallocate(isdf_in%Mmtrx_loc)
+    else
+      deallocate(isdf_in%Mmtrx)
+    endif
     close(rho_intp_dbg)
   endif
   close(outdbg)
+  if (peinf%master) print *, " finished deallocating arrays ."
 
   if (kpt%lcplx) then
      if ( writeqp .and. dft_code == PARSEC ) &
@@ -900,7 +1136,29 @@ program sigma
   routnam(22)='k_int_isdf 2  :'    ; timerlist(22)=66
   routnam(23)='k_int_isdf 3  :'    ; timerlist(23)=67
 
-  call timacc(1,2,tsec)
+#ifdef HIPMAGMA
+  !if (opt%linear_algebra .eq. 2 .or. opt%eigsolver .eq. 2) then
+  !  call magmaf_finalize()
+  !endif
+#endif
+
+  ! print *, "before Finalize"
+  !call timacc(1,2,tsec)
+  !jj = 3
+  !call timacc(57, jj, tsec)
+  !if (peinf%master) print *, "running time for constructing Cmtrx ", tsec(1), tsec(2), "sec", jj
+  !jj = 3
+  !call timacc(67, jj, tsec)
+  !if (peinf%master) print *, "call dgemm in matvec ", tsec(1), tsec(2), "sec", jj
+  !jj = 3
+  !call timacc(68, jj, tsec)
+  !if (peinf%master) print *, "Hadamard product in matvec ", tsec(1), tsec(2), "sec", jj
+  !jj = 3
+  !call timacc(69, jj, tsec)
+  !if (peinf%master) print *, "Matrix copy and MPI_calls in matvec ", tsec(1), tsec(2), "sec", jj
+  !jj = 3
+  !call timacc(58, jj, tsec)
+  !if (peinf%master) print *, "running time for polynomial matvec  ", tsec(1), tsec(2), "sec", jj
   call finalize(peinf%master,peinf%comm,ii,ik,routnam, timerlist)
 
 end program sigma

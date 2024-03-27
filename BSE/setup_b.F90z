@@ -46,13 +46,14 @@ subroutine Zsetup_b(gvec,kpt,qpt,q_bse,pol_in,pol,bsepol_in,bsepol, &
   !-------------------------------------------------------------------
   ! Define polarizability map.
   !
-  call Zsetup_g(gvec,kpt,qpt,pol_in,pol,k_p,nspin,tdldacut,.false.)
+  call Zsetup_g(gvec,kpt,qpt,pol_in,pol,k_p,nspin,tdldacut,.false.,0,.false.)
   !-------------------------------------------------------------------
   ! In periodic systems, calculate the matching pairs of (k,k') vectors:
   ! for each q-vector in the polarizability operator, conduction
   ! wave-functions are taken from point k and valence wave-functions are
   ! taken from point k' = k - q.
   !
+  if (peinf%master) print *, "finish setup_g"
   allocate(q_bse%match(kpt%nk,1))
   call qpt_matching(kpt%nk,kpt%nk,q_bse%nk,kpt%fk,kpt%fk,q_bse%fk,gvec%bdot,q_bse%match)
   if (peinf%master .and. gvec%per > 0) then
@@ -235,7 +236,7 @@ subroutine Zsetup_b(gvec,kpt,qpt,q_bse,pol_in,pol,bsepol_in,bsepol, &
   do ii = 1, gvec%syms%ntrans
      ! If ntr < 0, skip the construction of kernel
      if (bsepol(ii)%ntr >= 0 .and. n_b > 0) &
-          call Zdefine_pmap(gvec%syms,kpt,bsepol(ii),ii,n_b,map_b,nspin,n_b_up)
+          call Zdefine_pmap(gvec%syms,kpt,bsepol(ii),ii,n_b,map_b,nspin,n_b_up,.False.)
      ! If ntr < 0, skip the construction of kernel
      if (k_vc(ii)%ncol >= 0 .and. n_b > 0) &
           call define_kmap(gvec%syms,kpt,k_vc(ii),ii,n_b,map_b, &

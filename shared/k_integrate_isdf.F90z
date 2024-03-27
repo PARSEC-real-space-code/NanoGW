@@ -135,14 +135,18 @@ subroutine Zk_integrate_isdf( gvec, kpt, k_mat, k_tmp, irp, kflag, nspin, nbuff_
   do rsp = 1, nspin
      do csp = 1, nspin
         if (verbose) write(outdbg, '(A, I6, A, I6)') ' - loop rsp =',rsp,' csp =', csp
+#ifdef DEBUG
         if (r_grp%master) then
            write(6,*) "working on rsp ", rsp, " csp ", csp, " nrow per proc", (endrow(rsp)-startrow(rsp))/r_grp%npes 
         endif
+#endif
         do i_row = startrow(rsp), endrow(rsp), r_grp%npes
            if (verbose) write(outdbg, '(a,I6)') " -- loop i_row = ", i_row
+#ifdef DEBUG
            if (r_grp%master) then
               write(6,*) "working on row ", i_row/r_grp%npes+1
            endif
+#endif
            ! Determine which pairs (m3,m4) will be included.
            ! Indices for the important pairs will be stored in
            ! quadr(:,jcount+1:jcount+mycount).
@@ -285,7 +289,7 @@ subroutine Zk_integrate_isdf( gvec, kpt, k_mat, k_tmp, irp, kflag, nspin, nbuff_
                 ! --- m1, m2, k1, k2 will be the same for a specific i_row ---
                 ! --- so we only need to calculate it once for each i_row index
                 tmpvec = 0.0
-                if ( isdf_in%lessmemory ) then
+                if ( isdf_in%lessmemory .eq. 1 ) then
                   ii = kpt%wfn(rsp,k1)%map(m1)
                   jj = kpt%wfn(rsp,k1)%map(m2)
                   tmpCmtrx(1:isdf_in%n_intp_r) = &
@@ -315,7 +319,7 @@ subroutine Zk_integrate_isdf( gvec, kpt, k_mat, k_tmp, irp, kflag, nspin, nbuff_
               !     Zdot_c(nelem,fwfn123,1,kpt%wfn(csp,k4)%Zwf(istart,jj),1) * fac
               ! calculate: Zm_f = tmpvec(1:n_intp_r) * Cmtrx(1:n_intp_r, icv2)
               !
-              if ( isdf_in%lessmemory ) then
+              if ( isdf_in%lessmemory .eq. 1 ) then
                 ii = kpt%wfn(csp,k3)%map(m3)
                 jj = kpt%wfn(csp,k3)%map(m4)
                 tmpCmtrx(1:isdf_in%n_intp_r) = &
@@ -346,7 +350,7 @@ subroutine Zk_integrate_isdf( gvec, kpt, k_mat, k_tmp, irp, kflag, nspin, nbuff_
               !
            enddo ! do dicount loop
 
-           if (.false.) then
+           if (.true.) then
               do dicount = 1, ipe_count
                  m1 = ipe_quadr(1,dicount)
                  m2 = ipe_quadr(2,dicount)
@@ -360,10 +364,12 @@ subroutine Zk_integrate_isdf( gvec, kpt, k_mat, k_tmp, irp, kflag, nspin, nbuff_
            call timacc(13,2,tsec)
            jcount = jcount + mycount
            if (verbose) write(outdbg,'(A,I6)') " -- jcount = ", jcount
+#ifdef DEBUG
            if (r_grp%master) then
               write(6,*) "finished on row ", i_row/r_grp%npes+1, &
                 " total row per proc ", (endrow(rsp)-startrow(rsp))/r_grp%npes
            endif
+#endif
            !  
            !   Are we close to filling up buffer arrays? If so, print out
            !   calculated matrix elements.
@@ -378,9 +384,11 @@ subroutine Zk_integrate_isdf( gvec, kpt, k_mat, k_tmp, irp, kflag, nspin, nbuff_
               jcount = 0
               if (r_grp%master) then
                  call stopwatch(r_grp%master,' Kernel matrix calculation ')
+#ifdef DEBUG
                  write(6,'(i10,a,i3,a,i2,a,2i2)') ncount, &
                       ' matrix elements calculated by PE', &
                       peinf%inode,' representation ',irp,' spin ',rsp, csp
+#endif
                  call flush(6)
               endif
 

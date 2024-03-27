@@ -32,6 +32,9 @@
 !
 !-------------------------------------------------------------------
 program tdlda
+#ifdef HIPMAGMA
+  use magma
+#endif
   use typedefs
   use mpi_module
   implicit none
@@ -44,6 +47,7 @@ program tdlda
   type (polinfo), dimension(2) :: pol_in
   type (polinfo), allocatable :: pol(:,:)
   type (kernelinfo), allocatable :: k_p(:,:)
+  type (options) :: opt
 
   character (len=800) :: lastwords
   character (len=40), allocatable :: routnam(:)
@@ -89,9 +93,18 @@ program tdlda
   if(peinf%master) write (*,*) " dp = ", dp
   call input_g(pol_in,qpt,tdldacut,nbuff,lcache,w_grp%npes,&
        nolda,tamm_d,r_grp%num,dft_code,doisdf,n_intp,intp_type,isdf_type,&
-       isdf_in%lessmemory,isdf_in%fastselect,.false.)
+       isdf_in%lessmemory,isdf_in%fastselect,opt%eigsolver,opt%linear_algebra,opt%pdgesv_nbl2d,.false.)
   if(peinf%master) write (*,*) " input_g done"
   call input_t(tamm_d,rpaonly,trip_flag,noxchange,trunc_c)
+  if (opt%linear_algebra .eq. 2 .or. opt%eigsolver .eq. 2) then
+#ifndef HIPMAGMA
+      write(6, *) "Not compiled with '-DHIPMAGMA', use cpu for ", &
+       " eigsolver and linear algebra !!"
+      opt%linear_algebra = 1
+      opt%eigsolver = 1
+#endif 
+  endif
+
   
   ! W Gao open dbg files
   write(dbg_filename,"(i7)") peinf%inode
@@ -123,6 +136,7 @@ program tdlda
         enddo
      enddo
      ! W Gao dbg
+#ifdef DEBUG
      if(peinf%master) then
        write(*,'(a,i5)') " nmap = ", nmap
        write(*,'("   i    wmap(i)   ")')
@@ -134,6 +148,7 @@ program tdlda
           endif
        enddo
      endif
+#endif
   else
      allocate(wmap(1))
   endif
@@ -184,9 +199,9 @@ program tdlda
   call stopwatch(peinf%master,'Calling setup_g')
   call timacc(2,1,tsec)
   if (kpt%lcplx) then
-     call zsetup_g(gvec,kpt,qpt,pol_in,pol,k_p,nspin,tdldacut,.false.)
+     call zsetup_g(gvec,kpt,qpt,pol_in,pol,k_p,nspin,tdldacut,.false.,isdf_in%lessmemory,.false.)
   else
-     call dsetup_g(gvec,kpt,qpt,pol_in,pol,k_p,nspin,tdldacut,.false.)
+     call dsetup_g(gvec,kpt,qpt,pol_in,pol,k_p,nspin,tdldacut,.false.,isdf_in%lessmemory,.false.)
   call timacc(2,2,tsec)
   endif
 
@@ -267,40 +282,52 @@ program tdlda
      allocate(not_duplicate(n_intp_r))
      allocate(sort_idx(n_intp_r))
      not_duplicate = .True.
+#ifdef DEBUG
      if (peinf%master) write(rho_intp_dbg, *) &
         "# rho at interpolation points "
+#endif
      do ipt = 1, n_intp_r
         igrid = intp_r_tmp(ipt)
         jgrid = (igrid-1)/gvec%syms%ntrans + 1
         rho_at_intp_r(ipt) = kpt%rho(jgrid,1)
+#ifdef DEBUG
         if (peinf%master) write(rho_intp_dbg, '(i7,i7,f30.23)') ipt, intp_r_tmp(ipt), kpt%rho(jgrid,1)
+#endif 
      enddo
      call quicksort(n_intp_r, rho_at_intp_r, sort_idx)
      n_dummy = 0
      ! Note: if there are some intp points having the same rho, then
      !       we pick up the last point of these duplicated points.
+#ifdef DEBUG
      if (peinf%master) write(rho_intp_dbg, *) &
         "# rho at interpolation points (sorted) "
+#endif
      do ipt = 1, n_intp_r-1
         if (abs( rho_at_intp_r(sort_idx(ipt)) - &
                  rho_at_intp_r(sort_idx(ipt+1)) )<1.0e-14) then
            not_duplicate(sort_idx(ipt)) = .False.
+#ifdef DEBUG
            if (peinf%master) write(rho_intp_dbg, '(i7,i7,f30.23,a)') sort_idx(ipt), &
                intp_r_tmp(sort_idx(ipt)), rho_at_intp_r(sort_idx(ipt)), 'F'
+#endif
         else
            not_duplicate(sort_idx(ipt)) = .True.
            n_dummy = n_dummy + 1
+#ifdef DEBUG
            if (peinf%master) write(rho_intp_dbg, '(i7,i7,f30.23,a)') sort_idx(ipt), &
                intp_r_tmp(sort_idx(ipt)), rho_at_intp_r(sort_idx(ipt)), 'T'
+#endif
         endif
      enddo
      ! The last point in intp_r_tmp(:)
      not_duplicate(sort_idx(n_intp_r)) = .True.
      n_dummy = n_dummy + 1
+#ifdef DEBUG
      if (peinf%master) write(rho_intp_dbg, '(i7,i7,f30.23,a)') &
          sort_idx(n_intp_r), &
          intp_r_tmp(sort_idx(n_intp_r)), &
          rho_at_intp_r(sort_idx(n_intp_r)), 'T'
+#endif
      if (peinf%master) then
         write(6, *) "Original n_intp_r =", n_intp_r
         write(6, *) "After removing duplicated points, n_intp_r =", n_dummy
@@ -337,7 +364,6 @@ program tdlda
         maxivv = max( maxval(pol_in(isp)%vmap(:)), maxivv)
         maxicc = max( maxval(pol_in(isp)%cmap(:)), maxicc)
      enddo
-     if (peinf%master) write(6,*) "maxivv =", maxivv, ", maxicc =", maxicc
      allocate(pairmap(maxivv, maxicc, nspin, kpt%nk, gvec%syms%ntrans))
      pairmap = 0
      do ikp = 1, kpt%nk
@@ -374,7 +400,6 @@ program tdlda
      maxnc  = maxval( nc )
      maxnv  = maxval( nv )
      maxncv = maxval( ncv)
-     if (peinf%master) write (6,*) " max Ncv", maxncv, " max Nv", maxnv, " max Nc", maxnc
      allocate(invpairmap(2, maxncv, nspin, kpt%nk, gvec%syms%ntrans))
      allocate(ivlist(maxnv, nspin, kpt%nk, gvec%syms%ntrans))
      allocate(iclist(maxnc, nspin, kpt%nk, gvec%syms%ntrans))
@@ -390,8 +415,10 @@ program tdlda
               ivv = pol_in(isp)%vmap(iv)
               irp = kpt%wfn(isp,ikp)%irep(ivv)
               idum(irp) = idum(irp) + 1
+#ifdef DEBUG
               if (peinf%master) write(6,*) "ivv ", ivv, "irp", irp, &
                 "idum(irp)", idum(irp)
+#endif
               ivlist(idum(irp),isp,ikp,irp) = ivv
            enddo
            idum = 0
@@ -399,8 +426,10 @@ program tdlda
               icc = pol_in(isp)%cmap(ic)
               irp = kpt%wfn(isp,ikp)%irep(icc)
               idum(irp) = idum(irp) + 1
+#ifdef DEBUG
               if (peinf%master) write(6,*) "icc ", icc, "irp", irp, &
                 " idum(irp)", idum(irp)
+#endif
               iclist(idum(irp),isp,ikp,irp) = icc
            enddo
            icv = 0
@@ -418,6 +447,7 @@ program tdlda
            enddo ! iv loop
         enddo ! isp loop
      enddo ! ikp loop
+#ifdef DEBUG
      if (peinf%inode == 1) then
         do ikp = 1, kpt%nk
            do isp = 1, nspin
@@ -432,6 +462,7 @@ program tdlda
         enddo
      endif 
      if (peinf%master) write (6,*) " Finish getting invpairmap and pairmap. "
+#endif
      !
 
      isdf_in%maxivv     = maxivv
@@ -491,18 +522,24 @@ program tdlda
      !
      ! --- perform ISDF method to interpolate pair products of wave functions ---
      !
-     call stopwatch(peinf%master, "before call isdf")
-     if (peinf%master) write(*,*) 'call isdf subroutine'
+     call stopwatch(peinf%master, "before call ISDF (interpolative separable &
+       density fitting")
      kflag = 1 
      if ( trip_flag ) kflag = 3 
      if ( noxchange ) kflag = 2
      if ( nolda )     kflag = 0
-     write(*, *) n_intp_r, maxncv, nspin, kpt%nk, gvec%syms%ntrans
-     verbose = .TRUE. 
+     if (peinf%inode .eq. 0) then
+       write(6, *) "Reduced interpolation points = ", n_intp_r
+       write(6, *) "Max number of orbital pairs ", maxncv
+       write(6, *) "nspin ", nspin
+       write(6, *) "num of kpoints ", kpt%nk
+       write(6, *) "num of sym ops ", gvec%syms%ntrans
+     endif
+     verbose = .False.
      call timacc(52,1,tsec)
      if (isdf_in%lessmemory) then
        if(peinf%master) write(*,*) " call isdf_parallel_sym_lessmemory" 
-       call isdf_parallel_sym_lessmemory(gvec, pol_in, kpt, nspin, isdf_in, kflag, verbose)
+       call isdf_parallel_sym_lessmemory(gvec, pol_in, kpt, nspin, isdf_in, kflag, opt, verbose)
        if(peinf%master) write(*,*) " done isdf"
      else
        if(peinf%master) write(*,*) " call isdf_parallel_sym" 
@@ -512,7 +549,9 @@ program tdlda
      call timacc(52,2,tsec)
      call stopwatch(peinf%master, " after call isdf")
 
+#ifdef DEBUG
      close(rho_intp_dbg)
+#endif
   endif ! doisdf
 
   ! The outputs are Cmtrx and Mmtrx, which are used by k_integrate_isdf() for
@@ -594,11 +633,11 @@ program tdlda
   if (kpt%lcplx) then
      call zcalculate_tdlda(gvec,kpt,qpt,k_p,pol,nspin,ii, &
           tamm_d,nolda,rpaonly,trip_flag,noxchange,trunc_c,xsum,xmax, &
-          isdf_in )
+          isdf_in,opt )
   else
      call dcalculate_tdlda(gvec,kpt,qpt,k_p,pol,nspin,ii, &
           tamm_d,nolda,rpaonly,trip_flag,noxchange,trunc_c,xsum,xmax, &
-          isdf_in )
+          isdf_in,opt )
   endif
   call stopwatch(peinf%master, "after call calculate_tdlda")
 
@@ -645,6 +684,11 @@ program tdlda
   routnam(14)='kernel k_print:'     ; timerlist(14)=64
 
   call timacc(1,2,tsec)
+!#ifdef HIPMAGMA
+!  if (opt%linear_algebra .eq. 2 .or. opt%eigsolver .eq. 2) then
+!  call magmaf_finalize()
+!  endif
+!#endif
   call finalize(peinf%master,peinf%comm,ii,jj,routnam,timerlist)
 
 end program tdlda

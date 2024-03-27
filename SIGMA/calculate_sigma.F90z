@@ -12,7 +12,7 @@ subroutine Zcalculate_sigma(nspin,nkpt,n_it,it_scf,nr_buff,static_type, &
      sig_en,dft_code,chkpt_in,gvec,kpt,qpt,k_c,k_p,pol,sig_in, &
      sig,q_p,nolda,tamm_d,writeqp,snorm,cohsex,hqp_sym,lstop, &
      ecuts,qpmix,sig_cut,max_sig,&
-     isdf_in, doisdf)
+     isdf_in,doisdf,opt)
 
   use typedefs
   use mpi_module
@@ -39,6 +39,7 @@ subroutine Zcalculate_sigma(nspin,nkpt,n_it,it_scf,nr_buff,static_type, &
   type (qptinfo), intent(inout) :: qpt
   type (ISDF), intent(inout) :: isdf_in
   logical, intent(in) :: doisdf
+  type (options) :: opt
   type (kernelinfo), dimension(gvec%syms%ntrans,qpt%nk), intent(inout) :: &
        k_c, &        ! kernel for correlation, vertex
        k_p           ! kernel for TDLDA
@@ -97,7 +98,7 @@ subroutine Zcalculate_sigma(nspin,nkpt,n_it,it_scf,nr_buff,static_type, &
      chkpt = chkpt_in
      call Zcalculate_tdlda(gvec,kpt,qpt,k_p,pol,nspin,chkpt, &
           tamm_d,nolda,.false.,.false.,.false.,.false.,xsum,epsinv, &
-          isdf_in)
+          isdf_in,opt)
      !
      ! Rescale sum rule.
      if (.not. snorm) xsum = one
@@ -114,7 +115,7 @@ subroutine Zcalculate_sigma(nspin,nkpt,n_it,it_scf,nr_buff,static_type, &
         call MPI_BCAST(lstop,1,MPI_LOGICAL,peinf%masterid,peinf%comm,info)
 #endif
         if (chkpt_in == -1 .or. (.not. lstop)) then
-           if ( doisdf ) then
+           if ( doisdf .and. isdf_in%lessmemory .eq. 1 ) then
              if (peinf%master) write(6,*) " call wpol0_isdf() "
              call timacc(5,1,tsec)
              call Zwpol0_isdf(gvec,kpt,qpt,pol(:,iq),k_p(:,iq),nolda,gvec%syms%ntrans,nspin,iq,nr_buff,isdf_in)
@@ -257,6 +258,24 @@ subroutine Zcalculate_sigma(nspin,nkpt,n_it,it_scf,nr_buff,static_type, &
         read(pol_unit)
      endif
 
+     ! Debug: WG
+!     if (peinf%master .and. doisdf) then
+!        ! print out Mmtrx and Psi_intp
+!        write(6,*) "mu  nu Mmtrx(mu,nu) : "
+!        do ii = 1, isdf_in%n_intp_r
+!          do jj = 1, isdf_in%n_intp_r
+!            write(6,*) ii,jj,isdf_in%Mmtrx(ii, jj, 1, 1, 1, 1, 1)
+!          enddo
+!        enddo
+!        write(6,*) "iband mu Psi_intp(iband, mu)"
+!        do ii = 1, isdf_in%maxicc
+!          do jj = 1, isdf_in%n_intp_r
+!            write(6,*) ii, jj, isdf_in%Psi_intp(jj, ii, 1, 1)
+!          enddo
+!        enddo
+!     endif
+     ! Debug: WG
+
      do iq = 1, qpt%nk
         call stopwatch(peinf%master, "before call gw_correlation")
         do jrp = 1, gvec%syms%ntrans/r_grp%num
@@ -265,7 +284,7 @@ subroutine Zcalculate_sigma(nspin,nkpt,n_it,it_scf,nr_buff,static_type, &
            call Zgw_correlation(gvec,kpt,qpt,k_c(irp,iq),pol(irp,iq), &
                 sig_in,sig,nspin,nkpt,irp, &
                 pol_unit,k_p(irp,iq)%nn,qpt%nk,iq,sig_en,nolda,xsum, &
-                isdf_in)
+                isdf_in, opt)
         enddo
         call stopwatch(peinf%master, "after call gw_correlation")
 #ifdef MPI
@@ -578,42 +597,6 @@ subroutine Zcalculate_sigma(nspin,nkpt,n_it,it_scf,nr_buff,static_type, &
   call MPI_BCAST(max_sig,1,MPI_DOUBLE_PRECISION, &
        peinf%masterid,peinf%comm,info)
 #endif
-
-  !-------------------------------------------------------------------
-  ! Diagonalize QP Hamiltonian and write out QP eigenvalues/eigenvectors.
-  !
-  do ik = 1, nkpt
-     do isp = 1, nspin
-        do irp = 1, gvec%syms%ntrans
-           if (sig_in%xc == XC_GW) then
-              ! Apply cut-off in off-diagonal part of self-energy
-              do ii = 1, q_p(irp,isp,ik)%neig
-                 do jj = 1, q_p(irp,isp,ik)%neig
-                    if (abs(q_p(irp,isp,ik)%hqp(ii,jj)) < sig_cut .and. ii /= jj ) &
-                         q_p(irp,isp,ik)%hqp(ii,jj) = zzero
-                 enddo
-              enddo
-           endif
-
-           info = 0
-           if (q_p(irp,isp,ik)%neig > 0) &
-                call qp_eigensolver(q_p(irp,isp,ik),peinf%master,hqp_sym,info)
-           if (info /= 0) then
-              lstop = .true.
-              return
-           endif
-        enddo
-     enddo
-  enddo
-  !
-  ! Rotate wavefunctions. We must save the new ordering of wavefunctions.
-  ! Do that by using wfn(:)%cmapi.
-  !
-  call stopwatch(r_grp%master,' Calling rotate.')
-  if (peinf%master) write(6,*)
-  call timacc(10,1,tsec)
-  call Zrotate_qp(nspin,nkpt,gvec%syms%ntrans,sig,gvec,kpt,q_p,writeqp,it_scf)
-  call timacc(10,2,tsec)
 
   !-------------------------------------------------------------------
   ! Calculate total energy.

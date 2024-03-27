@@ -231,12 +231,12 @@ program chkpt_bin_asc
                     enddo
                     write(ounit,28) (map(diag(ii)), &
                          eqp(ien),sigma_vxc(ien,ii,:),ien=1,nen)
-                    !write(44, '(A)') "band  E  E0+Re[Sigma(E)]-Vxc Im[Sigma(E)]  No staic remainder:E0+Re(Sigma(E))-Vxc Im(Sigma(E))"
+                    write(44, '(A)') "band  E  E0+Re[Sigma(E)]-Vxc Im[Sigma(E)]  No staic remainder:E0+Re(Sigma(E))-Vxc Im(Sigma(E))"
                     write(44,'(i5,5g20.10)') (map(diag(ii)), &
                          eqp(ien),sigma_vxc(ien,ii,1), &
                          sigma_vxc(ien,ii,2),&
-                         sigma_vxc(ien,ii,1)-dble(static_remainder(ii)),&
-                         sigma_vxc(ien,ii,2)-aimag(static_remainder(ii)),&
+                         sigma_vxc(ien,ii,1)-dble(static_remainder(ii))/static_type,&
+                         sigma_vxc(ien,ii,2)-aimag(static_remainder(ii))/static_type,&
                          ien=1,nen)
                     close(44)
                  enddo

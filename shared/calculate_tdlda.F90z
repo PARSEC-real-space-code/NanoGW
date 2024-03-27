@@ -17,7 +17,7 @@
 !-------------------------------------------------------------------
 subroutine Zcalculate_tdlda(gvec,kpt,qpt,k_p,pol,nspin,chkpt, &
      tamm_d,nolda,rpaonly,trip_flag,noxchange,trunc_c,xsum,epsinv,&
-     isdf_in )
+     isdf_in,opt)
 
   use typedefs
   use mpi_module
@@ -30,6 +30,7 @@ subroutine Zcalculate_tdlda(gvec,kpt,qpt,k_p,pol,nspin,chkpt, &
   type (gspace), intent(in) :: gvec
   type (kptinfo), intent(in) :: kpt
   type (qptinfo), intent(in) :: qpt
+  type (options), intent(in) :: opt
   type (kernelinfo), dimension(gvec%syms%ntrans,qpt%nk), intent(inout) :: k_p
   type (polinfo), dimension(gvec%syms%ntrans,qpt%nk), intent(inout) :: pol
   ! number of spins
@@ -116,10 +117,11 @@ subroutine Zcalculate_tdlda(gvec,kpt,qpt,k_p,pol,nspin,chkpt, &
               call stopwatch(r_grp%master,' Calling diag_pol')
               call timacc(4,1,tsec)
               call Zdiag_pol(kpt,k_p(irp,iq),pol(irp,iq),irp,iq,nspin, &
-                   gvec%celvol,tamm_d,notrunc)
+                   gvec%celvol,tamm_d,notrunc,opt)
               call timacc(4,2,tsec)
               if (r_grp%num == 1) call Zwrite_pol(pol(irp,iq), &
                    gvec%syms%ntrans,qpt%nk,irp,iq,kpt%wfn(1,1)%nstate)
+              ! write(6, *) "Finish write_pol "
            endif
         endif
 

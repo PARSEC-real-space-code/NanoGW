@@ -421,14 +421,47 @@ module esdf_key
 
   ! Parameter for using less memory
   data kw_label(411)   / 'lessmemory' /
-  data kw_typ(411)     / 'E:E' /
+  data kw_typ(411)     / 'I:E' /
   data kw_dscrpt(411)  / '*! Use lessmemory. Call isdf_parallel_sym_lessmem !*' /
 
-  ! Parameter for faster matel selection
+  ! Parameter for faster matrix elements selection
   data kw_label(412)   / 'fastselect' /
   data kw_typ(412)     / 'E:E' /
   data kw_dscrpt(412)  / '*! Use fastselect. Call k_integrate_isdf_fastselect !*' /
 
+  ! Parameter for eigensolver
+  data kw_label(413)   / 'eigsolver' /
+  data kw_typ(413)     / 'T:E' /
+  data kw_dscrpt(413)  / '*! call which eigsolver to diagonalize Casida equation !*' /
+
+  ! Parameter for linear algebra subroutines (such as dgemm)
+  data kw_label(414)   / 'linear_algebra' /
+  data kw_typ(414)     / 'T:E' /
+  data kw_dscrpt(414)  / '*! use gpu or cpu to perform matrix multiplications? !*' /
+
+  ! Parameter for lanczos GW method
+  data kw_label(415)   / 'lanczos_gw' /
+  data kw_typ(415)     / 'E:E' /
+  data kw_dscrpt(415)  / '*! Use lanczos method to speed up GW calculation !*' /
+
+  ! Parameter for using less memory
+  data kw_label(416)   / 'nbl' /
+  data kw_typ(416)     / 'I:E' /
+  data kw_dscrpt(416)  / '*! The scalapack blocksize for linear solver pdgesv !*' /
+
+  ! Parameter for the dgree of polynomial
+  data kw_label(417)   / 'lanczos_npoly' /
+  data kw_typ(417)     / 'I:E' /
+  data kw_dscrpt(417)  / '*! The degree of fitting polynomial for lanczos method !*' /
+
+  ! Parameter for the number of iterations for lanczos method
+  data kw_label(418)   / 'lanczos_niter' /
+  data kw_typ(418)     / 'I:E' /
+  data kw_dscrpt(418)  / '*! The number of iterations for lanczos method !*' /
+
+  data kw_label(419)   / 'jnblock' /
+  data kw_typ(419)     / 'I:E' /
+  data kw_dscrpt(419)  / '*! The number of bands treated in each iteration for the summation over bands !*' /
 
 end module esdf_key
 !===============================================================

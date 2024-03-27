@@ -10,18 +10,34 @@ module typedefs
 
   use myconstants
   ! 
+  type options
+     ! 
+     integer :: eigsolver
+     integer :: linear_algebra
+     integer :: pdgesv_nbl2d
+     integer :: lanczos_npoly
+     integer :: lanczos_niter
+     integer :: jnblock
+     !
+  end type options
+
   type ISDF
      !
      logical :: fastselect
-     logical :: lessmemory
+     integer :: lessmemory
      integer :: n_slice
      integer :: maxicc
-     integer :: maxivv
+     integer :: maxivv ! this is not the highest occupied state, for GW
+     ! calculation, maxivv would be the largest index of 
+     ! state for which GW energy is calculated
      integer :: maxncv
      integer :: maxnv
      integer :: maxnc
      ! number of interpolation points in irreducible domain
      integer :: n_intp_r         
+     ! number of interpolation points in irreducible domain stored locally in 
+     ! the current process
+     integer :: n_intp_r_loc     
      ! the index of interpolation points in irreducible domain
      integer, pointer :: intp_r(:)
      ! the number orbital pairs for each (kpt, spin and representation)
@@ -35,7 +51,26 @@ module typedefs
      real(dp), pointer :: Cmtrx(:,:,:,:,:)
      real(dp), pointer :: Mmtrx(:,:,:,:,:,:,:)
      real(dp), pointer :: Psi_intp(:,:,:,:)
+     real(dp), pointer :: Mmtrx_loc(:,:,:,:,:,:,:)
+     real(dp), pointer :: Psi_intp_loc(:,:,:,:)
+     real(dp), pointer :: PsiC_intp_bl(:,:,:,:), PsiV_intp_bl(:,:,:,:)
+     integer :: xvgrp, xcgrp, myvgrp, mycgrp, mynv, mync, &
+       ldv, ldc, myvstart, myvend, mycstart, mycend
+     integer, pointer :: vstart(:), cstart(:), &
+       vend(:), cend(:) 
+     ! We assume nkp = nspin = 1 for now, kp and spin indices
+     ! are needed later
      !
+     ! Index arrays for calculate_sigma_lanczos_lowcomsym
+     ! Arrays map to the real index of wave functions
+     integer, pointer :: lrep(:), lrep_bound(:,:)
+     ! Index arrays for PsiV_intp_bl and PsiC_intp_bl
+     ! Arrays map to the index of local arrays PsiV_intp_bl and 
+     ! PsiC_intp_bl
+     integer, pointer :: lvrep(:), lvrep_bound(:,:), &
+       lcrep(:), lcrep_bound(:,:)
+     integer, pointer :: ncv_sym(:), myncv_sym(:), mync_sym(:), mynv_sym(:)
+     integer :: maxmync_sym, maxmynv_sym, maxmyncv_sym
   end type ISDF
   !
   ! Parameters for symmetry groups
@@ -317,6 +352,10 @@ module typedefs
      ! electron density could change after a orthogonalization of the QP
      ! Hamiltonian.
      complex(dpc), pointer :: sig_mat(:,:,:)
+
+     ! whether or not using lanczos algorithm for GW calculation
+     logical :: lanczos
+
   end type siginfo
   !
   !  Quasi-particle orbitals

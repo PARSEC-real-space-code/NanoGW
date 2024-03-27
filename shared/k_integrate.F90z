@@ -188,14 +188,18 @@ subroutine Zk_integrate(gvec,kpt,k_mat,k_tmp,irp,kflag,nspin,nbuff_max,qkt_in)
   do rsp = 1, nspin
      do csp = 1, nspin
         if (verbose)  write(outdbg, '(A, I6, A, I6)') ' - loop rsp =',rsp,' csp =', csp
+#ifdef DEBUG
         if (r_grp%master) then
            write(6,*) "working on rsp ", rsp, " csp ", csp, " nrow per proc", (endrow(rsp)-startrow(rsp))/r_grp%npes 
         endif
+#endif
         do i_row = startrow(rsp), endrow(rsp), r_grp%npes
            if (verbose) write(outdbg, '(a,I6)') " -- loop i_row = ", i_row
+#ifdef DEBUG
            if (r_grp%master) then
               write(6,*) "working on row ", i_row/r_grp%npes+1
            endif
+#endif
            do ipe = 0, w_grp%npes - 1
               ii = w_grp%mygr*w_grp%npes + i_row + ipe
               ioff = w_grp%ldn*ipe + 1
@@ -332,9 +336,11 @@ subroutine Zk_integrate(gvec,kpt,k_mat,k_tmp,irp,kflag,nspin,nbuff_max,qkt_in)
               enddo ! do jj = startcol, endcol
            endif ! if ii <= endrow(rsp)
            !
+#ifdef DEBUG
            if (r_grp%master) then
               write(6,*) " This row has ", mycount, " matrix elements."
            endif
+#endif
            !
            ! Calculate kernel matrix elements involving pair (m3,m4).
            !
@@ -431,7 +437,7 @@ subroutine Zk_integrate(gvec,kpt,k_mat,k_tmp,irp,kflag,nspin,nbuff_max,qkt_in)
                     m2 = ipe_quadr(2,dicount)
                     m3 = ipe_quadr(3,dicount)
                     m4 = ipe_quadr(4,dicount)
-                    !if (verbose) write(outdbg, '( i5," <",2i4,"|F|",2i4,">",e16.5)') dicount,m3,m4,m1,m2,k_tmp(iblock)%Zm_f(jcount+dicount)
+                    if (verbose) write(outdbg, '( i5," <",2i4,"|F|",2i4,">",e16.5)') dicount,m3,m4,m1,m2,k_tmp(iblock)%Zm_f(jcount+dicount)
                  enddo
               endif
 #else
@@ -472,9 +478,11 @@ subroutine Zk_integrate(gvec,kpt,k_mat,k_tmp,irp,kflag,nspin,nbuff_max,qkt_in)
               jcount = 0
               if (r_grp%master) then
                  call stopwatch(r_grp%master,' Kernel matrix calculation ')
+#ifdef DEBUG
                  write(6,'(i10,a,i3,a,i2,a,2i2)') ncount, &
                       ' matrix elements calculated by PE', &
                       peinf%inode,' representation ',irp,' spin ',rsp, csp
+#endif
                  call flush(6)
               endif
 

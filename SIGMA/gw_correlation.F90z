@@ -21,7 +21,7 @@
 !-------------------------------------------------------------------
 subroutine Zgw_correlation(gvec,kpt,qpt,k_c,pol,sig_in,sig,nspin,nkpt,irp, &
      pol_unit,nn_p,nq,iq,sig_en,nolda,xsum,&
-     isdf_in)
+     isdf_in, opt)
 
   use typedefs
   use mpi_module
@@ -56,6 +56,7 @@ subroutine Zgw_correlation(gvec,kpt,qpt,k_c,pol,sig_in,sig,nspin,nkpt,irp, &
   real(dp), intent(in) :: xsum
   ! Additional input parameters for ISDF method
   type (ISDF) :: isdf_in
+  type (options), intent(in) :: opt
 
   ! other variables
   integer :: isp, ik, jk, chkpt, info
@@ -95,7 +96,7 @@ subroutine Zgw_correlation(gvec,kpt,qpt,k_c,pol,sig_in,sig,nspin,nkpt,irp, &
      allocate(pot_c(pol%nn,k_c%ncol),stat=info)
      call alccheck('pot_c','sigma_c',pol%nn*k_c%ncol,info)
      call timacc(7,1,tsec)
-     call Zpotential(pol%ntr,pol%nn,pol%Ztv,k_c%ncol,k_c%Zm,pot_c)
+     call Zpotential(pol%ntr,pol%nn,pol%Ztv,k_c%ncol,k_c%Zm,pot_c, opt)
 !#ifdef DEBUG
 !     jtape = 5000 + peinf%inode + 100 * irp
 !     do pcol = 1, pol%nn
@@ -148,7 +149,7 @@ subroutine Zgw_correlation(gvec,kpt,qpt,k_c,pol,sig_in,sig,nspin,nkpt,irp, &
         allocate(pot_f(pol%nn,k_c%ncol),stat=info)
         call alccheck('pot_f','sigma',pol%nn*k_c%ncol,info)
         call timacc(7,1,tsec)
-        call Zpotential(pol%ntr,pol%nn,pol%Ztv,k_c%ncol,k_c%Zm,pot_f)
+        call Zpotential(pol%ntr,pol%nn,pol%Ztv,k_c%ncol,k_c%Zm,pot_f, opt)
 
 !#ifdef DEBUG
 !        jtape = 6000 + peinf%inode + 100 * irp

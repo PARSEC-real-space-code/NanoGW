@@ -7,7 +7,7 @@ subroutine dlinear_solver(n, m, A, B, X, inode, verbose, errinfo)
   real(dp),intent(in) :: A(n,n)
   real(dp),intent(in) :: B(n,m)
   real(dp),intent(out) :: X(n,m)
-  integer, intent(in) :: errinfo
+  integer, intent(in) :: errinfo ! issue: why intent(in)?
 
   logical   :: verbose
   ! Temporary local variables

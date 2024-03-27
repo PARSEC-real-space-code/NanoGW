@@ -1,0 +1,29 @@
+#ifdef DCU
+#ifndef CPLX
+Module sub_module
+INTERFACE
+
+Subroutine hadamard_prod_mat( d_PsiV, d_PsiC, d_Cmtrx, ldn, iv, nv, nc ) bind(C)
+use hipfort_types
+implicit none
+type(c_ptr), intent(inout) :: d_Cmtrx(ldn*nc)
+type(c_ptr), intent(in)    :: d_PsiV(ldn*nv), d_PsiC(ldn*nc)
+integer,value,intent(in) :: ldn, iv, nc, nv
+End Subroutine hadamard_prod_mat
+
+Subroutine hadamard_prod_mat_sym( d_PsiV, d_PsiC, d_Cmtrx, d_lcrep, &
+ ldn, iv, nv, nc, maxnc_sym, lcrep_bound1, lcrep_bound2 ) bind(C)
+use hipfort_types
+implicit none
+type(c_ptr), intent(inout) :: d_Cmtrx(ldn*maxnc_sym)
+type(c_ptr), intent(in)    :: d_PsiV(ldn*nv), d_PsiC(ldn*nc), d_lcrep(nc)
+integer,value,intent(in) :: ldn, iv, nc, nv, maxnc_sym, &
+  lcrep_bound1, lcrep_bound2
+End Subroutine hadamard_prod_mat_sym
+
+
+END INTERFACE
+
+End Module
+#endif
+#endif

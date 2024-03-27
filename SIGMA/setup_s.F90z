@@ -15,7 +15,7 @@
 !
 !-------------------------------------------------------------------
 subroutine Zsetup_s(gvec,kpt,qpt,kpt_sig,sig_in,sig,pol_in,pol,k_p,k_c, &
-     nspin,tdldacut,readocc,verbose)
+     nspin,tdldacut,readocc,isdf_in,verbose)
 
   use typedefs
   use mpi_module
@@ -39,7 +39,8 @@ subroutine Zsetup_s(gvec,kpt,qpt,kpt_sig,sig_in,sig,pol_in,pol,k_p,k_c, &
   logical, intent(in) :: readocc
   ! output flag
   logical, intent(in) :: verbose
-
+  ! W Gao ISDF method
+  type (ISDF) :: isdf_in
   ! local variables
   integer :: ii, jj, nn, isp, ik, ikp, iq, jk, info, &
        n_c, n_c_up, n_p, n_p_up, nvxc(2), nmax, nhomo
@@ -80,7 +81,7 @@ subroutine Zsetup_s(gvec,kpt,qpt,kpt_sig,sig_in,sig,pol_in,pol,k_p,k_c, &
         call die('Stop')
      endif
   else
-     call Zsetup_g(gvec,kpt,qpt,pol_in,pol,k_p,nspin,tdldacut,.false.)
+     call Zsetup_g(gvec,kpt,qpt,pol_in,pol,k_p,nspin,tdldacut,sig_in%lanczos,isdf_in%lessmemory,.false.)
   endif
   !
   ! Do the q-vectors form a regular grid?
@@ -189,7 +190,7 @@ subroutine Zsetup_s(gvec,kpt,qpt,kpt_sig,sig_in,sig,pol_in,pol,k_p,k_c, &
   ! in Green's function (defined by sig%nmax_c); "v" and "i" are
   ! as above.
   !
-  if (sig_in%xc == XC_GW) then
+  if (sig_in%xc == XC_GW .and. ( .not. sig_in%lanczos ) ) then
         nmax = sig_in%nmax_c
         nn = 0
         do ik = 1, kpt_sig%nk
@@ -257,6 +258,7 @@ subroutine Zsetup_s(gvec,kpt,qpt,kpt_sig,sig_in,sig,pol_in,pol,k_p,k_c, &
               enddo
            enddo
            ! --- Weiwei Gao: debug ---
+#ifdef DEBUG
            if ( peinf%master .and. verbose ) then
               write(6,'(" In setup_s() ")')
               write(6,'("  ii  map_c")')
@@ -265,6 +267,7 @@ subroutine Zsetup_s(gvec,kpt,qpt,kpt_sig,sig_in,sig,pol_in,pol,k_p,k_c, &
                    map_c(3,ii), map_c(4,ii)
               enddo
            endif
+#endif
            ! --------------------
            do ii = 1, gvec%syms%ntrans
               ! If ncol < 0, skip the construction of kernel

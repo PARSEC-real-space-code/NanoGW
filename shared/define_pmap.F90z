@@ -17,8 +17,9 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine Zdefine_pmap(syms,kpt,pol,irp,np_in,mapp_in,nspin,n_up)
+subroutine Zdefine_pmap(syms,kpt,pol,irp,np_in,mapp_in,nspin,n_up,lanczos)
 
+  use mpi_module
   use typedefs
   implicit none
 
@@ -34,12 +35,12 @@ subroutine Zdefine_pmap(syms,kpt,pol,irp,np_in,mapp_in,nspin,n_up)
   integer, intent(in) :: irp, np_in, nspin, n_up
   ! set of transitions from all representations
   integer, intent(in) :: mapp_in(4,np_in)
+  logical, intent(in) :: lanczos
 
   ! local variables
   ! counters and temporary array
   integer :: ii, jj, isp, iv, ic, jk, ik, rprod
   integer, allocatable :: map_in(:)
-
   !-------------------------------------------------------------------
   ! Determine the number of transitions belonging to representation irp,
   ! and how many of them have spin up (i.e. electron with majority spin and
@@ -79,6 +80,8 @@ subroutine Zdefine_pmap(syms,kpt,pol,irp,np_in,mapp_in,nspin,n_up)
            pol%tr(:,jj) = mapp_in(:,ii)
         endif
      enddo
+     if (.not. lanczos) then
+
      allocate(pol%eig(pol%ntr))
      allocate(pol%ostr(pol%ntr,3))
      if (kpt%lcplx) then
@@ -105,11 +108,17 @@ subroutine Zdefine_pmap(syms,kpt,pol,irp,np_in,mapp_in,nspin,n_up)
               pol%Zdipole(jj,:) = kpt%wfn(2,ik)%Zdipole(map_in(jj),:)
            endif
         enddo
+        ! print *, "finish assign dipole"
         pol%Zdipole = pol%Zdipole / sqrt(real(nspin,dp))
+        ! print *, "deallc map_in"
         deallocate(map_in)
+        ! print *, "finish dealloc map_in"
      enddo
+
+     endif ! .not. lanczos
   endif
   pol%nn = 0
+ 
 
 end subroutine Zdefine_pmap
 !===============================================================

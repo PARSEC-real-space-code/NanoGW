@@ -49,7 +49,7 @@ subroutine Zetotal(gvec,kpt,nspin)
         if (minval(kpt%wfn(isp,ik)%map)== 0) cycle
 
         mi = kpt%wfn(isp,ik)%nmem
-        write(6,*) " in etotal, mi = ", mi
+        ! write(6,*) " in etotal, mi = ", mi
         allocate(e_k(mi,mi),stat=ii)
         call alccheck('e_k','etotal',mi*mi,ii)
         e_k = Zzero

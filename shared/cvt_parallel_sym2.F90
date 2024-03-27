@@ -12,9 +12,6 @@ subroutine cvt_parallel_sym2(gvec, rho, nspin, n_intp, intp)
  use mpi_module
  use esdf
  use psp_module
-#ifdef INTEL
- USE IFPORT   ! This is required to call subroutine rand() if intel compiler is used
-#endif
  implicit none
 #ifdef MPI
   include 'mpif.h'
@@ -25,7 +22,9 @@ subroutine cvt_parallel_sym2(gvec, rho, nspin, n_intp, intp)
  integer, parameter :: max_iter = 100000
  ! random seed for initializing random interpolation points 
  ! integer, parameter :: rseed = 12348
- integer :: rseed
+ integer, allocatable :: rseed(:)
+ integer :: nrseed
+ real(dp) :: randnum
  ! convergence threshold 
  real(dp), parameter :: tol_conv = 1e-5
 
@@ -58,6 +57,15 @@ subroutine cvt_parallel_sym2(gvec, rho, nspin, n_intp, intp)
 
  integer :: pt_tmp(3), values(8), select_grid(n_intp)
 
+ !
+ !call date_and_time(VALUES=values)
+ call random_seed(size=nrseed)
+ allocate(rseed(nrseed))
+ !rseed = values(6)*116667+values(7)*10000+values(8)*59999
+ rseed = 12348
+ if (peinf%master) write(6,*) "# rseed for random number generator is: ", rseed(1)
+ call random_seed(put=rseed)
+ !
  ! generate all points in the unfolded real space grid
  allocate(fullgrid(3,gvec%nr * gvec%syms%ntrans))
  ! get the charge density on the full grid
@@ -127,11 +135,7 @@ subroutine cvt_parallel_sym2(gvec, rho, nspin, n_intp, intp)
        peinf%comm, info )
  enddo
  !
- call date_and_time(VALUES=values)
- !rseed = values(6)*11+values(7)*1000+values(8)
- rseed = 1518543090
  if (peinf%master) write(6,*) "# rseed for random number generator is: ", rseed
- call srand(rseed)
  ! generate initial guess of interpolation points
  ! write(outdbg,'(a)') "# Initial guess of interpolation points "
  if (peinf%master) open(outdbg, file="initial_pts.dat", form='formatted', status='unknown')
@@ -140,9 +144,10 @@ subroutine cvt_parallel_sym2(gvec, rho, nspin, n_intp, intp)
        ! generate some random points in the full grids
        ! multiply by 0.9 to make sure these random points are inside the
        ! boundary
+       call random_number(randnum)
        newpts(ii,ipt) = bounds(1,ii) + &
                  0.25*(bounds(2,ii)-bounds(1,ii)) + &
-          rand(0)*0.5*(bounds(2,ii)-bounds(1,ii)) 
+          randnum*0.5*(bounds(2,ii)-bounds(1,ii)) 
     enddo
     ! print out the intial random interpolation points
     if (peinf%master) write(outdbg,'("# ",3f10.4)') newpts(1:3,ipt)
@@ -206,8 +211,7 @@ subroutine cvt_parallel_sym2(gvec, rho, nspin, n_intp, intp)
        peinf%comm, info )
     call MPI_ALLREDUCE( MPI_IN_PLACE, newpts, 3*n_intp, MPI_DOUBLE, MPI_SUM, &
        peinf%comm, info )
-    if (peinf%inode == 0) then 
-        write(*,'(15(f8.3))') ((newpts(ii,ipt),ii=1,3),ipt=1,n_intp)
+    if (peinf%inode == 0 .and. mod(iter,5) == 0) then 
         write(*,'(i8,a,f18.12)') iter, " diff (a.u.) ", diff/n_intp
     endif
     if (diff/n_intp < tol_conv) then ! conv threshold is satisfied, break the loop??

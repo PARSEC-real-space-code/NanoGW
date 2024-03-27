@@ -12,9 +12,6 @@ subroutine cvt_parallel_sym1(gvec, rho, nspin, n_intp, intp)
  use mpi_module
  use esdf
  use psp_module
-#ifdef INTEL
- USE IFPORT   ! This is required to call subroutine rand() if intel compiler is used
-#endif
  implicit none
 #ifdef MPI
   include 'mpif.h'
@@ -25,7 +22,9 @@ subroutine cvt_parallel_sym1(gvec, rho, nspin, n_intp, intp)
  integer, parameter :: max_iter = 100000
  ! random seed for initializing random interpolation points 
  ! integer, parameter :: rseed = 12348
- integer :: rseed
+ integer, allocatable :: rseed(:)
+ integer :: nrseed
+ real(dp) :: randnum
  ! convergence threshold 
  real(dp), parameter :: tol_conv = 1e-5
 
@@ -58,6 +57,15 @@ subroutine cvt_parallel_sym1(gvec, rho, nspin, n_intp, intp)
 
  integer :: pt_tmp(3), values(8), select_grid(n_intp)
 
+ !
+ !call date_and_time(VALUES=values)
+ call random_seed(size=nrseed)
+ allocate(rseed(nrseed))
+ !rseed = values(6)*116667+values(7)*10000+values(8)*59999
+ rseed = 12348
+ if (peinf%master) write(6,*) "# rseed for random number generator is: ", rseed(1)
+ call random_seed(put=rseed)
+ !
  ! generate all points in the unfolded real space grid
  allocate(fullgrid(3,gvec%nr * gvec%syms%ntrans))
  ! get the charge density on the full grid
@@ -73,6 +81,7 @@ subroutine cvt_parallel_sym1(gvec, rho, nspin, n_intp, intp)
    iend = istart + mm - 1
    if ( ipes < nn) iend = iend + 1
  enddo
+#ifdef DEBUG
  if (.True.) then
    do ipes = 0, peinf%inode 
      if (peinf%inode == ipes) then
@@ -81,6 +90,7 @@ subroutine cvt_parallel_sym1(gvec, rho, nspin, n_intp, intp)
      endif
    enddo
  endif
+#endif
  !
  gnn = mod( gvec%nr, peinf%npes )
  gmm = gvec%nr / peinf%npes 
@@ -92,6 +102,7 @@ subroutine cvt_parallel_sym1(gvec, rho, nspin, n_intp, intp)
    igend   = igstart + gmm - 1
    if (ipes < gnn) igend = igend + 1
  enddo 
+#ifdef DEBUG
  if (.True.) then
    do ipes = 0, peinf%inode 
      if (peinf%inode == ipes) then
@@ -100,6 +111,7 @@ subroutine cvt_parallel_sym1(gvec, rho, nspin, n_intp, intp)
      endif
    enddo
  endif
+#endif
  !
  fullgrid = 0
  igrid = (igstart-1)*gvec%syms%ntrans ! counter for full-grid points
@@ -127,12 +139,6 @@ subroutine cvt_parallel_sym1(gvec, rho, nspin, n_intp, intp)
        peinf%comm, info )
  enddo
  !
- call date_and_time(VALUES=values)
- !rseed = values(6)*11+values(7)*1000+values(8)
- rseed = 1518543090
- !rseed = 20895
- if (peinf%master) write(6,*) "# rseed for random number generator is: ", rseed
- call srand(rseed)
  ! generate initial guess of interpolation points
  ! write(outdbg,'(a)') "# Initial guess of interpolation points "
  if (peinf%master) open(outdbg, file="initial_pts.dat", form='formatted', status='unknown')
@@ -141,9 +147,10 @@ subroutine cvt_parallel_sym1(gvec, rho, nspin, n_intp, intp)
        ! generate some random points in the full grids
        ! multiply by 0.9 to make sure these random points are inside the
        ! boundary
+       call random_number(randnum)
        newpts(ii,ipt) = bounds(1,ii) + &
                  0.25*(bounds(2,ii)-bounds(1,ii)) + &
-          rand(0)*0.5*(bounds(2,ii)-bounds(1,ii)) 
+          randnum*0.5*(bounds(2,ii)-bounds(1,ii)) 
     enddo
     ! print out the intial random interpolation points
     if (peinf%master) write(outdbg,'("# ",3f10.4)') newpts(1:3,ipt)
@@ -208,8 +215,7 @@ subroutine cvt_parallel_sym1(gvec, rho, nspin, n_intp, intp)
        peinf%comm, info )
     call MPI_ALLREDUCE( MPI_IN_PLACE, newpts, 3*n_intp, MPI_DOUBLE, MPI_SUM, &
        peinf%comm, info )
-    if (peinf%inode == 0) then 
-        write(*,'(15(f8.3))') ((newpts(ii,ipt),ii=1,3),ipt=1,n_intp)
+    if (peinf%inode == 0 .and. mod(iter,5) == 0) then 
         write(*,'(i8,a,f18.12)') iter, " diff (a.u.) ", diff/n_intp
     endif
     call timacc(62,2,tsec)
@@ -270,18 +276,10 @@ subroutine cvt_parallel_sym1(gvec, rho, nspin, n_intp, intp)
        enddo ! igrid 
        in_mindist(1) = mindist ! local minimum dist found in igstart to igend
        in_mindist(2) = minig   ! index of the minimum grid stored in procs
-       do ipes = 0, peinf%npes-1
-         if(peinf%inode == ipes) &
-            write(*,*) peinf%inode, in_mindist(1), int(in_mindist(2))
-         call MPI_BARRIER(peinf%comm,info)
-       enddo
+
        call MPI_ALLREDUCE( in_mindist, out_mindist, 1, MPI_2DOUBLE_PRECISION, &
          MPI_MINLOC, peinf%comm, info )
-       do ipes = 0, peinf%npes-1
-         if(peinf%inode == ipes) &
-            write(*,*) peinf%inode, out_mindist(1), int(out_mindist(2))
-         call MPI_BARRIER(peinf%comm,info)
-       enddo   
+
        intp(ipt) = int( out_mindist(2) )
        select_grid(ipt) = intp(ipt) / gvec%syms%ntrans + 1
     enddo ! ipt
