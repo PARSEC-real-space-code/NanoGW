@@ -74,6 +74,12 @@ subroutine Zcorrelation(kpt,pol,k_c,sig,pot_c,add_static, &
   real(dp) :: occfac, deltae, en0, eni, ecuts, ecuts2
   real(dp), dimension(nen) :: eden
   SCALAR, allocatable :: sum0(:,:,:)
+  ! for debug
+  SCALAR, allocatable :: sum_old(:), incr(:,:)
+  !integer :: dbgunit = 111112
+
+  ! WG: for debug
+  ! if (peinf%master) open(dbgunit,file="gw_corre_incr.dat",form='formatted',status='unknown',access='append')
 
   if (r_grp%master) write(6,'(a,f20.10,a,2i4)') &
        ' CORRELATION , xsum = ', xsum, ' spin ', isp, ik
@@ -96,7 +102,10 @@ subroutine Zcorrelation(kpt,pol,k_c,sig,pot_c,add_static, &
   !
   allocate(sum0(2,0:nen,sig%ndiag),stat=jj)
   call alccheck('sum0','correlation',2*(nen+1)*sig%ndiag,jj)
+  allocate(sum_old(0:nen),stat=jj)
+  allocate(incr(nen,sig%ndiag),stat=jj)
   sum0 = Zzero
+  sum_old = Zzero
 
   do isig = 1, sig%ndiag
      if ( nn <= 0 ) exit
@@ -107,11 +116,15 @@ subroutine Zcorrelation(kpt,pol,k_c,sig,pot_c,add_static, &
      ! Notice that, in static limit of correlation (scsdiag, sum0(0) ), 
      ! occupied and empty states are treated equally.
      !
+     ! WG debug
+     ! if (peinf%master) print *, " isig ", isig, " m1 ", m1, " xsum ", xsum
      do ij = nij_start, nij_end
         if ( k_c%col(1,ij) /= m1 .or. k_c%col(3,ij) /= ik ) cycle
         in = k_c%col(2,ij)
         occfac = kpt%wfn(isp,k_c%col(4,ij))%occ1(in)
         if ( occfac < tol_occ ) cycle
+        ! WG debug
+        ! if (peinf%master)  print *, " in = ", in, " e1(m1) ", kpt%wfn(isp,ik)%e1(m1), " e1(in) ", kpt%wfn(isp,k_c%col(4,ij))%e1(in)
         en0 = (kpt%wfn(isp,ik)%e1(m1) - kpt%wfn(isp,k_c%col(4,ij))%e1(in))*xsum - eni
         do ien = 1, nen
            eden(ien) = en0
@@ -119,12 +132,23 @@ subroutine Zcorrelation(kpt,pol,k_c,sig,pot_c,add_static, &
         enddo
         call Zcontract_en(nn,nen,eden,one,ecuts,ecuts2,occfac, &
              pol%eig(ioff),pot_c(1,ij),pot_c(1,ij),sum0(1,1,isig))
+        if (in .eq. 1) then
+          incr(1:nen,isig) = sum0(1,1:nen,isig)-sum_old(1:nen)
+        endif
+        !if (peinf%master .and.  in .le. 10) then
+        !  do ien = 1, nen
+        !     write(dbgunit, '("incr ",i7,3x,i7,3x,i7,3x,e15.5,3x,e15.5)') m1, in, ien, eden(ien)+kpt%wfn(isp,k_c%col(4,ij))%e1(in), &
+        !       incr(ien)*ryd
+        !  enddo
+        !endif
+        sum_old(1:nen) = sum0(1, 1:nen, isig)
      enddo
      do ij = nij_start, nij_end
         if ( k_c%col(1,ij) /= m1 .or. k_c%col(3,ij) /= ik ) cycle
         in = k_c%col(2,ij)
         occfac = one - kpt%wfn(isp,k_c%col(4,ij))%occ1(in)
         if ( occfac < tol_occ ) cycle
+        ! if (peinf%master)  print *, " in = ", in, " e1(m1) ", kpt%wfn(isp,ik)%e1(m1), " e1(in) ", kpt%wfn(isp,k_c%col(4,ij))%e1(in)
         en0 = (kpt%wfn(isp,ik)%e1(m1) - kpt%wfn(isp,k_c%col(4,ij))%e1(in))*xsum - eni
         do ien = 1, nen
            eden(ien) = en0
@@ -132,6 +156,10 @@ subroutine Zcorrelation(kpt,pol,k_c,sig,pot_c,add_static, &
         enddo
         call Zcontract_en(nn,nen,eden,mone,ecuts,ecuts2,occfac, &
              pol%eig(ioff),pot_c(1,ij),pot_c(1,ij),sum0(1,1,isig))
+        if (in .eq. 1) then
+          incr(1:nen,isig) = sum0(1,1:nen,isig)-sum_old(1:nen)
+        endif
+        sum_old(1:nen) = sum0(1, 1:nen, isig)
      enddo
 
      do ij = nij_start, nij_end
@@ -144,6 +172,25 @@ subroutine Zcorrelation(kpt,pol,k_c,sig,pot_c,add_static, &
   call Zpsum(2*(nen+1)*sig%ndiag,r_grp%npes,r_grp%comm,sum0)
 
   sum0 = sum0 * two/real(nspin,dp) / real(kpt%nk*kpt%nk,dp)
+
+  !if (peinf%master) then
+  !  do isig = 1, sig%ndiag
+  !    do ien = 1, nen
+  !      print *, isig, ien, sum0(1,ien,isig)*ryd, sum0(2,ien,isig)*ryd
+  !    enddo ! ien
+  !  enddo
+  !endif
+  call Zpsum(sig%ndiag*nen, r_grp%npes, r_grp%comm, incr)
+  if (peinf%master) then
+  do isig = 1, sig%ndiag
+  m1 = sig%map(sig%diag(isig))
+  !do ien = 1, nen
+  !   write(dbgunit, '("incr ", i7,3x,i7,3x,i7,3x,e15.5,3x,e15.5)') &
+  !     m1, 1, ien, kpt%wfn(isp,ik)%e1(m1)*xsum - eni + (ien-1)*deltae, &
+  !     incr(ien,m1) * ryd * two/real(nspin,dp) / real(kpt%nk*kpt%nk,dp)
+  !enddo ! ien
+  enddo ! isig
+  endif ! peinf%master
 
   do isig = 1, sig%ndiag
      if (add_static) sig%scsdiag(isig) = sig%scsdiag(isig) - sum0(1,0,isig)
@@ -284,6 +331,10 @@ subroutine Zcorrelation(kpt,pol,k_c,sig,pot_c,add_static, &
      sig%scoffd(2,isig+sig%noffd) = sig%scoffd(2,isig+sig%noffd) + sum0(2,2,isig)
   enddo
   deallocate(sum0)
+  deallocate(sum_old)
+  deallocate(incr)
+
+  !if(peinf%master) close(dbgunit)
 
 end subroutine Zcorrelation
 !===================================================================

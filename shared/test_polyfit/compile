@@ -1,0 +1,1 @@
+gfortran polyfit.f90 linear_solver.f90 test_polyfit.f90 -L/public/software/mathlib/lapack/gnu/3.8.0/lib64 -lblas -llapack

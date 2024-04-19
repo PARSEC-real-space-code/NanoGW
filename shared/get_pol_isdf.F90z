@@ -79,7 +79,7 @@ subroutine Zget_pol_isdf(pol,iunit,nrep,nq,irp,iq,nn)
   ! for loop over all the eigenvectors (X_s)
   do icol = 1, pol%ntr 
      if (r_grp%master) then
-        write(6, *) " icol = ", icol
+        ! write(6, *) " icol = ", icol
         tmpv = Zzero
         read(iunit) (tmpv(ii), ii=1,pol%ntr)
      endif

@@ -1,0 +1,517 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Interface routine for the LAPACK/ScaLAPACK eigensolvers, generalised
+! parallel hermitian eigenvalue solvers. Receives shared hamiltonian
+! with columns distributed among PEs so that PE0 has columns 1 to
+! nblock, PE1 has columns nblock+1 to 2*nblock, and so on. Internally,
+! it redistributes the hamiltonian to blacs layout, then calls
+! LAPACK/ScaLAPACK and finally collects all the eigenvectors onto all
+! PEs. For more details of the ScaLAPACK routines and data layouts see
+! http://www.netlib.org/scalapack/scalapack_home.html.
+!
+! At output, the hamiltonian is destroyied and replaced by
+! eigenvectors in the same layout as the input matrix. Eigenvalues are
+! returned in array egv.
+!
+! To save memory S(program) -> ZG(scala) 
+!                H(program) -> S(scala) 
+! -> means transformation to scala layout
+! call pcheevx/pssyevx 
+!                eigenvecs put in H(scala) -> ZG(program)
+!
+! distributed solver variables (block cyclic blacs layout):
+!           nbl = blocksize
+!           nprow = processor grid row
+!           npcol = processor grid column
+!
+! INPUT:
+!        shs : hamiltonian, column-wise distributed over PEs (local)
+!
+! OUTPUT:
+!        shs : eigenvectors, column-wise distributed over PEs (local)
+!        egv : eigenvalues (global)
+!
+! Based on pssyevx_inter/pcheevx_inter, written by Andrew Canning 
+! NERSC/LBNL 1998.
+!
+! Revised version by Murilo Tiago, U. Minnesota 2004.
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+#ifdef HIPMAGMA
+subroutine Zeigensolver_hipMAGMA(verbose,inode,npes,comm,nblock,nmat,shs,egv,ierr)
+
+  use magma
+  use myconstants
+  implicit none
+
+#ifdef MPI
+  include "mpif.h"
+#endif
+
+  ! arguments
+  ! output flag
+  logical, intent(in) :: verbose
+  ! rank of current PE, number of PEs, communicator
+  integer, intent(in) :: inode, npes, comm
+  ! nblock = number of columns of shs stored locally
+  ! nmat = number of columns/rows in the full matrix
+  integer, intent(in) :: nblock, nmat
+  SCALAR, intent(inout) :: shs(nmat,nblock)
+  real(dp), intent(inout) :: egv(nmat)
+  ! error flag
+  integer, intent(inout) :: ierr
+
+  ! local variables
+  integer :: nbl, lda
+  ! scalapack and blacks arrays
+  integer :: nprow_1d, npcol_1d, myrow_1d, mycol_1d, icntxt_1d, &
+    nprow_0d, npcol_0d, myrow_0d, mycol_0d, icntxt_0d, nbl_0d, &
+    ldrow, ldcol, context_system, desca_1d(9), desca_0d(9)
+
+  ! other variables
+  integer  :: ii, jj, kk, lwork, liwork, info, ngpu, dev, ilow, iup, nfound(1)
+  real(dp) :: ellow, elup
+
+#ifdef CPLX
+  integer :: lrwork
+  real(dp), allocatable :: rwork(:)
+#endif
+  SCALAR, allocatable :: work(:) ,egs(:,:)
+  integer, allocatable :: iwork(:)
+  logical :: iammaster
+  integer :: masterid
+  real(dp) :: start, finish
+  integer, external :: numroc
+  !-------------------------------------------------------------------
+  ! The rest of this routine is only if the # of processors is not 1, which
+  ! means we must be running MPI (the code below assumes it actually).
+  !
+#ifdef MPI
+  integer :: mpistatus(MPI_STATUS_SIZE)
+  !-------------------------------------------------------------------
+  ! Send the full matrix to one processor
+  ! and let it do diagonalization.
+  !
+  ! ####### old way to re-distribute matrices  #########
+  !masterid = 0
+  !if (masterid == inode) then
+  !   iammaster = .true.
+  !else
+  !   iammaster = .false.
+  !endif
+  !if (iammaster) then
+  !   allocate(egs(nmat,nmat))
+  !   egs = Zzero
+  !endif
+  !
+  ! Master PE saves its slice of matrix to array egs.
+  !
+  !if (iammaster) then
+  !   do jj = 1, nblock
+  !      kk = jj + inode*nblock
+  !      if (kk > nmat) cycle
+  !      egs(:,kk) = shs(:,jj)
+  !   enddo
+  !endif
+  !
+  ! Other PEs (except master) send their slices to master PE.
+  !
+  !do ii = 0, npes - 1
+  !   if (ii == masterid) cycle
+  !   if (ii == inode) then
+  !      call MPI_SEND(shs,nmat*nblock,MPI_DOUBLE_SCALAR, &
+  !           masterid,ii,comm,info)
+  !   else
+  !      if (iammaster) then
+  !         call MPI_RECV(shs,nmat*nblock,MPI_DOUBLE_SCALAR, &
+  !              ii,ii,comm,mpistatus,info)
+  !         do jj = 1, nblock
+  !            kk = jj + ii*nblock
+  !            if (kk > nmat) cycle
+  !            egs(:,kk) = shs(:,jj)
+  !         enddo
+  !      endif
+  !   endif
+  !enddo
+  ! ####### end old way to re-distribute matrices  #########
+
+  ! ####### use pdgemr2d for re-distributing matrices ######
+  ierr = 0 ! initialize ierr to zero
+  call blacs_get(-1, 0, context_system)
+  icntxt_1d = context_system ! communication world of all process
+  nprow_1d = 1               ! number of rows in the 1d process grid
+  npcol_1d = npes            ! number of cols in the 1d process grid
+  ! Initialize a ScaLapack Context for 1d process grid
+  call blacs_gridinit(icntxt_1d, 'c', nprow_1d, npcol_1d) 
+  ! Get the row and column indices for the current process
+  call blacs_gridinfo(icntxt_1d, nprow_1d, npcol_1d, myrow_1d, mycol_1d) 
+  call descinit(desca_1d, nmat, nmat, nmat, nblock, 0, 0, icntxt_1d, nmat, info)
+  nprow_0d = 1 
+  npcol_0d = 1
+  nbl_0d = nmat
+  icntxt_0d = context_system
+  ! Initialize the SL context for 1d process grid
+  call blacs_gridinit(icntxt_0d, 'c', nprow_0d, npcol_0d)
+  ! Get the row and col indices for the current process
+  call blacs_gridinfo(icntxt_0d, nprow_0d, npcol_0d, myrow_0d, mycol_0d)
+  iammaster = .false.
+  if ((myrow_0d .ne. -1) .and. (mycol_0d .ne. -1)) then
+      masterid  = inode
+      write(6, *) "masterid ", inode
+      iammaster = .true.
+      ldrow = numroc(nmat, nbl_0d, myrow_0d, 0, nprow_0d)
+      ldcol = numroc(nmat, nbl_0d, mycol_0d, 0, npcol_0d)
+      if (ldrow .ne. nmat .or. ldcol .ne. nmat) then
+          write(6, *) " # 0D blacs_grid"
+          write(6, *) " # ldrow ", ldrow, " ldcol ", ldcol
+          write(6, *) " # nmat ", nmat
+          write(6, *) " # ldrow \= nmat or ldcol \= nmat "
+          stop
+      endif
+      allocate(egs(ldrow,ldcol), stat = info)
+      call alccheck('egs', 'eigensolver_hipMAGMA', ldrow * ldcol, info)
+      egs = Zzero
+      call descinit(desca_0d, nmat, nmat, nbl_0d, nbl_0d, 0, 0, icntxt_0d, ldrow, info)
+  else
+      desca_0d(2) = -1
+  endif
+#ifdef CPLX
+  call pzgemr2d(nmat, nmat, shs, 1, 1, desca_1d, egs, 1, 1, desca_0d, icntxt_1d)
+#else
+  call pdgemr2d(nmat, nmat, shs, 1, 1, desca_1d, egs, 1, 1, desca_0d, icntxt_1d)
+#endif
+  write(6, *) " finish pdgemr2d _1, inode ", inode
+  ! ###### end pdgemr2d for re-distributing matrices ######
+  !
+  ! Single-processor send the matrix to GPU for diagnalization 
+  !
+  if (iammaster) then
+    call magmaf_init()
+    ngpu = magmaf_num_gpus()
+    call magmaf_getdevice(dev)
+    write(6, *) " ngpu ", ngpu, " dev ", dev
+    lda  = nmat
+    info = 0
+    !! allocate CPU memory
+    !! no magma Fortran routines for this, so use Fortran's normal mechanism
+#ifdef CPLX 
+    nbl = magmaf_get_chetrd_nb(Nmat)
+    lrwork = 1 + 5*Nmat + 2*Nmat**2
+    lwork = max( Nmat + Nmat*nbl, 2*Nmat + 2*Nmat**2 )
+    liwork = 3+5*Nmat
+    allocate( rwork(lrwork), stat = info)
+    call alccheck('rwork', 'eigensolver_hipMAGMA', lrwork, info)
+    allocate( work(lwork), stat = info )
+    call alccheck('work', 'eigensolver_hipMAGMA', lwork, info)
+    allocate( iwork(liwork), stat = info )
+    call alccheck('iwork', 'eigensolver_hipMAGMA', liwork, info)
+    write(6, *) "call magmaf_zheevd "
+    ! Solve using divide-conquer algorithm
+    call magmaf_wtime(start)
+    call magmaf_zheevd(MagmaVec, MagmaUpper, Nmat, egs, lda, egv, &
+      work, lwork, rwork, lrwork, iwork, liwork, info )
+    call magmaf_wtime(finish)
+    write(6, *) "magmaf_dsyevd run time ", finish-start
+    deallocate( work )
+    deallocate( iwork )
+    deallocate( rwork )
+#else
+    nbl = magmaf_get_dsytrd_nb(Nmat)
+    lwork = max( 2*Nmat + Nmat*nbl, 1 + 6*Nmat + 2*Nmat**2 )
+    liwork = 3+5*Nmat
+    ilow = 1; iup = Nmat
+    allocate( work(lwork) )
+    call alccheck('work', 'eigensolver_hipMAGMA', lwork, info)
+    allocate( iwork(liwork) )
+    call alccheck('iwork', 'eigensolver_hipMAGMA', liwork, info)
+    write(6, *) "call magmaf_dsyevd "
+    work = 0.d0
+    iwork = 0
+    ! Solve using divide-conquer algorithm
+    call magmaf_wtime(start)
+    call magmaf_dsyevd(MagmaVec, MagmaUpper, Nmat, egs, lda, egv, &
+      work, lwork, iwork, liwork, info )
+    !open(111111777, file="egs.dat", form='formatted', status='unknown')
+    !write(111111777, *) lda, ellow, elup, ilow, iup, lwork, liwork
+    !write(111111777, *) work(1:10)
+    !write(111111777, *) iwork(1:10)
+    !do ii = 1, Nmat
+    !    do jj = 1, Nmat
+    !    write(111111777, '(i5, 2x, i5, 2x, e11.4)') ii, jj, egs(ii, jj)
+    !    enddo
+    !enddo
+    !call magmaf_dsyevdx(MagmaNoVec, MagmaRangeAll, MagmaUpper, Nmat, egs, lda, &
+    !   ellow, elup, ilow, iup, nfound, egv, work, lwork, iwork, liwork, info )
+    call magmaf_wtime(finish)
+    write(6, *) "magmaf_dsyevd run time ", finish-start
+    deallocate( work )
+    deallocate( iwork )
+    !write(111111777, *) egv(1:10), egv(Nmat-9:Nmat)
+    !close(111111777)
+#endif
+    call magmaf_finalize()
+  endif
+  !
+  ! Distribute eigenvectors and eigenvalues.
+  !
+  !call MPI_BCAST(ierr,1,MPI_INTEGER,masterid,comm,info)
+  !if (ierr /= 0) return
+  !call MPI_BCAST(egv,nmat,MPI_DOUBLE_SCALAR,masterid,comm,info)
+  !do ii = 0, npes - 1
+  !   if (ii == masterid) cycle
+  !   if (iammaster) then
+  !      shs = Zzero
+  !      do jj = 1, nblock
+  !         kk = jj + ii*nblock
+  !         if (kk > nmat) cycle
+  !         shs(:,jj) = egs(:,kk)
+  !      enddo
+  !      call MPI_SEND(shs,nmat*nblock,MPI_DOUBLE_SCALAR, &
+  !           ii,ii+npes,comm,info)
+  !   else
+  !      if (ii == inode) then
+  !         call MPI_RECV(shs,nmat*nblock,MPI_DOUBLE_SCALAR, &
+  !              masterid,ii+npes,comm,mpistatus,info)
+  !      endif
+  !   endif
+  !enddo
+  !if (iammaster) then
+  !   do jj = 1, nblock
+  !      kk = jj + masterid*nblock
+  !      if (kk > nmat) cycle
+  !      shs(:,jj) = egs(:,kk)
+  !   enddo
+  !   deallocate(egs)
+  !endif
+  !
+  if (info < 0) then
+     write(6,*) ' error in parameters ', -info, 'for magmaf_dsyevdx/cheevx '
+     ierr = 9
+     return
+  endif
+  if (verbose) write(6,*) ' Sharing eigenvectors'
+  if (info > 0) then
+     write(6,*) ' convergence or memory problems in pcheevx/pssyevx'
+     write(6,*) ' info = ', info
+     ierr = 10
+     return
+  endif
+  ! Copy eigenvector layout from scalapack layout back to program layout.
+  ! using pzgemr2d/pdgemr2d
+  !
+  call MPI_BCAST(egv,nmat,MPI_DOUBLE_SCALAR,0,comm,info)
+#ifdef CPLX
+  call pzgemr2d(nmat,nmat,egs,1,1,desca_0d,shs,1,1,desca_1d, icntxt_1d)
+#else                                                          
+  call pdgemr2d(nmat,nmat,egs,1,1,desca_0d,shs,1,1,desca_1d, icntxt_1d)
+#endif
+  write(6, *) " finish pdgemr2d _2 , inode ", inode
+  call MPI_BARRIER(comm,info)
+  if (myrow_0d .ne. -1) call blacs_gridexit(icntxt_0d)
+  write(6, *) " Reach break point 0.1 , inode ", inode
+  if (myrow_1d .ne. -1) call blacs_gridexit(icntxt_1d)
+  write(6, *) " Reach break point 0.2 , inode ", inode
+  if (myrow_0d .ne. -1 .and. mycol_0d .ne. -1) then
+      deallocate(egs)
+  endif
+  write(6, *) " Reach break point 0.3 , inode ", inode
+
+#endif
+! -DMPI
+
+end subroutine Zeigensolver_hipMAGMA
+!===================================================================
+
+subroutine Zeigensolver_hipMAGMA_gpuinterface(verbose,inode,npes,comm,nblock,nmat,shs,egv,ierr)
+
+  use magma
+  use myconstants
+  implicit none
+
+#ifdef MPI
+  include "mpif.h"
+#endif
+
+  ! arguments
+  ! output flag
+  logical, intent(in) :: verbose
+  ! rank of current PE, number of PEs, communicator
+  integer, intent(in) :: inode, npes, comm
+  ! nblock = number of columns of shs stored locally
+  ! nmat = number of columns/rows in the full matrix
+  integer, intent(in) :: nblock, nmat
+  SCALAR, intent(inout) :: shs(nmat,nblock)
+  real(dp), intent(inout) :: egv(nmat)
+  ! error flag
+  integer, intent(inout) :: ierr
+
+  ! local variables
+  integer :: nbl, lda
+
+  ! other variables
+  integer  :: ii, jj, kk, lwork, liwork, info, ngpu, dev, ldda
+  magma_devptr_t :: dA
+  magma_devptr_t :: queue
+#ifdef CPLX
+  integer :: lrwork
+  real(dp), allocatable :: rwork(:)
+#endif
+  SCALAR, allocatable :: work(:) ,egs(:,:)
+  integer, allocatable :: iwork(:)
+  logical :: iammaster
+  integer :: masterid
+  real(dp) :: start, finish
+  !-------------------------------------------------------------------
+  ! The rest of this routine is only if the # of processors is not 1, which
+  ! means we must be running MPI (the code below assumes it actually).
+  !
+#ifdef MPI
+  integer :: mpistatus(MPI_STATUS_SIZE)
+  !-------------------------------------------------------------------
+  ! Send the full matrix to one processor
+  ! and let it do diagonalization.
+  !
+  masterid = 0
+  if (masterid == inode) then
+     iammaster = .true.
+  else
+     iammaster = .false.
+  endif
+  if (iammaster) then
+     allocate(egs(nmat,nmat))
+     egs = Zzero
+     ldda = ceiling(real(nmat)/32)*32
+     info = 0
+     call magmaf_init()
+     !! allocate GPU memory
+     info = magmaf_zmalloc( dA, ldda*nmat )
+     write(6, *) "magma_malloc(dA) info ", info
+  endif
+  !
+  ! Master PE saves its slice of matrix to array egs.
+  !
+  if (iammaster) then
+     do jj = 1, nblock
+        kk = jj + inode*nblock
+        if (kk > nmat) cycle
+        egs(:,kk) = shs(:,jj)
+     enddo
+  endif
+  !
+  ! Other PEs (except master) send their slices to master PE.
+  !
+  do ii = 0, npes - 1
+     if (ii == masterid) cycle
+     if (ii == inode) then
+        call MPI_SEND(shs,nmat*nblock,MPI_DOUBLE_SCALAR, &
+             masterid,ii,comm,info)
+     else
+        if (iammaster) then
+           call MPI_RECV(shs,nmat*nblock,MPI_DOUBLE_SCALAR, &
+                ii,ii,comm,mpistatus,info)
+           do jj = 1, nblock
+              kk = jj + ii*nblock
+              if (kk > nmat) cycle
+              egs(:,kk) = shs(:,jj)
+           enddo
+        endif
+     endif
+  enddo
+  !
+  ! Single-processor send the matrix to GPU for diagnalization 
+  !
+  if (iammaster) then
+    ngpu = magmaf_num_gpus()
+    call magmaf_getdevice(dev)
+    write(6, *) " ngpu ", ngpu, " dev ", dev
+    lda  = nmat
+    info = 0
+    !! allocate CPU memory
+    !! no magma Fortran routines for this, so use Fortran's normal mechanism
+#ifdef CPLX 
+    nbl = magmaf_get_chetrd_nb(Nmat)
+    lrwork = 1 + 5*Nmat + 2*Nmat**2
+    lwork = max( Nmat + Nmat*nbl, 2*Nmat + 2*Nmat**2 )
+    liwork = 3+5*Nmat
+    allocate( rwork(lrwork) )
+    allocate( work(lwork) )
+    allocate( iwork(liwork) )
+    write(6, *) "call magmaf_zheevd "
+    ! Solve using divide-conquer algorithm
+    call magmaf_wtime(start)
+    call magmaf_zheevd(MagmaVec, MagmaUpper, Nmat, egs, lda, egv, &
+      work, lwork, rwork, lrwork, iwork, liwork, info )
+    call magmaf_wtime(finish)
+    write(6, *) "magmaf_dsyevd run time ", finish-start
+    deallocate( work )
+    deallocate( iwork )
+    deallocate( rwork )
+#else
+    nbl = magmaf_get_dsytrd_nb(Nmat)
+    lwork = max( 2*Nmat + Nmat*nbl, 1 + 6*Nmat + 2*Nmat**2 )
+    liwork = 3+5*Nmat
+    allocate( work(lwork) )
+    allocate( iwork(liwork) )
+    write(6, *) "call magmaf_dsyevd "
+    ! Solve using divide-conquer algorithm
+    call magmaf_wtime(start)
+    call magmaf_queue_create( 0, queue )
+    call magmaf_dsetmatrix( Nmat, Nmat, egs, lda, dA, ldda, queue )
+    write(6, *) "ldda ", ldda, " lda ", lda, " Nmat ", Nmat
+    call magmaf_dsyevd_gpu(MagmaVec, MagmaUpper, Nmat, dA, ldda, egv, &
+      egs, lda, work, lwork, iwork, liwork, info )
+    write(6, *) "magmaf_dsyevd info ", info
+    call magmaf_dgetmatrix(Nmat, Nmat, dA, ldda, egs, lda, queue)
+    call magmaf_queue_destroy( queue )
+    call magmaf_wtime(finish)
+    write(6, *) "magmaf_dsyevd run time ", finish-start
+    deallocate( work )
+    deallocate( iwork )
+#endif
+  endif
+  !
+  ! Distribute eigenvectors and eigenvalues.
+  !
+  call MPI_BCAST(ierr,1,MPI_INTEGER,masterid,comm,info)
+  if (ierr /= 0) return
+  call MPI_BCAST(egv,nmat,MPI_DOUBLE_SCALAR,masterid,comm,info)
+  do ii = 0, npes - 1
+     if (ii == masterid) cycle
+     if (iammaster) then
+        shs = Zzero
+        do jj = 1, nblock
+           kk = jj + ii*nblock
+           if (kk > nmat) cycle
+           shs(:,jj) = egs(:,kk)
+        enddo
+        call MPI_SEND(shs,nmat*nblock,MPI_DOUBLE_SCALAR, &
+             ii,ii+npes,comm,info)
+     else
+        if (ii == inode) then
+           call MPI_RECV(shs,nmat*nblock,MPI_DOUBLE_SCALAR, &
+                masterid,ii+npes,comm,mpistatus,info)
+        endif
+     endif
+  enddo
+  if (iammaster) then
+     do jj = 1, nblock
+        kk = jj + masterid*nblock
+        if (kk > nmat) cycle
+        shs(:,jj) = egs(:,kk)
+     enddo
+     deallocate(egs)
+     info = magmaf_free( dA )
+     call magmaf_finalize()
+  endif
+#endif
+! -DMPI
+
+end subroutine Zeigensolver_hipMAGMA_gpuinterface
+!===================================================================
+
+#endif
+! -DHIPMAGMA

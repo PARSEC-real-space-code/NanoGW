@@ -104,6 +104,8 @@ subroutine printsigma(nrep,sig_in,sig,wfn,q_p,itape,isp,ik, &
              sig%sgdiag(ii,isig) - sig%vxcdiag(isig) + edft - xtable(ii)
         sigmai_table(ii) = sig%scdiag(ii,isig + sig%ndiag) + &
              sig%sgdiag(ii,isig + sig%ndiag)
+        !if (peinf%inode .eq. 1) print *, "printsigma: ", real(xtable(ii)), &
+        !    real(sig%xdiag(isig)), real(sig%scdiag(ii,isig)), real(sig%vxcdiag(isig)), edft, ftable(ii)
      enddo
      eqp(isig) = en0
      call newtonr(sig_in%nen,xtable,ftable,eqp(isig),EN_ACC,ztmp,ierr)
@@ -175,7 +177,7 @@ subroutine printsigma(nrep,sig_in,sig,wfn,q_p,itape,isp,ik, &
         do isig = 1,sig%ndiag
            en0 =  wfn%e1(sig%map(sig%diag(isig)))*ryd
            edft =  wfn%e0(sig%map(sig%diag(isig)))*ryd
-           write(jtape,'(i6,f8.3,11(1x,f9.3))') sig%map(sig%diag(isig)), &
+           write(jtape,'(i6,f8.3,11(1x,f14.8))') sig%map(sig%diag(isig)), &
                 wfn%occ1(sig%map(sig%diag(isig))),edft, &
                 real(sig%vxcdiag(isig),dp), real(sig%xdiag(isig),dp),&
                 real(sexdiag(isig),dp),real(scdiag(isig),dp), &

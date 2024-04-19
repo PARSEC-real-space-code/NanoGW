@@ -9,7 +9,7 @@
 !-------------------------------------------------------------------
 subroutine Zcalculate_bse(gvec,kpt,qpt,q_bse,bsepol_in,k_p,k_vv,k_cc, &
      k_vc,k_x,pol,bsepol,nolda,tamm_d,trip_flag,trunc_c,writeig, &
-     mix_flag,noxchange,snorm,hf,nspin,ecutb2,eref,isdf_in)
+     mix_flag,noxchange,snorm,hf,nspin,ecutb2,eref,isdf_in,opt)
 
   use typedefs
   use mpi_module
@@ -37,7 +37,7 @@ subroutine Zcalculate_bse(gvec,kpt,qpt,q_bse,bsepol_in,k_p,k_vv,k_cc, &
   type (polinfo), dimension(gvec%syms%ntrans,qpt%nk), intent(inout) :: pol
   ! BSE polarizability
   type (polinfo), dimension(gvec%syms%ntrans), intent(inout) :: bsepol
-
+  type (options) :: opt
   logical, intent(in) :: &
        nolda, &      ! true if LDA kernel is not used
        tamm_d, &     ! true if Tamm-Dancof approximation is used
@@ -75,8 +75,9 @@ subroutine Zcalculate_bse(gvec,kpt,qpt,q_bse,bsepol_in,k_p,k_vv,k_cc, &
   !-------------------------------------------------------------------
   ! Calculate TDLDA polarizability and rescale sum rule if necessary.
   !
+  chkpt = 0 ! initialize this to be zero, read checkpoint data (pol_diag.dat and ...)
   call Zcalculate_tdlda(gvec,kpt,qpt,k_p,pol,nspin,chkpt, &
-       tamm_d,nolda,.false.,.false.,.false.,.false.,xsum,epsinv,isdf_in)
+       tamm_d,nolda,.false.,.false.,.false.,.false.,xsum,epsinv,isdf_in,opt)
   if (.not. snorm) xsum = one
 
   !-------------------------------------------------------------------

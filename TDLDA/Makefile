@@ -17,11 +17,11 @@ SRC	= alccheck.f90 define_kmap.f90 define_xc.f90 \
 	  linear_solver.f90 printmatrix.f90 $(AUX_SRC)
 
 PSRCZ	= calculate_tdlda.F90z charac_group.F90z define_pmap.F90z diag_pol.F90z \
-	  dipole.F90z eigensolver.F90z \
+	  dipole.F90z eigensolver.F90z eigensolver_new.F90z  eigensolver_hipMAGMA.F90z\
 	  get_pol.F90z k_integrate.F90z k_print.F90z kernel.F90z \
 	  matvec3.F90z multiply_vec.F90z proj_calc.F90z k_integrate_isdf.F90z \
 	  psum.F90z read_pol.F90z save_pol.F90z setup_g.F90z write_pol.F90z \
-	  k_integrate_isdf_fastselect.F90z
+	  k_integrate_isdf_fastselect.F90z gemm_hl.F90z
 PSRC	= die.F90 finalize.F90 grid_setup.F90 paratec_wfn.F90 \
 	  parsec_wfn.F90 tdlda.F90 isdf_parallel_sym.F90 cvt_wfn.F90 cvt_parallel_sym.F90 \
      cvt.F90 cvt_parallel_sym1.F90 cvt_parallel_sym2.F90 isdf_parallel_sym_lessmemory.F90
@@ -39,7 +39,7 @@ VPATH	= ../shared:../TDLDA:$(AUX_PATH)
 tdlda: module obj initial pobjz pobj
 	$(F90) $(OPTS) -o ../bin/tdlda$(EXT) $(OBJ) $(POBJ) $(POBJZ) \
 	$(MODULE) $(INITIAL) $(LIBFFT) $(LIBLAPACK) $(LIBSCALAPACK) \
-	$(LIBXC) $(LIBHDF5)
+	$(LIBXC) $(LIBHDF5) $(LIBMAGMA)
 
 .SUFFIXES: .f90 .F90 .F90z $(SUFFIXES)
 

@@ -23,7 +23,7 @@
 !-------------------------------------------------------------------
 subroutine define_kmap(syms,kpt,kernel,irp,ncol_in,mapcol_in, &
   nrow_in,maprow_in,ncol_up,nrow_up)
-
+  use mpi_module
   use typedefs
   implicit none
 
@@ -36,7 +36,6 @@ subroutine define_kmap(syms,kpt,kernel,irp,ncol_in,mapcol_in, &
 
   ! local variables
   integer :: ii, jj, iv, ic, ik, jk, rprod, isp
-
   !-------------------------------------------------------------------
   ! Start with columns of the kernel.
   !

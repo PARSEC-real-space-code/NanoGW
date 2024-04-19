@@ -29,7 +29,7 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine Zpotential(npol,nn,tvpol,nij,kernel,pot)
+subroutine Zpotential(npol,nn,tvpol,nij,kernel,pot, opt)
 
   use typedefs
   use mpi_module
@@ -51,6 +51,7 @@ subroutine Zpotential(npol,nn,tvpol,nij,kernel,pot)
   SCALAR, intent(in) :: kernel(nn,nij)
   ! potential V^s or F^s
   SCALAR, intent(out) :: pot(nn,nij)
+  type(options), intent(in) :: opt
 
   ! local variables
   integer :: ipe, ioff, ncol
@@ -89,13 +90,24 @@ subroutine Zpotential(npol,nn,tvpol,nij,kernel,pot)
      ! kvpolt(1:nn,1:ncol) = tmp_v(1:nn,1:nn)
      !                            * kernel(1:nn,ioff+1:ioff+ncol)
 #ifdef MPI
+        ! -- old code --
         call Zgemm('N','N',nn,ncol,nn,Zone, tmp_v, &
             nn,kernel(1,ioff+1),nn,Zzero,kvpolt,nn)
+
+        ! -- new code --
+        !call Zgemm_hl('N','N',nn,ncol,nn,Zone, tmp_v, &
+        !    nn,kernel(1,ioff+1),nn,Zzero,kvpolt,nn, opt%linear_algebra)
+
         call MPI_REDUCE(kvpolt,pot(1,ioff+1),nn*ncol, &
              MPI_DOUBLE_SCALAR,MPI_SUM,ipe,r_grp%comm,info)
 #else
+        ! -- old code --
         call Zgemm('N','N',nn,ncol,nn,Zone, tvpol, &
             nn,kernel(1,ioff+1),nn,Zzero,kvpolt,nn)
+
+        ! -- new code --
+        !call Zgemm_hl('N','N',nn,ncol,nn,Zone, tvpol, &
+        !    nn,kernel(1,ioff+1),nn,Zzero,kvpolt,nn, opt%linear_algebra)
         call Zcopy(nn*ncol,kvpolt(1,1),1,pot(1,ioff+1),1)
 #endif
         ioff = ioff + ncol

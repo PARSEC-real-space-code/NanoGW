@@ -1,0 +1,425 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Interface routine for the LAPACK/ScaLAPACK eigensolvers, generalised
+! parallel hermitian eigenvalue solvers. Receives shared hamiltonian
+! with columns distributed among PEs so that PE0 has columns 1 to
+! nblock, PE1 has columns nblock+1 to 2*nblock, and so on. Internally,
+! it redistributes the hamiltonian to blacs layout, then calls
+! LAPACK/ScaLAPACK and finally collects all the eigenvectors onto all
+! PEs. For more details of the ScaLAPACK routines and data layouts see
+! http://www.netlib.org/scalapack/scalapack_home.html.
+!
+! At output, the hamiltonian is destroyied and replaced by
+! eigenvectors in the same layout as the input matrix. Eigenvalues are
+! returned in array egv.
+!
+! To save memory S(program) -> ZG(scala) 
+!                H(program) -> S(scala) 
+! -> means transformation to scala layout
+! call pcheevx/pssyevx 
+!                eigenvecs put in H(scala) -> ZG(program)
+!
+! distributed solver variables (block cyclic blacs layout):
+!           nbl = blocksize
+!           nprow = processor grid row
+!           npcol = processor grid column
+!
+! INPUT:
+!        shs : hamiltonian, column-wise distributed over PEs (local)
+!
+! OUTPUT:
+!        shs : eigenvectors, column-wise distributed over PEs (local)
+!        egv : eigenvalues (global)
+!
+! Based on pssyevx_inter/pcheevx_inter, written by Andrew Canning 
+! NERSC/LBNL 1998.
+!
+! Revised version by Murilo Tiago, U. Minnesota 2004.
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zeigensolver_new(verbose,inode,npes,comm,nblock,nmat,shs,egv,ierr)
+
+  use myconstants
+  implicit none
+
+#ifdef MPI
+  include "mpif.h"
+#endif
+
+  ! arguments
+  ! output flag
+  logical, intent(in) :: verbose
+  ! rank of current PE, number of PEs, communicator
+  integer, intent(in) :: inode, npes, comm
+  ! nblock = number of columns of shs stored locally
+  ! nmat = number of columns/rows in the full matrix
+  integer, intent(in) :: nblock, nmat
+  SCALAR, intent(inout) :: shs(nmat,nblock)
+  real(dp), intent(inout) :: egv(nmat)
+  ! error flag
+  integer, intent(inout) :: ierr
+
+  ! local variables
+#ifdef MPI
+  ! scalapack and blacs arrays
+  integer :: nprow_1d, npcol_1d, myrow_1d, mycol_1d, icntxt_1d, &
+    nbl_2d, nprow_2d, npcol_2d, myrow_2d, mycol_2d, icntxt_2d, &
+    ldrow, ldcol, context_system, ldrow_max, ldcol_max
+  integer :: clustersize, liwork, nzfound
+  integer :: desca_1d(9), desca_2d(9)
+  real(dp) :: orfac
+
+  ! scalapack functions and arrays
+  integer, external :: numroc, iceil
+  integer :: mpistatus(MPI_STATUS_SIZE)
+#endif
+
+  ! other variables
+  integer :: ii, jj, kk, ilow, iup, lwork, nfound, info, pre_iwork(50), dummy, &
+    izero, nn, nnp, np0, mq0, nq0
+  real(dp) :: abstol, ellow, elup, pre_rwork(50)
+  SCALAR :: pre_work(50)
+
+  integer :: lrwork
+  integer, parameter :: npadding = 10
+#ifdef CPLX
+  real(dp), allocatable :: rwork(:)
+#endif
+  SCALAR, allocatable :: work(:), egs(:,:)
+#ifdef MPI
+  SCALAR, allocatable :: shs_bl(:), egs_bl(:)
+!  SCALAR, allocatable :: shs_bl(:,:), egs_bl(:,:)
+  real(dp), allocatable :: gap(:), work_prnt(:)
+#endif
+  integer, allocatable :: iwork(:), ifail(:), iclustr(:)
+  integer :: iproc
+
+  !-------------------------------------------------------------------
+  !  If running with single PE, use the serial subroutines. Otherwise,
+  !  do the distributed job.
+  !
+  ierr = 0
+  if (npes == 1) then
+     if (nmat /= nblock) then
+        write(6,*) ' Hamiltonian matrix does not seem to be square!'
+        write(6,*) ' the program stops...'
+        ierr = 1
+        return
+     endif
+     lwork = 10*nmat
+     allocate(work(lwork))
+     abstol = zero
+     allocate(ifail(nmat))
+     allocate(iwork(5*nmat))
+     allocate(egs(nmat,nmat))
+     ilow = 1
+     iup = nmat
+     if (.true.) then
+        do ii = 1, nmat
+            do jj = 1, nmat
+                write(6,'(a,i7,i7,g17.8)') " matel ", ii, jj, shs(ii,jj)
+            enddo
+        enddo
+     endif
+#ifdef CPLX
+     allocate(rwork(7*nmat))
+     call zheevx('V','A','U',nmat,shs,nmat,ellow,elup,ilow,iup, &
+          abstol,nfound,egv,egs,nmat,work,8*nmat,rwork,iwork,ifail,info)
+     deallocate(rwork)
+#else
+     call dsyevx('V','A','U',nmat,shs,nmat,ellow,elup,ilow,iup, &
+          abstol,nfound,egv,egs,nmat,work,10*nmat,iwork,ifail,info)
+#endif
+     if (info < 0) then
+        write(6,*) ' error in input parameters for cheevx/ssyevx'
+        write(6,*) ' info = ', info
+        ierr = 2
+        return
+     endif
+
+     if (info > 0) then
+        write(6,*) 'convergence problems in cheevx/ssyevx'
+        write(6,*) ' info = ', info
+        write(6,*) 'The following eigenvector(s) failed to converge:'
+        write(6,*) ' ifail = ', ifail
+        ierr = 3
+        return
+     endif
+
+     shs = egs
+     deallocate(egs)
+     deallocate(iwork)
+     deallocate(ifail)
+     deallocate(work)
+     if (verbose) write(6,*) 'Lapack diagonalization done'
+     !
+     ! Done, exit subroutine.
+     return
+  endif
+  !
+  !-------------------------------------------------------------------
+  ! If we have MPI-parallelization, then use scalapack to obtain eigenpairs
+  ! To be done: use ELPA to obtain eigenpairs
+  !
+#ifdef MPI
+  !
+  ! Define the BLACS grid layout that corresponds to the 1D proc-grid 
+  ! that store the Hamiltonian shs(:) in input
+  ! 
+  call blacs_get(-1, 0, context_system)
+  icntxt_1d = context_system ! communication world of all process
+  nprow_1d = 1               ! number of rows in the 1d process grid
+  npcol_1d = npes            ! number of cols in the 1d process grid
+  ! Initialize a ScaLapack Context for 1d process grid
+  call blacs_gridinit(icntxt_1d, 'c', nprow_1d, npcol_1d) 
+  !write(6,*) "inode ", inode, " done gridinit"
+  ! Get the row and column indices for the current process
+  call blacs_gridinfo(icntxt_1d, nprow_1d, npcol_1d, myrow_1d, mycol_1d) 
+  !write(6,*) "inode  myrow_1d ",myrow_1d, " mycol_1d ", mycol_1d
+  ! Check whether the last process corresponds to mycol_1d==inode 
+  if (inode .eq. npes-1 .and. inode .ne. mycol_1d) then
+    call die("Inode is not equal to mycol_1d")
+  endif
+  ! Initialize the descriptor of the Hamiltonian in the 1d process grid
+  !        SUBROUTINE descinit( DESC, M, N, MB, NB, IRSRC, ICSRC, ICTXT,
+  !   $                     LLD, INFO )
+  call descinit(desca_1d, nmat, nmat, nmat, nblock, 0, 0, icntxt_1d, nmat, info)
+  !
+  ! Choose scalapack layout. Block cyclic.
+  ! Note that "nprow_2d * npcol_2d" need not to be "npes"
+  !
+  nprow_2d = int(sqrt(real(npes)+1e-6))
+  do ii = nprow_2d, 1, -1
+     if (mod(npes,ii) == 0) exit
+  end do
+  nprow_2d = ii
+  npcol_2d = npes/nprow_2d
+  nbl_2d = min(32, nmat/(max(nprow_2d,npcol_2d)))
+  nbl_2d = max(nbl_2d,1)
+  icntxt_2d = context_system
+  ! Initialize the SL context for 1d process grid
+  call blacs_gridinit(icntxt_2d, 'c', nprow_2d, npcol_2d)
+  ! Get the row and col indices for the current process
+  call blacs_gridinfo(icntxt_2d, nprow_2d, npcol_2d, myrow_2d, mycol_2d)
+  ! write(6,*) "inode  myrow_2d ",myrow_2d, " mycol_2d ", mycol_2d
+  if (verbose .and. inode==0) write(6,10) nprow_2d, npcol_2d, nbl_2d
+10  format(' SCALAPACK PROCESSOR GRID ',i3,' x ',i3,' BLOCKSIZE ',i3)
+  ! determine the required space for storing the local matrix and eigenvectors
+  ldrow = numroc(nmat, nbl_2d, myrow_2d, 0, nprow_2d)
+  ldcol = numroc(nmat, nbl_2d, mycol_2d, 0, npcol_2d)
+  !ldrow_max = ldrow
+  !ldcol_max = ldcol
+  !call igamx2d( icntxt_2d, 'All', 'I', 1, 1, ldrow_max, 1, dummy, dummy, -1, -1, -1 ) 
+  !call igamx2d( icntxt_2d, 'All', 'I', 1, 1, ldcol_max, 1, dummy, dummy, -1, -1, -1 ) 
+  !write(6, *) "ldrow ", ldrow, " ldcol ", ldcol, " ldrow_max ", ldrow_max, " ldcol_max", ldcol_max
+  if (myrow_2d .ne. -1) then
+      ! alocate local block of matrix and eigevctors
+      !allocate(shs_bl(ldrow_max*ldcol_max))
+      !allocate(egs_bl(ldrow_max*ldcol_max))
+      allocate(shs_bl(ldrow*ldcol))
+      allocate(egs_bl(ldrow*ldcol))
+      call descinit(desca_2d, nmat, nmat, nbl_2d, nbl_2d, 0, 0, icntxt_2d, ldrow, info)
+  else
+      desca_2d(2) = -1
+  endif
+  ! distribute the matrix in the BLACS grid using p?gemr2d subroutine
+#ifdef CPLX
+  call pzgemr2d(nmat, nmat, shs, 1, 1, desca_1d, shs_bl, 1, 1, desca_2d, icntxt_1d)
+#else
+  call pdgemr2d(nmat, nmat, shs, 1, 1, desca_1d, shs_bl, 1, 1, desca_2d, icntxt_1d)
+#endif
+  if (verbose .and. inode==0) write(6,*) ' Scalapack: using upper triangle matrix'
+  if (myrow_2d .eq. -1 .or. mycol_2d .eq. -1) then
+    write(6, *) " inode ", inode, " skipping pdsyevx"
+    goto 99
+  endif
+  abstol = zero   ! Negative value means a default value will be used
+  ! Eigenvectors that correspond to eigenvalues which are within tol=orfac*norm(A) of each other are to be reorthogonalized. 
+  orfac  = 1d-7  ! Negative value suggests a default value 1.0e-3
+  ! ilow and iup are not referenced by pdgyevx, since we solve all the eigenpairs
+  ilow = 1    ! not referenced
+  iup  = nmat ! not referenced 
+  !
+  ! First, we need to determine the required/optimal size for work, rwork, 
+  ! and iwork arrays.
+  ! By setting lwork = lrwork = liwork = -1, the subroutines will compute the required
+  ! space for us.
+  !
+  lwork  = -1
+  lrwork = -1
+  liwork = -1
+  ! allocate some workspace
+  allocate(ifail(nmat+npadding))
+  allocate(iclustr(2*nprow_2d*npcol_2d+npadding))
+  allocate(gap(nprow_2d*npcol_2d+npadding))
+  ! write(6, *) " desca_2d ", desca_2d(1:9)
+  ! The following call of pzheevx/pdsyevx will not execute the eigensolver.
+  ! It only computes the required workspace.
+#ifdef CPLX
+  call pzheevx('V', 'A', 'U', &
+#else
+  call pdsyevx('V', 'A', 'U', &
+#endif
+       nmat, shs_bl, 1, 1, desca_2d, ellow, elup, ilow, iup, abstol, nfound, &
+       nzfound, egv, orfac, egs_bl, 1, 1, desca_2d, pre_work, lwork, &
+#ifdef CPLX
+       pre_rwork, lrwork, &
+#endif
+       pre_iwork, liwork, ifail, iclustr, gap, info)
+  lwork = max(1.d0, dble(pre_work(1)))
+  liwork = max(1, pre_iwork(1))
+  ! get the largest lwork and liwork among icntxt_2d, make sure all procs have the
+  ! same lwork and liwork
+  call igamx2d( icntxt_2d, 'All', 'I', 1, 1, lwork,  1, dummy, dummy, -1, -1, -1 ) 
+  call igamx2d( icntxt_2d, 'All', 'I', 1, 1, liwork, 1, dummy, dummy, -1, -1, -1 )
+  lwork = lwork + npadding
+  liwork = liwork + npadding
+
+! The old way to set up lwork, liwork and lrwork #####################
+  !
+  ! Calculate work array sizes etc for pcheevx/pssyevx.
+  ! Assume no more than 20 eigenvalues in any one cluster.
+  ! If more pcheevx/pssyevx will abort. If more then more memory is
+  ! required for the orthogonlaisation ie more work space.
+  ! amc: nmat set to nv for work space calculation size.
+  !      It seems to be a problem in pcheevx/pssyevx with setting it to nmat.
+  !
+!   clustersize = 50
+!   izero = 0
+!   nn = max(nmat,nbl_2d,2)
+!   nnp = max(nmat,nprow_2d*npcol_2d+1,4)
+!   np0 = numroc(nn,nbl_2d,0,0,nprow_2d)
+!   mq0 = numroc(max(nmat,nbl_2d,2),nbl_2d,0,0,npcol_2d)
+! #ifdef CPLX
+!   !  Use nq0 for lwork to be consistent with pcheevx, man pages wrong.
+!   nq0 = numroc(nn,nbl_2d,0,0,npcol_2d)
+!   lwork = nmat + (np0+nq0+nbl_2d)*nbl_2d
+!   lrwork = 4*nmat+max(5*nn,np0*mq0)+iceil(nmat,nprow_2d*npcol_2d)*nn + &
+!          (clustersize-1)*nmat
+! #else
+!   lwork = 5*nmat+max(5*nn,np0*mq0+2*nbl_2d*nbl_2d) + &
+!        iceil(nmat,nprow_2d*npcol_2d)*nn+(clustersize-1)*nmat
+! #endif
+!  liwork = 6*nnp
+! #################################################################
+
+  ! Allocate workspaces
+  allocate(work(lwork))
+  ! write(6, *) liwork, lwork
+  call alccheck('work','eigensolver',lwork,info)
+  if (info /= 0) then
+     write(6,*) 'Can not allocate iwork in eigensolver_new'
+     ierr = 9
+     return
+  endif
+  allocate(iwork(liwork))
+  call alccheck('iwork','eigensolver',liwork,info)
+  if (info /= 0) then
+     write(6,*) 'Can not allocate iwork in eigensolver_new'
+     ierr = 9
+     return
+  endif
+#ifdef CPLX
+  lrwork = max(1.d0, pre_rwork(1))
+  ! get the largest lwork and liwork among icntxt_2d, make sure all procs have the
+  ! same lrwork
+  call igamx2d( icntxt_2d, 'All', 'I', 1, 1, lrwork, 1, dummy, dummy, -1, -1, -1 )
+  lrwork = lrwork + 100
+  allocate(rwork(lrwork))
+  call alccheck('rwork','eigensolver',lrwork,info)
+  if (info /= 0) then
+     write(6,*) 'Can not allocate rwork in eigensolver_new'
+     ierr = 9
+     return
+  endif
+#endif
+  ! print the matrix for debug
+  !if (myrow_2d .ne. -1) then
+  !   allocate(work_prnt(nbl_2d))
+  !   call pdlaprnt( nmat, nmat, shs_bl, 1, 1, desca_2d, 0, 0, 'mat', 6, work_prnt )
+  !   deallocate(work_prnt)
+  !endif
+  !
+  if (inode == 0) then
+     write(6, *) nmat
+     write(6, *) desca_2d(1:9)
+     write(6, *) ellow, elup, ilow, iup, abstol, orfac, lwork, liwork
+  endif
+  ! Now call pzheevx/pdsyevx again to diagonalize the Hamiltonian
+#ifdef CPLX
+  call pzheevx('V','A','U', &
+#else
+  call pdsyevx('V','A','U', &
+#endif
+       nmat, shs_bl, 1, 1, desca_2d, ellow, elup, ilow, iup, abstol, nfound, &
+       nzfound, egv, orfac, egs_bl, 1, 1, desca_2d, work, lwork, &
+#ifdef CPLX
+       rwork, lrwork, &
+#endif
+       iwork, liwork, ifail, iclustr, gap, info)
+  ! check error messages
+  if (info < 0) then
+     write(6,*) ' error in parameters for pcheevx/pssyevx ', info
+     ierr = 9
+     return
+  endif
+  ! print the matrix for debug
+  !if (myrow_2d .ne. -1) then
+  !   allocate(work_prnt(nbl_2d))
+  !   call pdlaprnt( nmat, nmat, egs_bl, 1, 1, desca_2d, 0, 0, 'eigvec', 0, work_prnt )
+  !   deallocate(work_prnt)
+  !endif
+  !
+  
+  if (verbose) write(6,*) ' Sharing eigenvectors'
+  if (info > 0) then
+     write(6,*) ' convergence or memory problems in pcheevx/pssyevx'
+     write(6,*) ' info = ', info
+     if (verbose) then
+        write(6,*) ' iclustr = ', iclustr
+        write(6,*) ' gap = ', gap
+     endif
+     ierr = 10
+     return
+  endif
+99 continue
+  !
+  ! Copy eigenvector layout from scalapack layout back to program layout.
+  ! using pzgemr2d/pdgemr2d
+  !
+#ifdef CPLX
+  call pzgemr2d(nmat,nmat,egs_bl,1,1,desca_2d,shs,1,1,desca_1d, icntxt_1d)
+#else                                                          
+  call pdgemr2d(nmat,nmat,egs_bl,1,1,desca_2d,shs,1,1,desca_1d, icntxt_1d)
+#endif
+  !if (myrow_1d .ne. -1) then
+  !   allocate(work_prnt(nmat))
+  !   call pdlaprnt( nmat, nmat, shs, 1, 1, desca_1d, 0, 0, 'eigvec2', 0, work_prnt )
+  !   deallocate(work_prnt)
+  !endif
+  call MPI_BARRIER(comm,info)
+  if (myrow_2d .ne. -1) call blacs_gridexit(icntxt_2d)
+  if (myrow_1d .ne. -1) call blacs_gridexit(icntxt_1d)
+  if (myrow_2d .ne. -1 .and. mycol_2d .ne. -1) then
+    deallocate(ifail)
+    deallocate(gap)
+    deallocate(iclustr)
+    deallocate(iwork)
+#ifdef CPLX
+    deallocate(rwork)
+#endif
+    deallocate(work)
+    deallocate(egs_bl)
+    deallocate(shs_bl)
+  endif
+  if (verbose) write(6,*) 'Scalapack diagonalization done'
+#endif
+!#endif MPI
+
+end subroutine Zeigensolver_new
+!===================================================================
+

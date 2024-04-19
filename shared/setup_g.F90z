@@ -13,7 +13,7 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine Zsetup_g(gvec,kpt,qpt,pol_in,pol,k_p,nspin,tdldacut,verbose)
+subroutine Zsetup_g(gvec,kpt,qpt,pol_in,pol,k_p,nspin,tdldacut,lanczos,lessmemory,verbose)
 
   use typedefs
   use mpi_module
@@ -32,15 +32,20 @@ subroutine Zsetup_g(gvec,kpt,qpt,pol_in,pol,k_p,nspin,tdldacut,verbose)
   logical, intent(in) :: verbose
   ! TDLDA cutoff, in Ry
   real(dp), intent(in) :: tdldacut
+  ! whether use lanczos method
+  logical, intent(in) :: lanczos
+  ! option for lessmemory usage
+  integer, intent(in) :: lessmemory
 
   ! local variables
-  integer :: ii, jj, isp, ik, iq, jk, imin, imax, n_p, n_p_up
+  integer :: ii, jj, isp, ik, iq, jk, imin, imax, n_p, n_p_up, nv, nc
   integer, allocatable :: map_p(:,:)
   real(dp) :: occ_v, occ_c, tmp
 
   !-------------------------------------------------------------------
   ! Calculate dipole matrix elements.
   !
+  if ( .not. lanczos ) then
   do isp = 1, nspin
      do ik = 1, kpt%nk
         call Zget_dipole(gvec,kpt%wfn(isp,ik),ik,kpt%fk(1,ik), &
@@ -56,6 +61,7 @@ subroutine Zsetup_g(gvec,kpt,qpt,pol_in,pol,k_p,nspin,tdldacut,verbose)
         endif
      enddo
   enddo
+  endif ! end if lanczos
   !-------------------------------------------------------------------
   ! In periodic systems, calculate the matching pairs of (k,k') vectors:
   ! for each q-vector in the polarizability operator, conduction
@@ -83,7 +89,6 @@ subroutine Zsetup_g(gvec,kpt,qpt,pol_in,pol,k_p,nspin,tdldacut,verbose)
           ' Make sure the k-point grid is a full regular (Monkhorst-Pack) grid.'
      call die('Stop')
   endif
-
   !-------------------------------------------------------------------
   ! If no sets of occupied/empty orbitals were given by the user,
   ! take them from the calculated dipole matrix elements.
@@ -126,7 +131,20 @@ subroutine Zsetup_g(gvec,kpt,qpt,pol_in,pol,k_p,nspin,tdldacut,verbose)
   ! This will reduce the number of TDLDA eigenstates in the
   ! polarizability.
   !
-  allocate(map_p(4,kpt%wfn(1,1)%nstate*kpt%wfn(1,1)%nstate*nspin*kpt%nk))
+  !allocate(map_p(4,kpt%wfn(1,1)%nstate*kpt%wfn(1,1)%nstate*nspin*kpt%nk))
+  if ( nspin .eq. 2 ) then
+  nv = max(pol_in(1)%nval, pol_in(2)%nval) 
+  nc = max(pol_in(1)%ncond, pol_in(2)%ncond)
+  else
+  nv = pol_in(1)%nval
+  nc = pol_in(1)%ncond
+  endif
+  if (peinf%inode .eq. peinf%npes - 1) print *, " lanczos = ", lanczos, " lessmemory = ", lessmemory
+  if ( (.not. lanczos) .or. &
+       (lanczos .and. (lessmemory .ne. 4)) .or. &
+       (lanczos .and. (lessmemory .eq. 4) .and. (gvec%syms%ntrans .eq. 1)) ) then
+  !
+  allocate(map_p(4, nc*nv*nspin*kpt%nk))
   do iq = 1, qpt%nk
      n_p = 0
      map_p = 0
@@ -156,14 +174,19 @@ subroutine Zsetup_g(gvec,kpt,qpt,pol_in,pol,k_p,nspin,tdldacut,verbose)
 
      do ii = 1, gvec%syms%ntrans
         ! If ntr < 0, skip the construction of kernel.
+        ! if (peinf%master) print *, "call_pmap"
         if (pol(ii,iq)%ntr >= 0) &
-             call Zdefine_pmap(gvec%syms,kpt,pol(ii,iq),ii,n_p,map_p,nspin,n_p_up)
+             call Zdefine_pmap(gvec%syms,kpt,pol(ii,iq),ii,n_p,map_p,nspin,n_p_up,lanczos)
+        ! if (peinf%master) print *, "define_pmap"
         if (k_p(ii,iq)%ncol >= 0) &
              call define_kmap(gvec%syms,kpt,k_p(ii,iq),ii,n_p,map_p,n_p, &
              map_p,n_p_up,n_p_up)
+        ! if (peinf%master) print *, "define_kmap"
      enddo
   enddo
   deallocate(map_p)
+  !
+  endif ! .not. lanczos
 
 end subroutine Zsetup_g
 !===================================================================

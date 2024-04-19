@@ -207,6 +207,7 @@ subroutine Zwpol0_isdf(gvec,kpt,qpt,pol,k_p,nolda,nrep,nspin,iq0,nr_buff,isdf_in
      !
      ! Compute Tmtrx
      !
+#ifdef DEBUG
      if ( r_grp%inode == r_grp%npes-1 ) then
      !if ( peinf%master ) then
        write(6,*) " Done with Cmtrx_loc "
@@ -214,6 +215,7 @@ subroutine Zwpol0_isdf(gvec,kpt,qpt,pol,k_p,nolda,nrep,nspin,iq0,nr_buff,isdf_in
        call printmatrix(Cmtrx_loc(1,1), nzeta, mpol, 6)
        write(6,*) " Compute Tmtrx "
      endif
+#endif
      do ipe = 0, r_grp%npes-1
        istart = ipe*mpol + 1
        iend   = ipe*mpol + mpol
@@ -233,6 +235,7 @@ subroutine Zwpol0_isdf(gvec,kpt,qpt,pol,k_p,nolda,nrep,nspin,iq0,nr_buff,isdf_in
        call MPI_REDUCE(tmpTmtrx(1,1), Tmtrx(1,1), nzeta*tmpdim, &
          MPI_DOUBLE_SCALAR, MPI_SUM, ipe, r_grp%comm, info)
      enddo ! ipe loop
+#ifdef DEBUG
      if ( r_grp%inode == r_grp%npes-1 ) then
      !if ( peinf%master ) then
        write(6,*) " Done with Tmtrx "
@@ -240,6 +243,7 @@ subroutine Zwpol0_isdf(gvec,kpt,qpt,pol,k_p,nolda,nrep,nspin,iq0,nr_buff,isdf_in
        call printmatrix ( Tmtrx(1,1), nzeta, mpol, 6 )
        write(6,*) " Calculate Amtrx "
      endif
+#endif
      DEALLOCATE(Cmtrx_loc)
      DEALLOCATE(tmpTmtrx)
      !
@@ -261,10 +265,12 @@ subroutine Zwpol0_isdf(gvec,kpt,qpt,pol,k_p,nolda,nrep,nspin,iq0,nr_buff,isdf_in
 
      do ipe = 0, r_grp%npes-1
        call MPI_BARRIER(r_grp%comm, info)
+#ifdef DEBUG
        if (r_grp%inode .eq. ipe) then
           write(6,*) " ipe ", ipe, " Amtrx = "
           call printmatrix (Amtrx(1,1), nzeta, nzeta, 6)
        endif
+#endif
      enddo
      call MPI_ALLREDUCE(MPI_IN_PLACE, Amtrx, nzeta*nzeta,&
        MPI_DOUBLE_SCALAR, MPI_SUM, r_grp%comm, info)
@@ -334,14 +340,18 @@ subroutine Zwpol0_isdf(gvec,kpt,qpt,pol,k_p,nolda,nrep,nspin,iq0,nr_buff,isdf_in
      enddo
      ! calculate W(r) = \sum_{u,v} vzeta_u(r) A_{u,v} vzeta_v(r)
      !
+#ifdef DEBUG
      if ( peinf%master ) then
        write(6,*) " calculate W(r) "
      endif
      if (peinf%master) write(6,*) "Total ig (w_grp%mydim) = ", w_grp%mydim
+#endif
      do ig = 1, w_grp%mydim
        if (ig+w_grp%offset > nr_buff) exit
+#ifdef DEBUG
        if (peinf%master .and. mod(ig,100)== 0) &
          write(6,*) "working on W(ig), ig = ", ig
+#endif
        ! First calculate \sum_u vzeta_u(r) A_{u,v}
        call Zgemv('n', nzeta, nzeta, &
          Zone, Amtrx(1,1), nzeta, &
@@ -350,13 +360,14 @@ subroutine Zwpol0_isdf(gvec,kpt,qpt,pol,k_p,nolda,nrep,nspin,iq0,nr_buff,isdf_in
        vr(w_grp%offset+ig) = vr(w_grp%offset+ig) + & 
          Zdot_c(nzeta, vzeta(ig,1:nzeta), 1, &
          Avzeta(1:nzeta), 1)
+#ifdef DEBUG
        if ( ig == 1 .and. w_grp%offset == 0 ) then
-
          write(6,*) " vzeta   Avzeta "
          do ii = 1, nzeta 
            write(6,*) vzeta(1,ii), Avzeta(ii)
          enddo
        endif
+#endif
      enddo
      DEALLOCATE(Amtrx)
      DEALLOCATE(vzeta)
@@ -379,8 +390,11 @@ subroutine Zwpol0_isdf(gvec,kpt,qpt,pol,k_p,nolda,nrep,nspin,iq0,nr_buff,isdf_in
   ! close hdf5 interfaces
   call h5close_f(h5err)
 
+  if (r_grp%master) then
+    close(pol_unit)
+  endif
   call MPI_ALLREDUCE(MPI_IN_PLACE, vr, nr_buff, &
-   MPI_DOUBLE_SCALAR, MPI_SUM, peinf%comm, info)
+     MPI_DOUBLE_SCALAR, MPI_SUM, peinf%comm, info)
   !
   if (peinf%master) then
      write(6,*) " output W(r) to wpol0.dat and wpol0_rho.dat "

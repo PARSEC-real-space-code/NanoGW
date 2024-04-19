@@ -51,6 +51,7 @@ program bsesolv
   type (kernelinfo), dimension(:), allocatable :: k_vc, k_x
   type (polinfo), dimension(:,:), allocatable :: pol
   type (polinfo), dimension(:), allocatable :: bsepol
+  type (options) :: opt
 
   character (len=800) :: lastwords
   character (len=40), allocatable :: routnam(:)
@@ -69,20 +70,32 @@ program bsesolv
   integer :: n_intp, intp_type, isdf_type, info
   integer, allocatable :: timerlist(:)
 
+  ! WG debug
+  integer :: outdbg
+  character (len=20) :: dbg_filename
+
   !-------------------------------------------------------------------
   ! Initialization.
   !
   call header('BSESOLV')
+  ! W Gao open dbg files
+  write(dbg_filename,"(i7)") peinf%inode
+  outdbg = peinf%inode+198812
+  dbg_filename = "kernel_dbg"//adjustl(dbg_filename)
+  open(outdbg,file=dbg_filename,status='unknown',iostat=info) 
+
   !-------------------------------------------------------------------
   ! Read input parameters from rgwbs.in.
   !
   call input_g(pol_in,qpt,tdldacut,nbuff,lcache,w_grp%npes, &
           nolda,tamm_d,r_grp%num,dft_code,doisdf,n_intp,intp_type,isdf_type,&
-          isdf_in%lessmemory,isdf_in%fastselect,.false.)
+          isdf_in%lessmemory,isdf_in%fastselect,opt%eigsolver,opt%linear_algebra,opt%pdgesv_nbl2d,.false.)
   ! Currently, the ISDF method is not implemented in BSE package
   if (doisdf) then
-     write(6, *) "ISDF method is not implemented for BSE for now."
-     write(6, *) "Proceed without using ISDF"
+     if (peinf%master) then
+        write(6, *) "ISDF method is not implemented for BSE for now."
+        write(6, *) "Proceed without using ISDF"
+     endif
      doisdf = .false.
   endif
   call input_b(bsepol_in,q_bse,writeig,trip_flag,trunc_c,mix_flag, &
@@ -204,6 +217,7 @@ program bsesolv
      call dsetup_b(gvec,kpt,qpt,q_bse,pol_in,pol,bsepol_in,bsepol, &
           k_p,k_vv,k_cc,k_vc,k_x,nspin,readocc,tdldacut,bsecut)
   endif
+  print *, "finish setup_b"
   call timacc(2,2,tsec)
 
   !-------------------------------------------------------------------
@@ -381,15 +395,15 @@ program bsesolv
   if (kpt%lcplx) then
      call zcalculate_bse(gvec,kpt,qpt,q_bse,bsepol_in,k_p,k_vv,k_cc, &
           k_vc,k_x,pol,bsepol,nolda,tamm_d,trip_flag,trunc_c,writeig, &
-          mix_flag,noxchange,snorm,hf,nspin,ecutb2,eref,isdf_in)
+          mix_flag,noxchange,snorm,hf,nspin,ecutb2,eref,isdf_in,opt)
   else
      call dcalculate_bse(gvec,kpt,qpt,q_bse,bsepol_in,k_p,k_vv,k_cc, &
           k_vc,k_x,pol,bsepol,nolda,tamm_d,trip_flag,trunc_c,writeig, &
-          mix_flag,noxchange,snorm,hf,nspin,ecutb2,eref,isdf_in)
+          mix_flag,noxchange,snorm,hf,nspin,ecutb2,eref,isdf_in,opt)
   endif
 
   if (peinf%master) call delete_file(90,'bse_chkpt.dat')
-
+  close(outdbg)
   !-------------------------------------------------------------------
   ! Time accounting.
   !

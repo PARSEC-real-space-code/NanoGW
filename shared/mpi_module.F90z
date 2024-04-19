@@ -49,6 +49,22 @@ module mpi_module
      ! (offset+mydim)
      integer :: offset
 
+     ! ncv : total number of (c,v) pairs
+     integer :: ncv
+     ! local number of (c,v) pairs
+     integer :: myncv
+     integer :: ldncv
+     integer, dimension(:), pointer :: ncv_start
+     integer, dimension(:), pointer :: ncv_end
+
+     ! n_intp_r : total number of interpolation points in the irreducible zone
+     integer :: n_intp_r
+     ! local number of interpolation points in the irreducible zone
+     integer :: myn_intp_r
+     integer :: ldn_intp_r
+     integer, dimension(:), pointer :: n_intp_start 
+     integer, dimension(:), pointer :: n_intp_end
+
      ! plan of the groups: all processors belonging to j-th group
      ! have peinf%inode = map(inode+1,j+1)
      integer, dimension(:,:), pointer :: map
@@ -364,7 +380,9 @@ contains
 
        do jpe = 0, w_grp%npes - 1
           do ipe = 0, w_grp%npes - 1
-             tag = ipe + w_grp%npes*jpe
+             !tag = ipe + w_grp%npes*jpe 
+             ! The tag will be out of bound for large systems
+             tag = jpe
              if (jpe == ipe) then
                 if (ipe == w_grp%inode) call Zcopy(ncount(jpe), &
                      f_distr(1,ipe+1),1,f_loc(offset(jpe)),1)
@@ -435,7 +453,8 @@ contains
 
        do jpe = 0, w_grp%npes - 1
           do ipe = 0, w_grp%npes - 1
-             tag = ipe + w_grp%npes*jpe
+             !tag = ipe + w_grp%npes*jpe
+             tag = jpe
              if (jpe == ipe) then
                 if (ipe == w_grp%inode) call Zcopy(ncount(jpe), &
                      f_loc(offset(jpe)),1,f_distr(1,ipe+1),1)

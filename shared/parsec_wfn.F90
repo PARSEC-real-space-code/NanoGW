@@ -469,6 +469,7 @@ subroutine parsec_wfn(gvec,kpt,nmap,nspin,wmap,init_gr)
            if (gvec%per > 0) write(6,'(a,3f13.6)') ' K-point = ', kpt%fk(:,ikp)
            write(6,*) ' Number of occupied levels, spin ', isp, &
                 ' : ', sum(kpt%wfn(isp,ikp)%occ0)
+#ifdef DEBUG
            write(6,*) 'DFT Eigenvalues (eV), spin ', isp, ' :'
            write(6,'(10f7.2)') &
                 (kpt%wfn(isp,ikp)%e0(ii)*ryd,ii=1,kpt%wfn(isp,ikp)%nstate)
@@ -476,6 +477,7 @@ subroutine parsec_wfn(gvec,kpt,nmap,nspin,wmap,init_gr)
            write(6,'(10i5)') &
                 (kpt%wfn(isp,ikp)%irep(ii),ii=1,kpt%wfn(isp,ikp)%nstate)
            write(6,*)
+#endif
         enddo
      enddo
      write(6,'(2a,e16.8)') ' Maximum value of electron density ', &
@@ -600,7 +602,7 @@ subroutine parsec_wfn(gvec,kpt,nmap,nspin,wmap,init_gr)
         allocate(kpt%wfn(isp,ikp)%map(kpt%wfn(isp,ikp)%nstate))
         kpt%wfn(isp,ikp)%map = 0
         icount = 0
-        write(6,*) " in parsec_wfn: nmap = ", nmap
+        ! write(6,*) " in parsec_wfn: nmap = ", nmap
         if (nmap == 0) then
            icount = kpt%wfn(isp,ikp)%nstate
            do ii = 1, kpt%wfn(isp,ikp)%nstate
@@ -620,7 +622,7 @@ subroutine parsec_wfn(gvec,kpt,nmap,nspin,wmap,init_gr)
            enddo
         endif
         kpt%wfn(isp,ikp)%nmem = icount
-        write(6,*) " in parsec_wfn: nmem = ", kpt%wfn(isp,ikp)%nmem
+        ! write(6,*) " in parsec_wfn: nmem = ", kpt%wfn(isp,ikp)%nmem
         allocate(kpt%wfn(isp,ikp)%imap(kpt%wfn(isp,ikp)%nmem))
         kpt%wfn(isp,ikp)%imap = 0
         do ii = 1, kpt%wfn(isp,ikp)%nstate
@@ -629,7 +631,7 @@ subroutine parsec_wfn(gvec,kpt,nmap,nspin,wmap,init_gr)
         enddo
 
         ! W Gao dbg
-        if(peinf%master .and. .true.) then
+        if(peinf%master .and. .false.) then
           write(*,'("isp = ",i2," ikp = ",i4)') isp, ikp
           write(*,'("    i   wfn%map(ii) ")')
           do ii = 1, kpt%wfn(isp,ikp)%nstate

@@ -141,6 +141,7 @@ subroutine Zkernel(gvec,kpt,k_mat,irp,kflag,nspin,qkt_in,distrib,readflag,&
   ! smallest possible number of Poisson solver executions.
   !
   ! WG debug
+#ifdef DEBUG
   if (verbose) then
      if (r_grp%master) write(6,*) "dbg :", "k_mat%nrow=", k_mat%nrow, "k_mat%ncol=", k_mat%ncol
      write(outdbg,*) "dbg  peinf%inode ",peinf%inode,"k_mat%row(1:4,:)"
@@ -152,6 +153,7 @@ subroutine Zkernel(gvec,kpt,k_mat,irp,kflag,nspin,qkt_in,distrib,readflag,&
        write(outdbg,*) icol,k_mat%col(1,icol),k_mat%col(2,icol),k_mat%col(3,icol),k_mat%col(4,icol)
      enddo
   endif 
+#endif
   if (k_mat%nrow > k_mat%ncol) then
      iswitch = .true.
      nn = k_mat%nrow
@@ -190,8 +192,10 @@ subroutine Zkernel(gvec,kpt,k_mat,irp,kflag,nspin,qkt_in,distrib,readflag,&
   k_tmp(:)%nblock_max = nbuff
   if (r_grp%master) &
        write(6,*) 'Using ',nbuff_max,' data blocks to store matrix elements.'
+#ifdef DEBUG
   write(6, *) "allocate(k_tmp(nbuff_max)), where nbuff_max = ", nbuff_max
   write(6, *) "k_tmp(:)%nblock_max = nbuff = ", nbuff
+#endif
 
   !-------------------------------------------------------------------
   ! Calculate all necessary matrix elements.
@@ -199,16 +203,16 @@ subroutine Zkernel(gvec,kpt,k_mat,irp,kflag,nspin,qkt_in,distrib,readflag,&
   call timacc(63,1,tsec)
   if(k_mat%isdf) then
     if(isdf_in%fastselect) then
-      write(*,*) "call k_integrate_isdf_fastselect"
+      if(peinf%master) write(*,*) "call k_integrate_isdf_fastselect"
       call Zk_integrate_isdf_fastselect(gvec,kpt,k_mat,k_tmp,irp,kflag,nspin,nbuff_max,qkt_in,&
          isdf_in)
     else
-      write(*,*) "call k_integrate_isdf"
+      if(peinf%master) write(*,*) "call k_integrate_isdf"
       call Zk_integrate_isdf(gvec,kpt,k_mat,k_tmp,irp,kflag,nspin,nbuff_max,qkt_in,&
          isdf_in)
     endif
   else
-    write(*,*) "call k_integrate"
+    if(peinf%master) write(*,*) "call k_integrate"
     call Zk_integrate(gvec,kpt,k_mat,k_tmp,irp,kflag,nspin,nbuff_max,qkt_in)
   endif
   call timacc(63,2,tsec)

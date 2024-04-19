@@ -12,17 +12,15 @@
 #  subdirectory ./config
 #####################
 
-MACH = cori
-#MACH = cori.serial
-#MACH = ices
-#MACH = edison
-#MACH = stampede2.2018
-#MACH = linux
-#MACH = stampede2.2018.skx
-#MACH = stampede2.2018.knl
+#MACH = sugon_kunshan_dcu
+MACH = perlmutter_nvdia
+#MACH = perlmutter_intel
+#MACH = linux_nv
+#MACH  = linux_nv_openblas
+#MACH = linux_nv_mkl
 
 # Version date: must have exactly 28 characters!
-VERSIONDATE = "Fri Jan  2 17:07:49 EST 2009"
+VERSIONDATE = "Wed Aug 23 17:07:49 EST 2023"
 
 #####################
 # Typically, no changes are needed beyond this point

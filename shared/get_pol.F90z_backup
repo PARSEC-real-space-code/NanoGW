@@ -1,0 +1,140 @@
+#include "../shared/mycomplex.h"
+!===================================================================
+!
+! Group master reads TDLDA eigenvectors for representation irp
+! from pol_diag.dat and distributed them among all PEs in the group.
+!
+! OUTPUT:
+!   pol%nn = nn
+!   pol%ltv = .true.
+!   pol%tv : allocated and read from file pol_diag.dat
+!
+! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
+! This file is part of RGWBS. It is distributed under the GPL v1.
+!
+!-------------------------------------------------------------------
+subroutine Zget_pol(pol,iunit,nrep,nq,irp,iq,nn)
+
+  use typedefs
+  use mpi_module
+  implicit none
+#ifdef MPI
+  include 'mpif.h'
+#endif
+
+  ! arguments
+  ! polarizability structure
+  type (polinfo), intent(inout) :: pol
+  integer, intent(in) :: &
+       iunit, &       ! number of file pol_diag.dat
+       nrep, &        ! number of representations
+       nq, &          ! number of q-vectors
+       irp, &         ! index of current representation
+       iq, &          ! index of current q-vector
+       nn             ! number of eigenpairs per processor (local variable)
+
+
+  ! local variables
+  character (len=800) :: lastwords
+  ! counters and temporary arrays
+  integer :: ii, jj, npol, icol, jrp, jq, ipe, pcol, &
+    nblock, remain, istart, ncount, itag
+  integer, parameter :: ntr_block = 6000
+  SCALAR, allocatable :: tmpv(:)
+#ifdef MPI
+  integer :: info
+  integer :: status(MPI_STATUS_SIZE)
+#endif
+
+  pol%nn = nn
+  pol%ltv = .true.
+  allocate(pol%Ztv(pol%nn,pol%nn*r_grp%npes))
+  pol%Ztv = Zzero
+  if (r_grp%master) then
+     do ii = 1, nrep * nq
+        read(iunit) jrp, jq, npol
+        write(6,'(a,i3,a,2i3,i8)') ' Seek representation ', irp, &
+             ' in pol_diag.dat. ', jrp, jq, npol
+        if (jrp == irp .and. jq == iq) goto 60
+        do jj = 1, npol + 2
+           read(iunit)
+        enddo
+        if (jrp == nrep .and. jq == nq) then
+           rewind(iunit)
+           read(iunit)
+           read(iunit)
+        endif
+     enddo
+     write(lastwords,*) 'ERROR: representation ', irp, ' q-vector ', &
+          iq, 'not found in pol_diag.dat!'
+     call die(lastwords)
+60   continue
+     if (npol /= pol%ntr) then
+        write(lastwords,*) 'ERROR: number of transitions in ', &
+             'pol_diag.dat is wrong!', npol, pol%ntr
+        call die(lastwords)
+     endif
+     read(iunit)
+     read(iunit)
+  endif
+  allocate(tmpv(pol%ntr))
+  do icol = 1, pol%ntr
+     ipe = (icol-1)/pol%nn
+     pcol = icol - ipe * pol%nn
+     if (r_grp%master) then
+        read(iunit) (tmpv(ii), ii=1,pol%ntr)
+        tmpv = MYCONJG(tmpv)
+        if (ipe == r_grp%inode) then
+           call Zcopy(pol%ntr,tmpv,1,pol%Ztv(pcol,1),pol%nn)
+        else
+#ifdef MPI
+           ! Send tmpv by small blocks, it's faster 
+           nblock = pol%ntr/ntr_block
+           remain = mod(pol%ntr, ntr_block)
+           istart = 1
+           do ii = 1, nblock+1
+             if ( ii <= nblock ) then
+               ncount = ntr_block
+             else
+               ncount = remain
+             endif
+             if ( ncount == 0 ) continue
+             itag = ipe*100000 + ii
+             call MPI_SEND(tmpv(istart),ncount,MPI_DOUBLE_SCALAR, &
+                  ipe,itag,r_grp%comm,info)
+             istart = istart + ncount
+           enddo ! ii loop
+#endif
+        endif
+     else
+        if (ipe == r_grp%inode) then
+#ifdef MPI
+           ! Recv tmpv by small blocks
+           nblock = pol%ntr/ntr_block
+           remain = mod(pol%ntr, ntr_block)
+           istart = 1
+           do ii = 1, nblock+1
+             if ( ii <= nblock ) then
+               ncount = ntr_block
+             else 
+               ncount = remain
+             endif
+             if ( ncount == 0 ) continue
+             itag = ipe*100000 + ii
+             call MPI_RECV(tmpv(istart),ncount,MPI_DOUBLE_SCALAR, &
+                  r_grp%masterid,itag,r_grp%comm,status,info)
+             call Zcopy(ncount,tmpv(istart),1,pol%Ztv(pcol,istart),pol%nn)
+             istart = istart + ncount
+           enddo ! ii loop
+#endif
+        endif
+     endif
+#ifdef MPI
+     call MPI_BARRIER(r_grp%comm,info)
+#endif
+  enddo
+  deallocate(tmpv)
+
+end subroutine Zget_pol
+!===================================================================
+
