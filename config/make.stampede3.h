@@ -1,7 +1,10 @@
 ##
 # stampede3.tacc.utexas.edu, Intel Fortran compiler ifx, FFTW 3.*, MPI, HDF5
 #
-# Note: module load intel/24.0 hdf5/1.14.3
+# Note: module load phdf5/1.14.3
+# Currently Loaded Modules:
+#  1) intel/24.0   3) autotools/1.4   5) xalt/3.0.1   7) phdf5/1.14.3
+#  2) impi/21.11   4) cmake/3.28.1    6) TACC
 #
 FCPP    = /usr/bin/cpp -P -traditional-cpp
 CPPOPT  = -DUSEFFTW3 -DMPI -DINTEL # -DDEBUG

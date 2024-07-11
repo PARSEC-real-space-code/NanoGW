@@ -12,12 +12,7 @@
 #  subdirectory ./config
 #####################
 
-#MACH = sugon_kunshan_dcu
-MACH = perlmutter_nvdia
-#MACH = perlmutter_intel
-#MACH = linux_nv
-#MACH  = linux_nv_openblas
-#MACH = linux_nv_mkl
+MACH ?= perlmutter_nvdia
 
 # Version date: must have exactly 28 characters!
 VERSIONDATE = "Wed Aug 23 17:07:49 EST 2023"
