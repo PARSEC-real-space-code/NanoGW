@@ -1,27 +1,31 @@
-## Brief intro of NanoGW
+# Brief introduction to NanoGW
 
-7/8/2024
+7/14/2024
 
-### Updates
-We implemented a Lanczos-based method to accelerate full-frequency GW calculations (named as LanczosGW). For now, we have demonstrate the great efficiency of LanczosGW method for finite systems. More details is discussed in [Physical Review Letters **132**, 126402](https://doi.org/10.1103/PhysRevLett.132.126402).
+## Updates
+We implemented a Lanczos-based method to accelerate full-frequency GW calculations. Currently, we have demonstrated the high efficiency of this method for finite systems. More details are discussed in [Physical Review Letters **132**, 126402](https://doi.org/10.1103/PhysRevLett.132.126402).
 
-### developers
-The first version of NanoGW was developed by Murilo Tiago and James R. Chelikowsky between 2004 and 2009. Later, it is developed and maintained by Linda Hung and Weiwei Gao. Weiwei Gao implemented a symmetry-adapted interpolative separable density fitting method to drastically speed up the evaluation of kernel matrix elements in the calculations performed with NanoGW.  
-NanoGW was originally named as RGWBS, which is more difficult to remember (so we changed the name to “NanoGW”). Since the main advantage of this package is for confined, nanoscale systems, so we call it NanoGW.
+## Developers
+The first version of NanoGW was developed by Murilo L. Tiago and James R. Chelikowsky between 2004 and 2009. Later, it was further developed and maintained by Linda Hung and Weiwei Gao. Weiwei Gao implemented a symmetry-adapted interpolative separable density fitting (ISDF) method to drastically speed up the evaluation of kernel matrix elements in the NanoGW calculations.  
 
-### What can NanoGW do:
+NanoGW was originally named "RGWBS", which was less memorable, prompting us to change its name. Given its primary advantage for confined, nanoscale systems, we adopted the name "NanoGW".
+
+## Features of NanoGW
 This package can perform the following calculations:
-1.	Linear-response time-dependent density functional theory (by solving Casida equation)
+1.	Linear-response time-dependent density functional theory (by solving the Casida equation)
 2.	Full-frequency GW calculation with or without LDA vertex function (does not support spin-orbit coupling)
-3.	Construct and solve Bethe-Salpeter equation
-This package has been tested thoroughly and optimized for molecules and nanoclusters. It runs particularly efficient for small-size (less than 30 atoms) molecules or clusters. This package can also deal with crystalline systems. However, its functionality for dealing crystals has not been thoroughly tested yet. 
-We have tested it one a few Linux/Unix machines, including NERSC perlmutter, TACC stampede3, Workstation of Oden institute at UT Austin and personal computers that run Ubuntu or Mac OS. Now it can handles molecules (12 atoms or 50 electrons) with a few minutes and reasonable accuracy on personal computers with a 2-core/4-thread Intel processor. 
+3.	Constructing and solving the Bethe-Salpeter equation
+	
+This package has been thoroughly tested and optimized for molecules and nanoclusters. It runs particularly efficiently for small-size (less than 30 atoms) molecules or clusters. This package can also handle crystalline systems. However, its functionality for dealing with crystals has not been thoroughly tested yet.
 
-### What does NanoGW need as input:
-This package requires wave functions and Kohn-Sham energies calculated with PARSEC as input. It also support plane-wave based DFT package PARATEC. NanoGW will convert the plane-wave based wave functions to real-space based wave functions. However, its compatibility with PARATEC has not been thoroughly tested yet. 
+We have tested it on a few Linux/Unix machines, including NERSC Perlmutter, TACC Stampede3, the workstation of Oden Institute at UT Austin, and personal computers that run Ubuntu or Mac OS. It can now handle molecules (12 atoms or 50 electrons) within a few minutes and with reasonable accuracy on personal computers with a 2-core/4-thread Intel processor. 
 
-### How to cite this software:
-If you find NanoGW is useful and use it for your publication, we appreciate if you can cite the following paper:
+## Input requirements for NanoGW
+This package requires wave functions and Kohn-Sham energies calculated with [PARSEC](https://github.com/PARSEC-real-space-code/PARSEC) as input. It also supports the plane-wave-based DFT package PARATEC. NanoGW converts plane-wave-based wave functions to real-space-based wave functions. However, its compatibility with PARATEC has not been thoroughly tested yet.
+
+## How to cite NanoGW
+If you find NanoGW useful and use it for your publication, we would appreciate it if you could cite the following paper:  
+Murilo L. Tiago and James R. Chelikowsky, *Optical excitations in organic molecules, clusters, and defects studied by first-principles Green's function methods*, [Physical Review B **73**, 205334](https://doi.org/10.1103/PhysRevB.73.205334) (2006).
 ```
 @article{tiago2006optical,
   title={Optical excitations in organic molecules, clusters, and defects studied by first-principles Green’s function methods},
@@ -34,7 +38,8 @@ If you find NanoGW is useful and use it for your publication, we appreciate if y
   publisher={APS}
 }
 ```
-If you use interpolative separable density fitting (ISDF) to speed up your calculation, please also cite the following reference:
+If you use interpolative separable density fitting (ISDF) to speed up your calculation, please also cite the following reference:  
+Weiwei Gao and James R. Chelikowsky, *Accelerating time-dependent density functional theory and GW calculations for molecules and nanoclusters with symmetry adapted interpolative separable density fitting*, [Journal of Chemical Theory and Computation **16**, 2216](https://doi.org/10.1021/acs.jctc.9b01025) (2020).
 ```
 @article{gao2020accelerating,
   title={Accelerating time-dependent density functional theory and GW calculations for molecules and nanoclusters with symmetry adapted interpolative separable density fitting},
@@ -47,7 +52,8 @@ If you use interpolative separable density fitting (ISDF) to speed up your calcu
   publisher={ACS Publications}
 }
 ```
-If you use LanczosGW to speed up your calculation, please also cite the following reference:
+If you use the Lanczos method to speed up your calculation, please also cite the following reference:  
+Weiwei Gao, Zhao Tang, Jijun Zhao, and James R. Chelikowsky, *Efficient full-frequency GW calculations using a Lanczos method*, [Physical Review Letters **132**, 126402](https://doi.org/10.1103/PhysRevLett.132.126402) (2024).
 ```
 @article{gao2024efficient,
   title={Efficient Full-Frequency GW Calculations Using a Lanczos Method},
@@ -61,7 +67,7 @@ If you use LanczosGW to speed up your calculation, please also cite the followin
 }
 ```
 
-### An incomplete list of papers that use NanoGW:
+## An incomplete list of papers using NanoGW
 1.  Murilo L. Tiago and James R. Chelikowsky, *First-principles GW–BSE excitations in organic molecules*, [Solid State Communications **136**, 333](https://doi.org/10.1016/j.ssc.2005.08.012) (2005).
 2.  Marie Lopez del Puerto, Murilo L. Tiago, and James R. Chelikowsky, *Excitonic effects and optical properties of passivated CdSe clusters*, [Physical Review Letters **97**, 096401](https://doi.org/10.1103/PhysRevLett.97.096401) (2006).
 3.  Murilo L. Tiago and James R. Chelikowsky, *Optical excitations in organic molecules, clusters, and defects studied by first-principles Green's function methods*, [Physical Review B **73**, 205334](https://doi.org/10.1103/PhysRevB.73.205334) (2006).
