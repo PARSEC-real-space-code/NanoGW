@@ -14,7 +14,7 @@ EXT     = .mpi
 F90s    = mpif90 # Serial compiler
 F90     = $(F90s)
 
-OPTS    = -O3 -axCORE-AVX512 -qmkl=cluster # -check bounds
+OPTS    = -O3 -xCORE-AVX512 -qmkl=cluster # -check bounds
 OPTS2   = -I${TACC_HDF5_INC} 
 
 FFTW_DIR = 
