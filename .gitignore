@@ -1,17 +1,17 @@
 # Prerequisites
 *.d
 
-# Compiled Object files
+# Compiled object files
 *.slo
 *.lo
 *.o
 *.obj
 
-# Precompiled Headers
+# Precompiled headers
 *.gch
 *.pch
 
-# Compiled Dynamic libraries
+# Compiled dynamic libraries
 *.so
 *.dylib
 *.dll
@@ -21,7 +21,7 @@
 *.smod
 tmp*/
 
-# Compiled Static libraries
+# Compiled static libraries
 *.lai
 *.la
 *.a
@@ -33,3 +33,19 @@ tmp*/
 *.app
 *.mpi
 
+# Extra libraries
+LIB/libstring_f/.deps/
+LIB/libstring_f/Makefile
+LIB/libstring_f/config.log
+LIB/libstring_f/config.status
+LIB/libstring_f/include/
+LIB/libxc/Makefile
+LIB/libxc/config.h
+LIB/libxc/config.log
+LIB/libxc/config.status
+LIB/libxc/include/
+LIB/libxc/src/.deps/
+LIB/libxc/src/Makefile
+LIB/libxc/stamp-h1
+LIB/libxc/testsuite/.deps/
+LIB/libxc/testsuite/Makefile
