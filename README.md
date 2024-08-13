@@ -18,9 +18,33 @@ This package can perform the following calculations:
 	
 This package has been thoroughly tested and optimized for molecules and nanoclusters. It runs particularly efficiently for small-size (less than 30 atoms) molecules or clusters. This package can also handle crystalline systems. However, its functionality for dealing with crystals has not been thoroughly tested yet.
 
-We have tested it on a few Linux/Unix machines, including NERSC Perlmutter, TACC Stampede3, the workstation of Oden Institute at UT Austin, and personal computers that run Ubuntu or Mac OS. It can now handle molecules (12 atoms or 50 electrons) within a few minutes and with reasonable accuracy on personal computers with a 2-core/4-thread Intel processor. 
+We have tested it on a few Linux/Unix machines, including NERSC Perlmutter, TACC Stampede3, the workstation of Oden Institute at UT Austin, and personal computers that run Ubuntu or Mac OS. It can now handle molecules (12 atoms or 50 electrons) within a few minutes and with reasonable accuracy on personal computers with a 2-core/4-thread Intel processor.  
 
-## Input requirements for NanoGW
+## How to compile
+Before proceeding with these steps, you may need to load the required modules as specified in the configuration files. Compile the extra libraries before building the main NanoGW code:  
+```bash
+cd LIB/libstring_f
+pwd
+./configure --prefix=<current_directory>
+make
+make install
+
+cd ../libxc
+pwd
+./configure --prefix=<current_directory>
+make
+make install
+cd ../..
+```
+
+Then you may compile the NanoGW code for the sigma calculation:  
+```bash
+make sigma MACH=vista_gg
+```
+
+Replace `vista_gg` with the appropriate machine-dependent configuration name from the [config](config) directory. You may need to adjust some parameters to fit your programming environment.  
+
+## Input requirements
 This package requires wave functions and Kohn-Sham energies calculated with [PARSEC](https://github.com/PARSEC-real-space-code/PARSEC) as input. It also supports the plane-wave-based DFT package PARATEC. NanoGW converts plane-wave-based wave functions to real-space-based wave functions. However, its compatibility with PARATEC has not been thoroughly tested yet.
 
 ## How to cite NanoGW

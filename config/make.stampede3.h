@@ -24,7 +24,7 @@ LIBLAPACK =
 EXTRA_DIR=../LIB
 LIBXC = -L${EXTRA_DIR}/libstring_f -L${EXTRA_DIR}/libxc/src -lxc -lstring_f # -lxcf90
 
-LIBHDF5 = -Wl,-rpath,${TACC_HDF5_LIB} -L${TACC_HDF5_LIB} -lhdf5_fortran -lz
+LIBHDF5 = -L${TACC_HDF5_LIB} -lhdf5_fortran
 
 AUX_SRC = aux_generic.f90
 
