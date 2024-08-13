@@ -7,7 +7,6 @@ CPPOPT  = -DUSEFFTW3 -DMPI -D_CUDA # -DDEBUG
 EXT     = .nvdia.mpi
 
 F90s    = ftn
-#F90s    = mpifort
 F90     = $(F90s)
 
 #FFTW3_INC_DIR = 
