@@ -110,7 +110,7 @@ subroutine Zcalculate_sigma(nspin,nkpt,n_it,it_scf,nr_buff,static_type, &
         if (qpt%zerok(iq)) exit
      enddo
      if (nr_buff > 0) then
-        if (peinf%master) inquire(file='wpol0.dat',exist=lstop)
+        if (peinf%master) inquire(file='wpol0.dat', exist=lstop)
 #ifdef MPI
         call MPI_BCAST(lstop,1,MPI_LOGICAL,peinf%masterid,peinf%comm,info)
 #endif

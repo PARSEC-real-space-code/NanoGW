@@ -46,10 +46,13 @@
 !
 !-------------------------------------------------------------------
 program sigma
+
 #ifdef HIPMAGMA
   use magma
 #endif
+
   use typedefs
+
 #ifdef DCU
   use sub_module
   use hipfort
@@ -57,6 +60,7 @@ program sigma
   use hipfort_types
   use hipfort_hipblas
 #endif
+
 #ifdef _CUDA
 ! Need to include a couple of modules:
 !   cublas: required to use generic BLAS interface
@@ -65,11 +69,14 @@ program sigma
   use cublas
   use cudafor
 #endif
+
   use mpi_module
   implicit none
+
 #ifdef MPI
   include 'mpif.h'
 #endif
+
   type (gspace) gvec
   type (kptinfo) :: kpt, kpt_sig
   type (qptinfo) :: qpt
@@ -110,10 +117,13 @@ program sigma
            timerlist(:), icv(:), intp_r(:), idum(:), sort_idx(:), intp_r_tmp(:)
   real(dp), allocatable :: rho_at_intp_r(:)
   logical, allocatable :: not_duplicate(:)
-  !
+
+#ifdef DEBUG  
   ! WG debug
   integer :: outdbg, rho_intp_dbg
   character (len=20) :: dbg_filename
+#endif
+
 #ifdef DCU
   integer :: ndevs, mydevice
 #endif
@@ -135,11 +145,13 @@ program sigma
   print *, peinf%inode, "finished set device"
 #endif
 
+#ifdef DEBUG
   ! W Gao open dbg files
   write(dbg_filename,"(i7)") peinf%inode
   outdbg = peinf%inode+198812
   dbg_filename = "kernel_dbg"//adjustl(dbg_filename)
   open(outdbg,file=dbg_filename,status='unknown',iostat=info) 
+#endif
   !-------------------------------------------------------------------
   ! Read input parameters from rgwbs.in.
   !
@@ -314,8 +326,10 @@ program sigma
   call timacc(2,2,tsec)
 
   if (doisdf) then
+#ifdef DEBUG
      rho_intp_dbg = 100001
      open(rho_intp_dbg,file="rho_intp_dbg.dat",status='unknown',iostat=info)
+#endif
      ! --- prepare some inputs for the ISDF method ---
      ! W Gao find the index of highest occupied orbital "ihomo"
      ihomo = 1
@@ -387,40 +401,52 @@ program sigma
      allocate(not_duplicate(n_intp_r))
      allocate(sort_idx(n_intp_r))
      not_duplicate = .True.
+#ifdef DEBUG
      if (peinf%master) write(rho_intp_dbg, *) &
         "# rho at interpolation points "
+#endif
      do ipt = 1, n_intp_r
         igrid = intp_r_tmp(ipt)
         jgrid = (igrid-1)/gvec%syms%ntrans + 1
         rho_at_intp_r(ipt) = kpt%rho(jgrid,1)
+#ifdef DEBUG
         if (peinf%master) write(rho_intp_dbg, '(i7,i7,f30.23)') ipt, intp_r_tmp(ipt), kpt%rho(jgrid,1)
+#endif
      enddo
      call quicksort(n_intp_r, rho_at_intp_r, sort_idx)
      n_dummy = 0
      ! Note: if there are a few points having the same rho, then
      !       we pick up the last point of these duplicated points.
+#ifdef DEBUG
      if (peinf%master) write(rho_intp_dbg, *) &
         "# rho at interpolation points (sorted) "
+#endif
      do ipt = 1, n_intp_r-1
         if (abs( rho_at_intp_r(sort_idx(ipt)) - &
                  rho_at_intp_r(sort_idx(ipt+1)) )<1.0e-14) then
            not_duplicate(sort_idx(ipt)) = .False.
+#ifdef DEBUG
            if (peinf%master) write(rho_intp_dbg, '(i7,i7,f30.23,a)') sort_idx(ipt), &
                intp_r_tmp(sort_idx(ipt)), rho_at_intp_r(sort_idx(ipt)), 'F'
+#endif
         else
            not_duplicate(sort_idx(ipt)) = .True.
            n_dummy = n_dummy + 1
+#ifdef DEBUG
            if (peinf%master) write(rho_intp_dbg, '(i7,i7,f30.23,a)') sort_idx(ipt), &
                intp_r_tmp(sort_idx(ipt)), rho_at_intp_r(sort_idx(ipt)), 'T'
+#endif
         endif
      enddo
      ! The last point in intp_r_tmp(:)
      not_duplicate(sort_idx(n_intp_r)) = .True.
      n_dummy = n_dummy + 1
+#ifdef DEBUG
      if (peinf%master) write(rho_intp_dbg, '(i7,i7,f30.23,a)') &
         sort_idx(n_intp_r), &
         intp_r_tmp(sort_idx(n_intp_r)), &
         rho_at_intp_r(sort_idx(n_intp_r)), 'T'
+#endif
      if (peinf%master) then
         write(6, *) "Original n_intp_r =", n_intp_r
         write(6, *) "After removing duplicated points, n_intp_r =", n_dummy
@@ -471,13 +497,17 @@ program sigma
            if(sig_in%map(sig_in%diag(ii)) > mv) &
              mv = sig_in%map(sig_in%diag(ii))
          enddo
+#ifdef DEBUG
          !if(peinf%master) write(outdbg, '(a,i5,a,i5)') " isp ", isp, " mv ", mv
+#endif
          do iv = 1, mv
            irp = kpt%wfn(isp,ikp)%irep(iv)
            nv(isp,ikp,irp) = nv(isp,ikp,irp) + 1
          enddo
          mc = max( maxval(pol_in(isp)%cmap(:)), sig_in%nmax_c )
+#ifdef DEBUG
          !if(peinf%master) write(outdbg, '(a,i5,a,i5)') " isp ", isp, " mc ", mc
+#endif
          do ic = 1, mc
            irp = kpt%wfn(isp,ikp)%irep(ic)
            nc(isp,ikp,irp) = nc(isp,ikp,irp) + 1
@@ -493,7 +523,9 @@ program sigma
            enddo
          enddo
          ncv(isp,ikp, 1:gvec%syms%ntrans) = icv(1:gvec%syms%ntrans)
+#ifdef DEBUG
          !if(peinf%master) write(outdbg, *) " ncv ", &
+#endif
          !  (ncv(isp,ikp,ii), ii =1,gvec%syms%ntrans)
          if ( mv > maxivv ) maxivv = mv
          if ( mc > maxicc ) maxicc = mc
@@ -524,7 +556,9 @@ program sigma
            if(sig_in%map(sig_in%diag(ii)) > mv) &
              mv = sig_in%map(sig_in%diag(ii))
          enddo
+#ifdef DEBUG
          !if(peinf%master) write(outdbg, '(a,i5,a,i5)') " isp ", isp, " mv ", mv
+#endif
          idum = 0
          do iv = 1, mv
            irp = kpt%wfn(isp,ikp)%irep(iv)
@@ -532,7 +566,9 @@ program sigma
            ivlist(idum(irp), isp, ikp, irp) = iv
          enddo
          mc = max( maxval(pol_in(isp)%cmap(:)), sig_in%nmax_c )
+#ifdef DEBUG
          !if(peinf%master) write(outdbg, '(a,i5,a,i5)') " isp ", isp, " mc ", mc
+#endif
          idum = 0
          do ic = 1, mc
            irp = kpt%wfn(isp,ikp)%irep(ic)
@@ -558,6 +594,7 @@ program sigma
        enddo ! isp
      enddo ! ikp
      if(peinf%master) then
+#ifdef DEBUG
         !do irp = 1, gvec%syms%ntrans
         !write(outdbg,*) "irp=",irp," isp    iv   ivlist " 
         !do isp = 1, nspin
@@ -566,8 +603,6 @@ program sigma
         !   enddo
         !enddo
         !enddo
-     endif
-     if(peinf%master) then
        !do irp = 1, gvec%syms%ntrans
        !write(outdbg,*) "irp=",irp," isp    ic   iclist " 
        !do isp = 1, nspin
@@ -576,8 +611,6 @@ program sigma
        !  enddo
        !enddo
        !enddo
-     endif
-     if(peinf%master) then
        !do irp = 1, gvec%syms%ntrans
        !write(outdbg,*) "irp=",irp," isp    i    j    pairmap"
        !do isp = 1, nspin
@@ -588,6 +621,7 @@ program sigma
        !  enddo
        !enddo
        !enddo
+#endif
        print *, "maxivv", maxivv
        print *, "maxicc", maxicc
        print *, "maxncv", maxncv
@@ -1081,9 +1115,13 @@ program sigma
     else
       deallocate(isdf_in%Mmtrx)
     endif
+#ifdef DEBUG
     close(rho_intp_dbg)
+#endif
   endif
+#ifdef DEBUG
   close(outdbg)
+#endif
   if (peinf%master) print *, " finished deallocating arrays ."
 
   if (kpt%lcplx) then

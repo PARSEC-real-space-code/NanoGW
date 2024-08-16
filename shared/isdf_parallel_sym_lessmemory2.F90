@@ -142,11 +142,15 @@ subroutine isdf_parallel_sym_lessmemory2 ( gvec, pol_in, kpt, nspin, isdf_in, kf
   ! the number of grid points in irreducible wedge, ngr = gvec%nr
   integer :: ngr, ngrid 
   ! the number of full grid point, ngf = ngr * (# of sym operations)
-  integer :: ngfl, iptf, iptr, ioff, ioff1, ioff2, rcond, rank, outdbg
+  integer :: ngfl, iptf, iptr, ioff, ioff1, ioff2, rcond, rank
 
+#ifdef DEBUG
   ! variables for debug and test of accuracy 
   character(50) :: dbg_filename = "isdf_dbg.dat"
-  integer, parameter :: dbgunit = 20171130, amatunit = 20190220
+  integer, parameter :: dbgunit = 20171130
+  integer :: outdbg
+#endif
+
   ! external functions
   real(dp), external :: ddot
   type(xc_type) :: xc_lda
@@ -166,18 +170,15 @@ subroutine isdf_parallel_sym_lessmemory2 ( gvec, pol_in, kpt, nspin, isdf_in, kf
     subdspace
   integer(hsize_t) :: data_dims(2), subdim(2), shift(2), stride(2), block(2)
   integer :: h5err
-  !
+
+#ifdef DEBUG
   outdbg=198812+peinf%inode
   if( peinf%master ) then
-     !
      ! write(*,*) "call isdf_parallel(), write debug info to ", dbg_filename
-     !
      open(dbgunit, file=dbg_filename, form='formatted', status='replace')
-     !
   endif
-  if( peinf%master ) then
-     open(amatunit, file="amat.dat", form='formatted', status='replace')
-  endif
+#endif
+
   ! the number of real-space grid points stored in current proc
   ngrid= w_grp%mydim
   ! the number of real-space grid points in reduced real-space domain
@@ -227,16 +228,16 @@ subroutine isdf_parallel_sym_lessmemory2 ( gvec, pol_in, kpt, nspin, isdf_in, kf
   call MPI_ALLREDUCE(idum, ncount, w_grp%npes, MPI_INTEGER, MPI_SUM, &
      w_grp%comm, errinfo)
   !
+#ifdef DEBUG
   if ( verbose .and. peinf%master ) then
-    !
     write(dbgunit, *) " In isdf() "
     write(dbgunit, *) " w_grp%mygr ", w_grp%mygr, " w_grp%inode = ", w_grp%inode
     write(dbgunit, *) "    ii      offset(ii)       ncount(ii) "
     do ii = 0, w_grp%npes-1
       write(dbgunit, '(i7,2i9)') ii,offset(ii),ncount(ii)
     enddo
-    !
   endif
+#endif
   !
   ! isdf_in%ivlist(:) maps the index of valence states used in
   !   calculation (i.e., stored in memory) to the real index of valence states
@@ -420,11 +421,9 @@ subroutine isdf_parallel_sym_lessmemory2 ( gvec, pol_in, kpt, nspin, isdf_in, kf
         do jrp = 1, gvec%syms%ntrans
 #ifdef DEBUG
           if (peinf%master) write(6,*) " jrp = ", jrp
-#endif
-          !
           if (verbose .and. peinf%master) &
              write(dbgunit, *) ' isp = ', isp, ', ikp = ', ikp
-          !
+#endif
           do iv = 1, isdf_in%nv(isp,ikp,jrp)
             IVV = isdf_in%ivlist(iv,isp,ikp,jrp)
             JVV = kpt%wfn(isp,ikp)%map(IVV)
@@ -540,6 +539,7 @@ subroutine isdf_parallel_sym_lessmemory2 ( gvec, pol_in, kpt, nspin, isdf_in, kf
           !if (peinf%inode .eq. 0) write(6, *) "after gemm_hl ", &
           !    PsiC(1,1), PsiC_intp(1,1,jrp), Q(1,1,jrp)
 
+#ifdef DEBUG
           if ( .true. .and. peinf%master ) then
             write(dbgunit, *) "jrp =", jrp
             !write(dbgunit, '("PsiV = ")' ) 
@@ -559,6 +559,7 @@ subroutine isdf_parallel_sym_lessmemory2 ( gvec, pol_in, kpt, nspin, isdf_in, kf
             write(dbgunit, '("Q_intp = ")' ) 
             call printmatrix ( Q_intp(1,1,jrp), n_intp_r, n_intp_r, dbgunit )
           endif
+#endif
           !
         enddo ! jrp loop
         !stop
@@ -579,9 +580,11 @@ subroutine isdf_parallel_sym_lessmemory2 ( gvec, pol_in, kpt, nspin, isdf_in, kf
             do lrp2 = 1, gvec%syms%ntrans
                if(gvec%syms%prod(lrp1,lrp2) == irp) exit
             enddo
+#ifdef DEBUG
             if (peinf%master) then
                write(dbgunit,*) "lrp1 ", lrp1, ", lrp2 ", lrp2, ", irp ", irp
             endif
+#endif
             !
             ! ---------------------
             ! For each irp, spin and ikp, calculate zeta
@@ -617,14 +620,17 @@ subroutine isdf_parallel_sym_lessmemory2 ( gvec, pol_in, kpt, nspin, isdf_in, kf
             Bmtrx(1:n_intp_r,1:w_grp%mydim) = Bmtrx(1:n_intp_r,1:w_grp%mydim) + &
               transpose( acc_B(1:w_grp%mydim, 1:n_intp_r) )
             !
+#ifdef DEBUG
             if (verbose .and. peinf%master) then
                write(dbgunit, '(" P*Q = ")')
                call printmatrix ( acc_B(1:w_grp%mydim, 1:n_intp_r), w_grp%mydim, n_intp_r, dbgunit)
             endif
+#endif
           enddo ! lrp1
           !
           ! solve linear equation A * X = B
           !
+#ifdef DEBUG
           if (.true. .and. peinf%master) then
             write(dbgunit, '(" irp =", i3, "  Amtrx = ")') irp
             call printmatrix ( Amtrx(1:isdf_in%n_intp_r, 1:isdf_in%n_intp_r, irp), &
@@ -633,23 +639,10 @@ subroutine isdf_parallel_sym_lessmemory2 ( gvec, pol_in, kpt, nspin, isdf_in, kf
             call printmatrix ( Bmtrx(1:isdf_in%n_intp_r, 1:w_grp%mydim) , &
               isdf_in%n_intp_r, w_grp%mydim, dbgunit )
           endif
+#endif
           ALLOCATE(ipiv(n_intp_r))
           ! Note that dgesv will change Amtrx, so we need a temporary Amtrx1
           Amtrx1(1:n_intp_r,1:n_intp_r) = Amtrx(1:n_intp_r,1:n_intp_r,irp)
-          if (.False. .and. peinf%master) then
-            write(amatunit, '( " irp =", i3, "  Amtrx1 = ")') irp
-            do ii = 1, n_intp_r 
-              do jj = 1, n_intp_r
-                 write(amatunit, '(i6, i6, e17.5)' ) ii, jj, Amtrx1(ii,jj)
-              enddo
-            enddo
-            write(amatunit, '( " irp =", i3, "  Bmtrx = ")') irp 
-            do ii = 1, n_intp_r
-              do jj = 1, w_grp%mydim
-                 write(amatunit, '(i6, i6, e17.5)' ) ii, jj, Bmtrx(ii,jj)
-              enddo
-            enddo
-          endif
           call dgesv(isdf_in%n_intp_r, w_grp%mydim, Amtrx1(1,1), n_intp_r, ipiv, Bmtrx, &
             n_intp_r, einfo)
           !call magmaf_dgesv( )
@@ -658,6 +651,7 @@ subroutine isdf_parallel_sym_lessmemory2 ( gvec, pol_in, kpt, nspin, isdf_in, kf
 #endif
           DEALLOCATE(ipiv)
           Xmtrx(1:w_grp%mydim,1:n_intp_r) = transpose(Bmtrx(1:n_intp_r,1:w_grp%mydim)) ! probably we can remove Bmtrx here now
+#ifdef DEBUG
           ! for debug use
           write(outdbg, *) " Large Xmtrx "
           do ii = 1, w_grp%mydim
@@ -666,14 +660,16 @@ subroutine isdf_parallel_sym_lessmemory2 ( gvec, pol_in, kpt, nspin, isdf_in, kf
                 write(outdbg, *) ii, jj, Xmtrx(ii, jj)
               endif
             enddo ! jj
-          enddo ! ii 
+          enddo ! ii
+#endif
           call MPI_BARRIER(peinf%comm, errinfo)
+#ifdef DEBUG
           if (.true. .and. peinf%master) then
             write(dbgunit, '(" irp =", i3, "  Zeta = ")') irp
             call printmatrix ( Xmtrx(1:w_grp%mydim, 1:isdf_in%n_intp_r), &
-              w_grp%mydim, &
-              isdf_in%n_intp_r, dbgunit )
+              w_grp%mydim, isdf_in%n_intp_r, dbgunit )
           endif
+#endif
           !
           ! Copy Xmtrx to zeta
           !
@@ -768,7 +764,9 @@ subroutine isdf_parallel_sym_lessmemory2 ( gvec, pol_in, kpt, nspin, isdf_in, kf
             call h5dread_f( dset_zeta_id(rsp,irp), H5T_NATIVE_DOUBLE, &
                rho_h_distr(1:w_grp%mydim, 1:w_grp%npes), data_dims, &
                h5err, subdspace, dspace_zeta )
+#ifdef DEBUG
             if (peinf%master) write(dbgunit,*) " i_row ", i_row, ": done h5read_3"
+#endif
             !
             ! initialize rho_h
             !
@@ -824,18 +822,22 @@ subroutine isdf_parallel_sym_lessmemory2 ( gvec, pol_in, kpt, nspin, isdf_in, kf
           call h5dread_f( dset_zeta_id(isp, irp), H5T_NATIVE_DOUBLE, &
              tmp_array, data_dims, h5err )
           zeta( 1:w_grp%mydim, 1:isdf_in%n_intp_r, isp ) = tmp_array( 1:w_grp%mydim, 1:isdf_in%n_intp_r )
+#ifdef DEBUG
           if (peinf%master) write(dbgunit,*) "done h5read_1"
           if (peinf%master) then
             write(dbgunit, '("Read zeta() irp",i3," isp ",i3 )') irp, isp
             call printmatrix( zeta(1,1,isp), w_grp%mydim, isdf_in%n_intp_r, &
               dbgunit)
           endif
+#endif
           if(kflag<2) then
           call h5dread_f( dset_vczeta_id(isp, irp), H5T_NATIVE_DOUBLE, &
              tmp_array, data_dims, h5err )
           vzeta( 1:w_grp%mydim, 1:isdf_in%n_intp_r, isp ) = tmp_array( 1:w_grp%mydim, 1:isdf_in%n_intp_r )
           endif
+#ifdef DEBUG
           if (peinf%master) write(dbgunit,*) "done h5read_2"
+#endif
         enddo
         DEALLOCATE(tmp_array)
         ! calculate mtrx now
@@ -847,12 +849,14 @@ subroutine isdf_parallel_sym_lessmemory2 ( gvec, pol_in, kpt, nspin, isdf_in, kf
                   fxc(1:w_grp%mydim, rsp, csp) &
                    * zeta(1:w_grp%mydim, ii, csp)
               enddo ! ii loop
+#ifdef DEBUG
               if (peinf%master) then
                 write(dbgunit,*) " test zeta fzeta irp =", irp
                 do jj = 1, 10
                   write(dbgunit,*) jj-1, zeta(jj,1,1), fzeta(jj,1)
                 enddo
               endif
+#endif
               ! -- old code -- 
               !call dgemm('T', 'N', isdf_in%n_intp_r, isdf_in%n_intp_r, w_grp%mydim, &
               !  norm_factor, zeta(1,1,rsp), w_grp%mydim, fzeta(1,1), &
@@ -869,12 +873,14 @@ subroutine isdf_parallel_sym_lessmemory2 ( gvec, pol_in, kpt, nspin, isdf_in, kf
               !
             endif ! kflag > 0
             if ( kflag < 2 ) then
+#ifdef DEBUG
               if (peinf%master) then
                 write(dbgunit,*) " test zeta vzeta irp =", irp
                 do jj = 1, 10
                   write(dbgunit,*) jj-1, zeta(jj,1,1), vzeta(jj,1,1)
                 enddo
               endif
+#endif
               ! -- old code --
               !call dgemm('T', 'N', isdf_in%n_intp_r, isdf_in%n_intp_r, w_grp%mydim, &
               !  norm_factor, zeta(1,1,rsp), w_grp%mydim, vzeta(1,1,csp), w_grp%mydim, 1.d0, &
@@ -927,6 +933,7 @@ subroutine isdf_parallel_sym_lessmemory2 ( gvec, pol_in, kpt, nspin, isdf_in, kf
   call MPI_ALLREDUCE( MPI_IN_PLACE, isdf_in%Mmtrx(1,1,1,1,1,1,1), n_intp_r * n_intp_r * nspin * nspin * kpt%nk * 2 * gvec%syms%ntrans, &
     MPI_DOUBLE, MPI_SUM, w_grp%comm, errinfo )
   !
+#ifdef DEBUG
   if ( peinf%master .and. .True. ) then
     do jrp = 1, gvec%syms%ntrans
       write( dbgunit, '(a,i2,a)' ) " Mmtrx (:, :, rsp=1, csp=1, ikp=1, 1, jrp=", jrp, ") = "
@@ -939,6 +946,7 @@ subroutine isdf_parallel_sym_lessmemory2 ( gvec, pol_in, kpt, nspin, isdf_in, kf
       call printmatrix ( isdf_in%Mmtrx (1:isdf_in%n_intp_r,1:isdf_in%n_intp_r,1,1,1,2,jrp), isdf_in%n_intp_r, isdf_in%n_intp_r, dbgunit )
     enddo
   endif
+#endif
   !
   !stop
   !
@@ -947,7 +955,9 @@ subroutine isdf_parallel_sym_lessmemory2 ( gvec, pol_in, kpt, nspin, isdf_in, kf
     isp = 1
     ikp = 1
     irp = 1
+#ifdef DEBUG
     write (dbgunit, *) " test calculate < 1 2 | V_coul | 3 4 > "
+#endif
     tmpvec = zero
     do icv1 = 1, 10
       ivv = isdf_in%invpairmap(1, icv1, isp, ikp, irp)
@@ -970,10 +980,14 @@ subroutine isdf_parallel_sym_lessmemory2 ( gvec, pol_in, kpt, nspin, isdf_in, kf
           tmpCmtrx1(1), 1, zero, tmpvec, 1)
         matel = ddot(isdf_in%n_intp_r, tmpvec, 1, &
           tmpCmtrx2(1), 1)
+#ifdef DEBUG
         write (dbgunit, *) " icv1 ", icv1, " icv2 ", icv2, matel
+#endif
       enddo ! icv2
     enddo ! icv1
+#ifdef DEBUG
     write (dbgunit, *) " test calculate < 1 2 | f_xc | 3 4 > "
+#endif
     tmpvec = zero
     do icv1 = 1, 10
       ivv = isdf_in%invpairmap(1, icv1, isp, ikp, irp)
@@ -996,16 +1010,17 @@ subroutine isdf_parallel_sym_lessmemory2 ( gvec, pol_in, kpt, nspin, isdf_in, kf
           tmpCmtrx1(1), 1, zero, tmpvec, 1)
         matel = ddot(isdf_in%n_intp_r, tmpvec, 1, &
           tmpCmtrx2(1), 1)
+#ifdef DEBUG
         write (dbgunit, *) " icv1 ", icv1, " icv2 ", icv2, matel
+#endif
       enddo ! icv2
     enddo ! icv1
   endif
+#ifdef DEBUG
   if ( peinf%master ) then
      close ( dbgunit )
   endif
-  if ( peinf%master ) then
-     close (amatunit)
-  endif
+#endif
   return
   !
 end subroutine isdf_parallel_sym_lessmemory2

@@ -116,7 +116,7 @@ subroutine isdf_parallel_sym( gvec, pol_in, kpt, nspin, isdf_in, kflag, &
              IVV, ICC, JVV, JCC, isp, ikp, errinfo, ipe, einfo, &
              ivrp, icrp, n_intp_r, maxncv, &
              maxnv, maxnc, ig, icv1, icv2
-  integer :: status, mpi_status(MPI_STATUS_SIZE), outdbg
+  integer :: status, mpi_status(MPI_STATUS_SIZE)
   ! The index of w_grp, r_grp, processor that works on the calculation of
   ! zeta(:,:,nspin,nk)
   integer :: workwgrp, workrgrp, workproc
@@ -131,9 +131,12 @@ subroutine isdf_parallel_sym( gvec, pol_in, kpt, nspin, isdf_in, kflag, &
   ! the number of full grid point, ngf = ngr * (# of sym operations)
   integer :: ngfl, iptf, iptr, ioff, ioff1, ioff2, rcond
 
+#ifdef DEBUG
   ! variables for debug and test of accuracy 
   character(50) :: dbg_filename = "isdf_dbg.dat"
-  integer :: dbgunit = 20171130, amatunit = 20190220
+  integer :: dbgunit = 20171130
+  integer :: outdbg
+#endif
   ! external functions
   real(dp), external :: ddot
   type(xc_type) :: xc_lda
@@ -142,7 +145,8 @@ subroutine isdf_parallel_sym( gvec, pol_in, kpt, nspin, isdf_in, kflag, &
   workwgrp = 0
   call MPI_BCAST( workrgrp, 1, MPI_INTEGER, peinf%masterid, peinf%comm, errinfo )
   call MPI_BCAST( workwgrp, 1, MPI_INTEGER, peinf%masterid, peinf%comm, errinfo )
-  
+
+#ifdef DEBUG
   if( peinf%master .and. verbose ) then
      !
      write(*,*) "call isdf_parallel(), write debug info to ", dbg_filename
@@ -150,9 +154,7 @@ subroutine isdf_parallel_sym( gvec, pol_in, kpt, nspin, isdf_in, kflag, &
      open(dbgunit, file=dbg_filename, form='formatted', status='replace')
      !
   endif
-  if( peinf%master ) then
-     open(amatunit, file="amat.dat", form='formatted', status='replace')
-  endif
+#endif
   !
   ngrid= w_grp%mydim
   ! the number of real-space grid points in reduced real-space domain
@@ -326,8 +328,10 @@ subroutine isdf_parallel_sym( gvec, pol_in, kpt, nspin, isdf_in, kflag, &
         do jrp = 1, gvec%syms%ntrans
            if (peinf%master .and. verbose) write(6,*) " jrp = ", jrp
            !
+#ifdef DEBUG
            if (verbose .and. peinf%master) &
               write(dbgunit, *) ' isp = ', isp, ', ikp = ', ikp
+#endif
            !
            do iv = 1, isdf_in%nv(isp,ikp,jrp)
               IVV = isdf_in%ivlist(iv,isp,ikp,jrp)
@@ -389,6 +393,7 @@ subroutine isdf_parallel_sym( gvec, pol_in, kpt, nspin, isdf_in, kflag, &
              PsiC_intp(1,1,jrp), n_intp_r, PsiC_intp(1,1,jrp), n_intp_r, zero, &
              Q_intp(1,1,jrp), n_intp_r)
            !
+#ifdef DEBUG
            if ( verbose .and. peinf%master ) then
               write(dbgunit, *) "jrp =", jrp
               write(dbgunit, '("PsiV = ")' ) 
@@ -408,6 +413,7 @@ subroutine isdf_parallel_sym( gvec, pol_in, kpt, nspin, isdf_in, kflag, &
               write(dbgunit, '("Q_intp = ")' ) 
               call printmatrix ( Q_intp(1,1,jrp), n_intp_r, n_intp_r, dbgunit )
            endif
+#endif
            !
         enddo ! jrp loop
         !
@@ -428,6 +434,7 @@ subroutine isdf_parallel_sym( gvec, pol_in, kpt, nspin, isdf_in, kflag, &
                 PsiV_intp(1:n_intp_r, inv_ivlist(IVV,isp,ikp,ivrp), ivrp) * &
                 PsiC_intp(1:n_intp_r, inv_iclist(ICC,isp,ikp,icrp), icrp) ! element-wise multiplication
            enddo
+#ifdef DEBUG
            !if (peinf%master) then
            !   write(dbgunit, '(a,i5,a,i5,a,i5)') " jrp ", jrp, " isp ", isp, " ikp ", ikp
            !   write(dbgunit, *) " Cmtrx = "
@@ -437,6 +444,7 @@ subroutine isdf_parallel_sym( gvec, pol_in, kpt, nspin, isdf_in, kflag, &
            !      enddo
            !   enddo
            !endif
+#endif
         enddo ! jrp
         !
         ! Calculate zeta(r,n_intp_r,jrp) for all representations
@@ -460,9 +468,11 @@ subroutine isdf_parallel_sym( gvec, pol_in, kpt, nspin, isdf_in, kflag, &
               do lrp2 = 1, gvec%syms%ntrans
                  if(gvec%syms%prod(lrp1,lrp2) == irp) exit
               enddo
+#ifdef DEBUG
               if (peinf%master .and. verbose) then
                  write(dbgunit,*) "lrp1 ", lrp1, ", lrp2 ", lrp2, ", irp ", irp
               endif
+#endif
               !
               ! ---------------------
               ! For each irp, spin and ikp, calculate zeta
@@ -499,10 +509,12 @@ subroutine isdf_parallel_sym( gvec, pol_in, kpt, nspin, isdf_in, kflag, &
               Bmtrx(1:n_intp_r,1:w_grp%mydim) = Bmtrx(1:n_intp_r,1:w_grp%mydim) + &
                 transpose( acc_B(1:w_grp%mydim, 1:n_intp_r) )
               !
+#ifdef DEBUG
               if (verbose .and. peinf%master) then
                  write(dbgunit, '(" P*Q = ")')
                  call printmatrix ( P(:,:,lrp1)*Q(:,:,lrp2), w_grp%mydim, n_intp_r, dbgunit)
               endif
+#endif
            enddo ! lrp1
            !
            ! solve linear equation A * X = B
@@ -523,12 +535,14 @@ subroutine isdf_parallel_sym( gvec, pol_in, kpt, nspin, isdf_in, kflag, &
                  zeta( jj, ii, isp, irp ) = Xmtrx( ii, jj )
               enddo ! jj loop
            enddo ! ii loop
+#ifdef DEBUG
            if (verbose .and. peinf%master) then
               write(dbgunit, '(" irp =", i3, "  Zeta = ")') irp
               call printmatrix ( zeta(  1:137, 1:isdf_in%n_intp_r,isp,irp), 137, isdf_in%n_intp_r, dbgunit)
               call printmatrix ( zeta(138:274, 1:isdf_in%n_intp_r,isp,irp), 137, isdf_in%n_intp_r, dbgunit)
               call printmatrix ( zeta(275:411, 1:isdf_in%n_intp_r,isp,irp), 137, isdf_in%n_intp_r, dbgunit)
            endif
+#endif
            !
         enddo ! jrp loop
         !
@@ -536,10 +550,12 @@ subroutine isdf_parallel_sym( gvec, pol_in, kpt, nspin, isdf_in, kflag, &
            !
            if ( verbose ) then
               !
+#ifdef DEBUG
               if (peinf%master .and. verbose) then
                  write (dbgunit, *) "isp",isp," jrp",jrp, " ncv", &
                  isdf_in%ncv(isp,ikp,jrp)
               endif
+#endif
               do icv = 1, isdf_in%ncv(isp,ikp,jrp)
                  call dgemv( 'n', w_grp%mydim, isdf_in%n_intp_r, &
                    one, zeta(1,1, isp, jrp), w_grp%mydim, &
@@ -558,11 +574,13 @@ subroutine isdf_parallel_sym( gvec, pol_in, kpt, nspin, isdf_in, kflag, &
                  call MPI_ALLREDUCE( MPI_IN_PLACE, weight, 1, MPI_DOUBLE, &
                    MPI_SUM, w_grp%comm, errinfo)
                  diff = sqrt(diff)/sqrt(weight)
+#ifdef DEBUG
                  if (peinf%master .and. verbose) then
                    if (diff > 0.09) write (dbgunit, '(a)', advance='no') " !! "
                    write (dbgunit, *) " icv ", icv, " diff ", diff
                    write (dbgunit, '(5e12.5)') tmp_Zmtrx(101:105)
                  endif
+#endif
               enddo
            endif ! verbose
         enddo ! jrp
@@ -653,9 +671,12 @@ subroutine isdf_parallel_sym( gvec, pol_in, kpt, nspin, isdf_in, kflag, &
                       !          = \int zeta_jj(r) rho_h(r) dr
                       !
                       ! Note: ngrid = w_grp%mydim
+#ifdef DEBUG
                       !if ( peinf%master ) write(dbgunit, *) " ii ", ii, &
                       !   " i_col", i_col
+#endif
                       if ( kflag > 0 ) then
+#ifdef DEBUG
                         if (peinf%master .and. ii == 1 .and. i_col == 1 .and. verbose) then
                           write(dbgunit,*) " test zeta fzeta irp = ", irp
                           do jj = 1, 10
@@ -665,6 +686,7 @@ subroutine isdf_parallel_sym( gvec, pol_in, kpt, nspin, isdf_in, kflag, &
                             write(dbgunit,*) jj, zeta(jj,1,1,irp), fzeta(ioff+jj-1)
                           enddo
                         endif
+#endif
                         isdf_in%Mmtrx( ii, i_col, rsp, csp, ikp, 2, irp ) = &
                           ddot( ngrid, zeta( 1, i_col, csp, irp ), 1, fzeta(ioff), 1 ) / gvec%hcub * &
                           gvec%syms%ntrans
@@ -675,6 +697,7 @@ subroutine isdf_parallel_sym( gvec, pol_in, kpt, nspin, isdf_in, kflag, &
                           isdf_in%Mmtrx( ii, i_col, rsp, csp, ikp, 2, irp )
                       endif
                       if ( kflag < 2 ) then
+#ifdef DEBUG
                         if (peinf%master .and. ii == 1 .and. i_col == 1 .and. verbose) then
                           write(dbgunit,*) " test zeta vzeta irp = ", irp
                           do jj = 1, 10
@@ -684,6 +707,7 @@ subroutine isdf_parallel_sym( gvec, pol_in, kpt, nspin, isdf_in, kflag, &
                             write(dbgunit,*) jj, zeta(jj,1,1,irp), rho_h_distr(ioff+jj-1)
                           enddo
                         endif
+#endif
                         isdf_in%Mmtrx( ii, i_col, rsp, csp, ikp, 1, irp ) = &
                           ddot( ngrid, zeta( 1, i_col, csp, irp ), 1, rho_h_distr(ioff), 1 ) / gvec%hcub * &
                           gvec%syms%ntrans
@@ -700,6 +724,7 @@ subroutine isdf_parallel_sym( gvec, pol_in, kpt, nspin, isdf_in, kflag, &
                  !
               enddo ! i_row loop 
               !
+#ifdef DEBUG
               !if ( peinf%master .and. verbose ) then
               !   write(dbgunit,*) " jrp = ", jrp, " irp = ", irp, " rsp = ", rsp, " csp = ", csp
               !   write(dbgunit, '( "Mmtrx = " )' ) 
@@ -707,6 +732,7 @@ subroutine isdf_parallel_sym( gvec, pol_in, kpt, nspin, isdf_in, kflag, &
               !     isdf_in%n_intp_r, isdf_in%n_intp_r, dbgunit)
               !endif
               !
+#endif
            enddo ! csp loop
            !
         enddo ! rsp loop
@@ -758,6 +784,7 @@ subroutine isdf_parallel_sym( gvec, pol_in, kpt, nspin, isdf_in, kflag, &
   !   enddo
   !endif
   ! end old code ---
+#ifdef DEBUG
   outdbg=198812+peinf%inode
   do jrp = 1, gvec%syms%ntrans
     write( outdbg, '(a,i2,a)' ) " Large Mmtrx (:, :, rsp=1, csp=1, ikp=1, 1, jrp=", jrp, ") = "
@@ -779,12 +806,14 @@ subroutine isdf_parallel_sym( gvec, pol_in, kpt, nspin, isdf_in, kflag, &
       enddo
     enddo
   enddo
+#endif
   !
   ! new code here ---
   call MPI_ALLREDUCE( MPI_IN_PLACE, isdf_in%Mmtrx(1,1,1,1,1,1,1), n_intp_r * n_intp_r * nspin * nspin * kpt%nk * 2 * gvec%syms%ntrans, &
     MPI_DOUBLE, MPI_SUM, w_grp%comm, errinfo )
   ! new code end here
   !
+#ifdef DEBUG
   if ( peinf%master .and. verbose ) then
      do jrp = 1, gvec%syms%ntrans
         write( dbgunit, '(a,i2,a)' ) " Mmtrx (:, :, rsp=1, csp=1, ikp=1, 1, jrp=", jrp, ") = "
@@ -795,13 +824,16 @@ subroutine isdf_parallel_sym( gvec, pol_in, kpt, nspin, isdf_in, kflag, &
          call printmatrix ( isdf_in%Mmtrx (1:isdf_in%n_intp_r,1:isdf_in%n_intp_r,1,1,1,2,jrp), isdf_in%n_intp_r, isdf_in%n_intp_r, dbgunit )
      enddo
   endif
+#endif
   !
   ! test calculating < 1 2 | F | 3 4 > 
   if ( peinf%master .and. verbose ) then
     isp = 1
     ikp = 1
     irp = 1
+#ifdef DEBUG
     write (dbgunit, *) " test calculate < 1 2 | V_coul | 3 4 > "
+#endif
     tmpvec = zero
     do icv1 = 1, 10
        do icv2 = 1, 10
@@ -810,10 +842,14 @@ subroutine isdf_parallel_sym( gvec, pol_in, kpt, nspin, isdf_in, kflag, &
          isdf_in%Cmtrx (1, icv1, isp, ikp, irp), 1, zero, tmpvec, 1)
        matel = ddot(isdf_in%n_intp_r, tmpvec, 1, &
          isdf_in%Cmtrx(1, icv2, isp, ikp, irp), 1)
+#ifdef DEBUG
        write (dbgunit, *) " icv1 ", icv1, " icv2 ", icv2, matel
+#endif
        enddo
     enddo
+#ifdef DEBUG
     write (dbgunit, *) " test calculate < 1 2 | f_xc | 3 4 > "
+#endif
     tmpvec = zero
     do icv1 = 1, 10
        do icv2 = 1, 10
@@ -822,16 +858,17 @@ subroutine isdf_parallel_sym( gvec, pol_in, kpt, nspin, isdf_in, kflag, &
          isdf_in%Cmtrx (1, icv1, isp, ikp, irp), 1, zero, tmpvec, 1)
        matel = ddot(isdf_in%n_intp_r, tmpvec, 1, &
          isdf_in%Cmtrx(1, icv2, isp, ikp, irp), 1)
+#ifdef DEBUG
        write (dbgunit, *) " icv1 ", icv1, " icv2 ", icv2, matel
+#endif
        enddo
     enddo
   endif
+#ifdef DEBUG
   if ( peinf%master .and. verbose ) then
      close ( dbgunit )
   endif
-  if ( peinf%master ) then
-     close (amatunit)
-  endif
+#endif
   return
   !
 end subroutine isdf_parallel_sym

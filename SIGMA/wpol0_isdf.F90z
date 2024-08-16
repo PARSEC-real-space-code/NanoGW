@@ -274,8 +274,7 @@ subroutine Zwpol0_isdf(gvec,kpt,qpt,pol,k_p,nolda,nrep,nspin,iq0,nr_buff,isdf_in
      enddo
      call MPI_ALLREDUCE(MPI_IN_PLACE, Amtrx, nzeta*nzeta,&
        MPI_DOUBLE_SCALAR, MPI_SUM, r_grp%comm, info)
-     if (peinf%master) &
-       write(6,*) "read vzeta from file ", h5filename 
+     if (peinf%master) write(6,*) "read vzeta from file ", h5filename 
      data_dims(1) = w_grp%mydim
      data_dims(2) = isdf_in%n_intp_r
      !
@@ -299,7 +298,7 @@ subroutine Zwpol0_isdf(gvec,kpt,qpt,pol,k_p,nolda,nrep,nspin,iq0,nr_buff,isdf_in
        ! read data
        ioffset = (isp-1)*isdf_in%n_intp_r
 #ifdef CPLX
-       ALLOCATE(vzeta_realimag(w_grp%mydim, isdf_in%n_intp_r))
+       allocate(vzeta_realimag(w_grp%mydim, isdf_in%n_intp_r))
        data_dims(3) = 2
        subdim(1:2) = data_dims(1:2)
        rank = 2
@@ -326,7 +325,7 @@ subroutine Zwpol0_isdf(gvec,kpt,qpt,pol,k_p,nolda,nrep,nspin,iq0,nr_buff,isdf_in
          cmplx(0.d0,1.d0) * vzeta_realimag(1:data_dims(1), 1:data_dims(2))
        ! close subdspace
        call h5sclose_f(subdspace, h5err)
-       DEALLOCATE(vzeta_realimag)
+       deallocate(vzeta_realimag)
 #else
        call h5dread_f( dset_vczeta_id(isp,irp), H5T_NATIVE_DOUBLE, &
          vzeta(1:data_dims(1), 1+ioffset:data_dims(2)+ioffset), data_dims(1:2), h5err )
@@ -338,6 +337,7 @@ subroutine Zwpol0_isdf(gvec,kpt,qpt,pol,k_p,nolda,nrep,nspin,iq0,nr_buff,isdf_in
        ! close dataset
        call h5dclose_f(dset_vczeta_id(isp, irp), h5err)
      enddo
+
      ! calculate W(r) = \sum_{u,v} vzeta_u(r) A_{u,v} vzeta_v(r)
      !
 #ifdef DEBUG
@@ -383,12 +383,16 @@ subroutine Zwpol0_isdf(gvec,kpt,qpt,pol,k_p,nolda,nrep,nspin,iq0,nr_buff,isdf_in
         write(6,*) vr(1:5)
      endif
   enddo ! jrp loop
-  ! 
+
   ! close hdf5 file
   call h5fclose_f(file_id, h5err)
-  !
+
   ! close hdf5 interfaces
   call h5close_f(h5err)
+
+  ! Delete the file
+  write(6,*) "Remove file "//trim(h5filename)
+  call execute_command_line("rm " // trim(h5filename))
 
   if (r_grp%master) then
     close(pol_unit)

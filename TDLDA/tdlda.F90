@@ -77,10 +77,12 @@ program tdlda
   real(dp), allocatable :: rho_at_intp_r(:)
   logical, allocatable  :: not_duplicate(:)
 
+#ifdef DEBUG
   ! WG debug
-  integer :: outdbg, rho_intp_dbg
-  logical :: verbose
+  integer :: rho_intp_dbg
   character (len=20) :: dbg_filename
+#endif
+  logical :: verbose
 
   !-------------------------------------------------------------------
   ! Initialization.
@@ -104,13 +106,6 @@ program tdlda
       opt%eigsolver = 1
 #endif 
   endif
-
-  
-  ! W Gao open dbg files
-  write(dbg_filename,"(i7)") peinf%inode
-  outdbg = peinf%inode+198812
-  dbg_filename = "kernel_dbg"//adjustl(dbg_filename)
-  open(outdbg,file=dbg_filename,status='unknown',iostat=info) 
 
   !-------------------------------------------------------------------
   ! Determine the set of wavefunctions to read: if n-th wavefunction is
@@ -640,8 +635,6 @@ program tdlda
           isdf_in,opt )
   endif
   call stopwatch(peinf%master, "after call calculate_tdlda")
-
-  close(outdbg)
 
   ! Deallocate arrays for ISDF method
   if(doisdf) then

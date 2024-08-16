@@ -70,19 +70,10 @@ program bsesolv
   integer :: n_intp, intp_type, isdf_type, info
   integer, allocatable :: timerlist(:)
 
-  ! WG debug
-  integer :: outdbg
-  character (len=20) :: dbg_filename
-
   !-------------------------------------------------------------------
   ! Initialization.
   !
   call header('BSESOLV')
-  ! W Gao open dbg files
-  write(dbg_filename,"(i7)") peinf%inode
-  outdbg = peinf%inode+198812
-  dbg_filename = "kernel_dbg"//adjustl(dbg_filename)
-  open(outdbg,file=dbg_filename,status='unknown',iostat=info) 
 
   !-------------------------------------------------------------------
   ! Read input parameters from rgwbs.in.
@@ -403,7 +394,6 @@ program bsesolv
   endif
 
   if (peinf%master) call delete_file(90,'bse_chkpt.dat')
-  close(outdbg)
   !-------------------------------------------------------------------
   ! Time accounting.
   !
