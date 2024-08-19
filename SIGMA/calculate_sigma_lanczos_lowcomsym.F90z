@@ -133,10 +133,15 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym (nspin,nkpt, &
   integer, device, dimension(:), allocatable :: d_lcrep
   integer(kind=cuda_stream_kind) :: streamid
 #endif
-  integer :: dbgunit = 111112
 
+#ifdef DEBUG
+  integer :: dbgunit = 111112
+#endif
+
+#ifdef DEBUG
   ! WG: for debug
   if (peinf%master) open(dbgunit,file="gw_corre_incr.dat",form='formatted')
+#endif
 
   if (peinf%master) print *, "ecuts ", ecuts
   !-------------------------------------------------------------------
@@ -748,6 +753,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym (nspin,nkpt, &
            do kk = 1, blksz
               sigma_corr(1:sig_in%nen) = sigma_corr(1:sig_in%nen) + &
                 2.0 * pnorm2(kk) * ( -sigma_corr_tmp(sig_in%nen+1, kk) + sigma_corr_tmp(1:sig_in%nen, kk))/(-ezz(1:sig_in%nen, kk))
+#ifdef DEBUG
               if (peinf%master) print *, isdf_in%lrep(jn+kk-1), "incr ", 2.0 * pnorm2(kk) * ( -sigma_corr_tmp(sig_in%nen+1,kk) + sigma_corr_tmp(2, kk) )/(-ezz(2, kk))
               if (peinf%master) then
                 do ien = 1, sig_in%nen
@@ -755,6 +761,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym (nspin,nkpt, &
                   2.0 * pnorm2(kk) * real( ( -sigma_corr_tmp(sig_in%nen+1,kk) + sigma_corr_tmp(ien, kk) )/(-ezz(ien, kk)) ) * ryd
                 enddo
               endif
+#endif
            enddo
            !
          else ! for unoccupied states
@@ -783,6 +790,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym (nspin,nkpt, &
            do kk = 1, blksz
               sigma_corr(1:sig_in%nen) = sigma_corr(1:sig_in%nen) + &
                 2.0 * pnorm2(kk) * ( -sigma_corr_tmp(sig_in%nen+1, kk) + sigma_corr_tmp(1:sig_in%nen, kk))/ezz(1:sig_in%nen, kk)
+#ifdef DEBUG
               if (peinf%master) print *, isdf_in%lrep(jn+kk-1), "incr ", 2.0 * pnorm2(kk) * ( -sigma_corr_tmp(sig_in%nen+1,kk) + sigma_corr_tmp(2, kk) )/ezz(2, kk)
               if (peinf%master) then
                 do ien = 1, sig_in%nen
@@ -790,6 +798,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym (nspin,nkpt, &
                   2.0 * pnorm2(kk) * real( ( -sigma_corr_tmp(sig_in%nen+1,kk) + sigma_corr_tmp(ien, kk) )/ezz(ien, kk) ) * ryd
                 enddo
               endif
+#endif
            enddo
            !
          endif
@@ -801,7 +810,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym (nspin,nkpt, &
          enddo
          jj = 3
          call timacc(58, jj, tsec)
-         if (peinf%master) write(6, '(i3, f15.6, f15.6, a, i12, a)') 58, tsec(1), tsec(2), " sec", jj, "matvec_isdf runs"
+         if (peinf%master) write(6, '(i3, f15.6, f15.6, a, i12, a)') 58, tsec(1), tsec(2), " sec", jj, " matvec_isdf runs"
          ! stop
          !          
          enddo ! iblk 
@@ -811,11 +820,11 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym (nspin,nkpt, &
          if (peinf%master) then
            print *, "sigma_corr", sig_in%map(sig_in%diag(isig))
            do ien = 1, sig_in%nen
-             write(6,*) " #sigma_c ", ien, ryd*(deltae*(ien-1) + en0), real(sigma_corr(ien))*ryd, aimag(sigma_corr(ien))*ryd
+             write(6,'(a,i7,f15.6,f15.6,f15.6)') " #sigma_c ", ien, ryd*(deltae*(ien-1) + en0), real(sigma_corr(ien))*ryd, aimag(sigma_corr(ien))*ryd
            enddo ! ien
            print *, "E_qp(E)", sig_in%map(sig_in%diag(isig))
            do ien = 1, sig_in%nen
-             write(6,*) " #E_qp ", ien, ryd*(deltae*(ien-1) + en0), (kpt%wfn(1,1)%e1(m1)+real(sig(1,1)%xdiag(isig)+sigma_corr(ien)-sig(1,1)%vxcdiag(isig)) )*ryd
+             write(6,'(a,i7,f15.6,f15.6)') " #E_qp ", ien, ryd*(deltae*(ien-1) + en0), (kpt%wfn(1,1)%e1(m1)+real(sig(1,1)%xdiag(isig)+sigma_corr(ien)-sig(1,1)%vxcdiag(isig)) )*ryd
            enddo ! ien
          endif ! peinf%master
          do ien = 1, sig_in%nen
@@ -866,8 +875,10 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym (nspin,nkpt, &
   istat = cublasDestroy(handle)
 #endif
 
+#ifdef DEBUG
   ! WG: for debug
   if (peinf%master) close(dbgunit)
+#endif
 
 23 continue
 

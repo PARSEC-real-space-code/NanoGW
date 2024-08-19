@@ -1177,8 +1177,10 @@ program sigma
   !endif
 #endif
 
-  ! print *, "before Finalize"
-  !call timacc(1,2,tsec)
+  if (peinf%master) then
+    print *, "before Finalize"
+  end if
+  call timacc(1, 2, tsec)
   !jj = 3
   !call timacc(57, jj, tsec)
   !if (peinf%master) print *, "running time for constructing Cmtrx ", tsec(1), tsec(2), "sec", jj

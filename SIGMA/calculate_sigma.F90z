@@ -62,12 +62,12 @@ subroutine Zcalculate_sigma(nspin,nkpt,n_it,it_scf,nr_buff,static_type, &
   ! abort flag, true if calculation aborted abnormally
   logical, intent(out) :: lstop
 
-  real(dp), intent(in) :: &
+  real (dp), intent(in) :: &
        ecuts, &      ! resolution in energy denominators, in Ry
        qpmix, &      ! mixing parameter in SCGW
        sig_cut       ! cut-off in self-energy corrections
   ! maximum amplitude of self-energy correction
-  real(dp), intent(out) :: max_sig
+  real (dp), intent(out) :: max_sig
   ! Additional input parameters for ISDF method
 
 
@@ -78,7 +78,7 @@ subroutine Zcalculate_sigma(nspin,nkpt,n_it,it_scf,nr_buff,static_type, &
   logical :: staticcorr
   integer :: ii, jj, irp, jrp, iq, ik, jk,  isp,  isig, &
        info, chkpt, neig_qp
-  real(dp) :: tsec(2), xsum, rtmp, epsinv
+  real (dp) :: tsec(2), xsum, rtmp, epsinv
   integer, allocatable :: iord(:)
 
   if (peinf%master) then
@@ -117,15 +117,11 @@ subroutine Zcalculate_sigma(nspin,nkpt,n_it,it_scf,nr_buff,static_type, &
         if (chkpt_in == -1 .or. (.not. lstop)) then
            if ( doisdf .and. isdf_in%lessmemory .eq. 1 ) then
              if (peinf%master) write(6,*) " call wpol0_isdf() "
-             call timacc(5,1,tsec)
              call Zwpol0_isdf(gvec,kpt,qpt,pol(:,iq),k_p(:,iq),nolda,gvec%syms%ntrans,nspin,iq,nr_buff,isdf_in)
-             call timacc(5,2,tsec)
              if (peinf%master) write(6,*) " wpol0_isdf() done "
            else ! no isdf
              if (peinf%master) write(6,*) " call wpol0() "
-             call timacc(5,1,tsec)
              call Zwpol0(gvec,kpt,qpt,pol(:,iq),k_p(:,iq),nolda,gvec%syms%ntrans,nspin,iq,nr_buff)
-             call timacc(5,2,tsec)
              if (peinf%master) write(6,*) " wpol0() done "
            endif
         endif

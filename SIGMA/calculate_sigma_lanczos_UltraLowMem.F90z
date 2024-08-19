@@ -296,7 +296,9 @@ subroutine Zcalculate_sigma_lanczos_UltraLowMem(nspin,nkpt, &
   MC_vec, CMC_vec, tmp_vec, tmp_Hvec, tmp_cvpair)
            sigma_corr(1:sig_in%nen) = sigma_corr(1:sig_in%nen) + &
              2.0 * pnorm2 * ( -sigma_corr_tmp(sig_in%nen+1) + sigma_corr_tmp(1:sig_in%nen))/(-ezz(1:sig_in%nen))
+#ifdef DEBUG
            if (peinf%master) print *, jn, "incr ", 2.0 * pnorm2 * ( -sigma_corr_tmp(sig_in%nen+1) + sigma_corr_tmp(2))/(-ezz(2))
+#endif
            ! stop
          else ! for unoccupied states
            ezz(1:sig_in%nen) = &
@@ -308,7 +310,9 @@ subroutine Zcalculate_sigma_lanczos_UltraLowMem(nspin,nkpt, &
   MC_vec, CMC_vec, tmp_vec, tmp_Hvec, tmp_cvpair)
            sigma_corr(1:sig_in%nen) = sigma_corr(1:sig_in%nen) + &
              2.0 * pnorm2 * ( -sigma_corr_tmp(sig_in%nen+1) + sigma_corr_tmp(1:sig_in%nen))/ezz(1:sig_in%nen)
+#ifdef DEBUG
            if (peinf%master) print *, jn, "incr ", 2.0 * pnorm2 * ( -sigma_corr_tmp(sig_in%nen+1) + sigma_corr_tmp(2))/ezz(2)
+#endif
          endif
          if (mod(jn, 5) .eq. 0) then
             call stopwatch(peinf%master,' summation over bands ')

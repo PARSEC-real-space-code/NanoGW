@@ -99,6 +99,10 @@ subroutine Zwpol0_isdf(gvec,kpt,qpt,pol,k_p,nolda,nrep,nspin,iq0,nr_buff,isdf_in
   integer(hsize_t) :: data_dims(2)
 #endif
   SCALAR, external :: Zdot_c
+
+  real (dp) :: tsec(2)
+
+  call timacc(5, 1, tsec)
   !
   ! W.Gao: In this implementation, we assume nr_buff = gvec%nr for now
   !        need to change later
@@ -432,6 +436,8 @@ subroutine Zwpol0_isdf(gvec,kpt,qpt,pol,k_p,nolda,nrep,nspin,iq0,nr_buff,isdf_in
      close(out2_unit)
   endif
   DEALLOCATE(vr)
+
+  call timacc(5, 2, tsec)
 
 end subroutine Zwpol0_isdf
 !===================================================================

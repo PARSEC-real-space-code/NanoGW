@@ -28,31 +28,31 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine timacc(n,option,tottim)    
+subroutine timacc(n, option, tottim)    
 
   use myconstants
   implicit none
 
   ! arguments
-  integer, intent(in) :: n
-  integer, intent(inout) :: option
-  real(dp),intent(out) :: tottim(2)
+  integer, intent (in) :: n
+  integer, intent (inout) :: option
+  real (dp),intent (out) :: tottim(2)
 
   ! local variables
   character (len=600) :: lastwords
   integer, parameter :: MTIM = 100 ! Maximum number of "timing slots" available
   integer, save :: ncount(MTIM) = 0
-  real(dp), dimension(2,MTIM), save :: acctim = zero, tzero = zero
-  real(dp) :: cpu, wall
+  real (dp), dimension (2,MTIM), save :: acctim = zero, tzero = zero
+  real (dp) :: cpu, wall
   integer :: values(8)
 
   !-------------------------------------------------------------------
   ! Does n have valid value ?
   !
   if (n < 1 .or. n > MTIM) then
-     write(lastwords,'(a,i6,a,i8)') ' timacc: dim mtim=', MTIM, &
-          ' but input n= ', n
-     call die(lastwords)
+    write (lastwords, '(a,i6,a,i8)') ' timacc: dim mtim=', MTIM, &
+        ' but input n= ', n
+    call die(lastwords)
   end if
 
   !-------------------------------------------------------------------
@@ -60,27 +60,27 @@ subroutine timacc(n,option,tottim)
   !
   call cpu_time(cpu)
   call date_and_time(VALUES=values)
-  wall = ((values(3)*24.0d0+values(5))*60.0d0 + values(6))*60.0d0 &  
-       + values(7) + values(8)*0.001d0
+  wall = ((values(3)*24.0d0+values(5))*60.0d0 + values(6))*60.0d0 &
+      + values(7) + values(8)*0.001d0
 
   select case (option)
-  case(1)
-     ! Start stopwatch for accumulator n.
-     tzero(1,n) = cpu
-     tzero(2,n) = wall
-  case(2)
-     ! Stop stopwatch and accumulate elapsed time for n.
-     acctim(1,n) = acctim(1,n) + cpu - tzero(1,n)
-     acctim(2,n) = acctim(2,n) + wall - tzero(2,n)
-     ncount(n) = ncount(n) + 1
-  case(3)
-     ! Return accumulated time for n.
-     tottim(1) = acctim(1,n)
-     tottim(2) = acctim(2,n)
-     option = ncount(n)
-  case default
-     write(lastwords,'(a,i10)' ) ' timacc: input option not valid, = ' , option
-     call die(lastwords)
+    case(1)
+      ! Start stopwatch for accumulator n.
+      tzero(1,n) = cpu
+      tzero(2,n) = wall
+    case(2)
+      ! Stop stopwatch and accumulate elapsed time for n.
+      acctim(1,n) = acctim(1,n) + cpu - tzero(1,n)
+      acctim(2,n) = acctim(2,n) + wall - tzero(2,n)
+      ncount(n) = ncount(n) + 1
+    case(3)
+      ! Return accumulated time for n.
+      tottim(1) = acctim(1,n)
+      tottim(2) = acctim(2,n)
+      option = ncount(n)
+    case default
+      write (lastwords, '(a,i10)') ' timacc: input option not valid, = ', option
+      call die(lastwords)
   end select
 
 end subroutine timacc
