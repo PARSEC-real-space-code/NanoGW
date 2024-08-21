@@ -117,11 +117,15 @@ subroutine Zcalculate_sigma(nspin,nkpt,n_it,it_scf,nr_buff,static_type, &
         if (chkpt_in == -1 .or. (.not. lstop)) then
            if ( doisdf .and. isdf_in%lessmemory .eq. 1 ) then
              if (peinf%master) write(6,*) " call wpol0_isdf() "
+             call timacc(5, 1, tsec)
              call Zwpol0_isdf(gvec,kpt,qpt,pol(:,iq),k_p(:,iq),nolda,gvec%syms%ntrans,nspin,iq,nr_buff,isdf_in)
+             call timacc(5, 2, tsec)
              if (peinf%master) write(6,*) " wpol0_isdf() done "
            else ! no isdf
              if (peinf%master) write(6,*) " call wpol0() "
+             call timacc(5, 1, tsec)
              call Zwpol0(gvec,kpt,qpt,pol(:,iq),k_p(:,iq),nolda,gvec%syms%ntrans,nspin,iq,nr_buff)
+             call timacc(5, 2, tsec)
              if (peinf%master) write(6,*) " wpol0() done "
            endif
         endif

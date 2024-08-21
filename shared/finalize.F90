@@ -51,7 +51,7 @@ subroutine finalize(verbose,comm,count1,count2,routnam,timerlist)
     call MPI_ALLREDUCE(tsec, tmin, 2, MPI_DOUBLE_PRECISION, MPI_MIN, comm, info)
     call MPI_ALLREDUCE(tsec, tmax, 2, MPI_DOUBLE_PRECISION, MPI_MAX, comm, info)
 #endif
-    if (verbose) then
+    if (verbose .and. jj > 0) then
 #ifdef MPI
       write (6, '(1x,a40,a,f10.3,3x,f10.3)') &
           routnam(ii), '( min. )', tmin(1), tmin(2)
