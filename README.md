@@ -24,14 +24,12 @@ We have tested it on a few Linux/Unix machines, including NERSC Perlmutter, TACC
 Before proceeding with these steps, you may need to load the required modules as specified in the configuration files. Compile the extra libraries before building the main NanoGW code:  
 ```bash
 cd LIB/libstring_f
-pwd
-./configure --prefix=<current_directory>
+./configure --prefix=$(pwd)
 make
 make install
 
 cd ../libxc
-pwd
-./configure --prefix=<current_directory>
+./configure --prefix=$(pwd)
 make
 make install
 cd ../..
