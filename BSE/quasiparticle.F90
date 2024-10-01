@@ -14,61 +14,61 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine quasiparticle(wfn,bsepol,verbose,isp,ik)
+subroutine quasiparticle(wfn, bsepol, verbose, isp, ik)
 
   use typedefs
   implicit none
 
   ! arguments
   ! electron orbitals
-  type (wavefunction), intent(inout) :: wfn
+  type(wavefunction), intent(inout) :: wfn
   ! BSE polarizability
-  type (polinfo), intent(in) :: bsepol
+  type(polinfo), intent(in) :: bsepol
   ! output flag
   logical, intent(in) :: verbose
   ! spin channel and k-point
   integer, intent(in) :: isp, ik
 
   ! local variables
-  character (len=800) :: lastwords
+  character(len=800) :: lastwords
   logical :: lpartial
   integer :: iv, ivp, ic, icp, jsp, jk, ncount, ii, jj, imax(1), ierr
   real(dp) :: tmp, occ, occ_i, occ_j, i_p, e_a
   integer, allocatable :: qpmap(:)
   real(dp), dimension(:), allocatable :: eqp_tmp, htmp
-  real(dp), dimension(:,:), allocatable :: eigvec
+  real(dp), dimension(:, :), allocatable :: eigvec
 
   !-------------------------------------------------------------------
   ! Define inverse maps to make life easier.
   !
-  if (bsepol%nval * bsepol%ncond == 0) return
+  if (bsepol%nval*bsepol%ncond == 0) return
   if (verbose .and. minval(bsepol%cmap) <= maxval(bsepol%vmap)) &
-       write(6,'(a,/,a,/,a,/,a,/,a,/,a)') repeat('!',65), ' WARNING!!!! ', &
-       ' Partiallly occupied states are found!', &
-       ' Ignoring off-diagonal matrix elements of self-energy', &
-       ' involving partially occupied states.', repeat('!',65)
+    write (6, '(a,/,a,/,a,/,a,/,a,/,a)') repeat('!', 65), ' WARNING!!!! ', &
+    ' Partiallly occupied states are found!', &
+    ' Ignoring off-diagonal matrix elements of self-energy', &
+    ' involving partially occupied states.', repeat('!', 65)
   if (bsepol%nval > 0) then
-     allocate(wfn%hqpvv(bsepol%nval,bsepol%nval))
-     wfn%hqpvv = zero
-     allocate(wfn%eqpv(bsepol%nval))
-     wfn%eqpv = zero
-  endif
+    allocate (wfn%hqpvv(bsepol%nval, bsepol%nval))
+    wfn%hqpvv = zero
+    allocate (wfn%eqpv(bsepol%nval))
+    wfn%eqpv = zero
+  end if
   if (bsepol%ncond > 0) then
-     allocate(wfn%hqpcc(bsepol%ncond,bsepol%ncond))
-     wfn%hqpcc = zero
-     allocate(wfn%eqpc(bsepol%ncond))
-     wfn%eqpc = zero
-  endif
-  allocate(wfn%vmapi(wfn%nstate))
-  allocate(wfn%cmapi(wfn%nstate))
+    allocate (wfn%hqpcc(bsepol%ncond, bsepol%ncond))
+    wfn%hqpcc = zero
+    allocate (wfn%eqpc(bsepol%ncond))
+    wfn%eqpc = zero
+  end if
+  allocate (wfn%vmapi(wfn%nstate))
+  allocate (wfn%cmapi(wfn%nstate))
   wfn%vmapi = 0
   do ii = 1, bsepol%nval
-     wfn%vmapi(bsepol%vmap(ii)) = ii
-  enddo
+    wfn%vmapi(bsepol%vmap(ii)) = ii
+  end do
   wfn%cmapi = 0
   do ii = 1, bsepol%ncond
-     wfn%cmapi(bsepol%cmap(ii)) = ii
-  enddo
+    wfn%cmapi(bsepol%cmap(ii)) = ii
+  end do
 
   !-------------------------------------------------------------------
   ! Open input file and build <c|hqp|c'> and <v|hqp|v'>. Store them
@@ -78,114 +78,114 @@ subroutine quasiparticle(wfn,bsepol,verbose,isp,ik)
   ! occupied states ARE NOT ignored! This may lead to modified electron
   ! density after those matrix elements are included!
   !
-  ! WARNING: construction of qp hamiltonian is incorrect if partially 
+  ! WARNING: construction of qp hamiltonian is incorrect if partially
   ! occupied states are present!
   !
   ncount = 0
-  open(9,file='hmat_qp',form='formatted',status='old',iostat=ierr)
+  open (9, file='hmat_qp', form='formatted', status='old', iostat=ierr)
   if (ierr /= 0) then
-     if (verbose) write(6,'(/,a,/,a)') &
-          ' WARNING!!!! File hmat_qp not found.', &
-          ' Searching for hmat_qp_nostatic.'
-     open(9,file='hmat_qp_nostatic',form='formatted',status='old',iostat=ierr)
-     if (ierr /= 0) then
-        if (verbose) write(6,'(a,/,a,/,a,a,/,a)') repeat('!',65), &
-             ' WARNING!!!! ', ' File hmat_qp not found.', &
-             ' Using Eigenvalues from DFT and scissors ', &
-             'operator to define H_qp.', repeat('!',65)
+    if (verbose) write (6, '(/,a,/,a)') &
+      ' WARNING!!!! File hmat_qp not found.', &
+      ' Searching for hmat_qp_nostatic.'
+    open (9, file='hmat_qp_nostatic', form='formatted', status='old', iostat=ierr)
+    if (ierr /= 0) then
+      if (verbose) write (6, '(a,/,a,/,a,a,/,a)') repeat('!', 65), &
+        ' WARNING!!!! ', ' File hmat_qp not found.', &
+        ' Using Eigenvalues from DFT and scissors ', &
+        'operator to define H_qp.', repeat('!', 65)
 
-        do ivp = 1, bsepol%nval
-           occ = wfn%occ1(bsepol%vmap(ivp))
-           if (occ > one-tol_occ) then
-              wfn%eqpv(ivp) = wfn%e1(bsepol%vmap(ivp))
-              wfn%hqpvv(ivp,ivp) = one
-           endif
-        enddo
-        do icp = 1, bsepol%ncond
-           occ = wfn%occ1(bsepol%cmap(icp))
-           if (occ < tol_occ) then
-              wfn%eqpc(icp) = wfn%e1(bsepol%cmap(icp))
-              wfn%hqpcc(icp,icp) = one
-           endif
-        enddo
-        return
-     endif
+      do ivp = 1, bsepol%nval
+        occ = wfn%occ1(bsepol%vmap(ivp))
+        if (occ > one - tol_occ) then
+          wfn%eqpv(ivp) = wfn%e1(bsepol%vmap(ivp))
+          wfn%hqpvv(ivp, ivp) = one
+        end if
+      end do
+      do icp = 1, bsepol%ncond
+        occ = wfn%occ1(bsepol%cmap(icp))
+        if (occ < tol_occ) then
+          wfn%eqpc(icp) = wfn%e1(bsepol%cmap(icp))
+          wfn%hqpcc(icp, icp) = one
+        end if
+      end do
+      return
+    end if
   else
-     if (verbose) write(6,'(/,a,/)') &
-          'Reading quasi-particle Hamiltonian from file hmat_qp.'
-  endif
+    if (verbose) write (6, '(/,a,/)') &
+      'Reading quasi-particle Hamiltonian from file hmat_qp.'
+  end if
   do
-     read(9,*,end=10) ii, jj, tmp, jsp, jk
-     if (jsp /= isp .or. jk /= ik) cycle
-     ncount = ncount + 1
-     if (bsepol%nval * bsepol%ncond == 0) cycle
-     ! If ii and jj both refer to occupied states, put
-     ! matrix element into hqpvv.
-     iv = wfn%vmapi(ii)
-     ivp = wfn%vmapi(jj)
-     lpartial = .false.
-     if (iv*ivp > 0) then
-        occ_i = wfn%occ1(ii)
-        occ_j = wfn%occ1(jj)
-        if ( occ_j < one-tol_occ .and. iv /= ivp ) lpartial = .true.
-        if ( occ_i < one-tol_occ .and. iv /= ivp ) lpartial = .true.
-        if (.not. lpartial) then
+    read (9, *, end=10) ii, jj, tmp, jsp, jk
+    if (jsp /= isp .or. jk /= ik) cycle
+    ncount = ncount + 1
+    if (bsepol%nval*bsepol%ncond == 0) cycle
+    ! If ii and jj both refer to occupied states, put
+    ! matrix element into hqpvv.
+    iv = wfn%vmapi(ii)
+    ivp = wfn%vmapi(jj)
+    lpartial = .false.
+    if (iv*ivp > 0) then
+      occ_i = wfn%occ1(ii)
+      occ_j = wfn%occ1(jj)
+      if (occ_j < one - tol_occ .and. iv /= ivp) lpartial = .true.
+      if (occ_i < one - tol_occ .and. iv /= ivp) lpartial = .true.
+      if (.not. lpartial) then
 #ifdef DEBUG
-           if (verbose) write (6,'(a,2i5,2f20.10)') ' hqp(v,vp) = ',ii, jj, tmp
+        if (verbose) write (6, '(a,2i5,2f20.10)') ' hqp(v,vp) = ', ii, jj, tmp
 #endif
-           wfn%hqpvv(iv,ivp) = tmp/ryd
-        endif
-     endif
-     ! If ii and jj both refer to unoccupied states, put
-     ! matrix element into hqpcc.
-     ic = wfn%cmapi(ii)
-     icp = wfn%cmapi(jj)
-     lpartial = .false.
-     if (ic*icp > 0) then
-        occ_i = wfn%occ1(ii)
-        occ_j = wfn%occ1(jj)
-        if ( occ_j > tol_occ .and. ic /= icp ) lpartial = .true.
-        if ( occ_i > tol_occ .and. ic /= icp ) lpartial = .true.
-        if (.not. lpartial) then
+        wfn%hqpvv(iv, ivp) = tmp/ryd
+      end if
+    end if
+    ! If ii and jj both refer to unoccupied states, put
+    ! matrix element into hqpcc.
+    ic = wfn%cmapi(ii)
+    icp = wfn%cmapi(jj)
+    lpartial = .false.
+    if (ic*icp > 0) then
+      occ_i = wfn%occ1(ii)
+      occ_j = wfn%occ1(jj)
+      if (occ_j > tol_occ .and. ic /= icp) lpartial = .true.
+      if (occ_i > tol_occ .and. ic /= icp) lpartial = .true.
+      if (.not. lpartial) then
 #ifdef DEBUG
-           if (verbose) write(6,'(a,2i5,2f20.10)') ' hqp(c,cp) = ',ii, jj, tmp
+        if (verbose) write (6, '(a,2i5,2f20.10)') ' hqp(c,cp) = ', ii, jj, tmp
 #endif
-           wfn%hqpcc(ic,icp) = tmp/ryd
-        endif
-     endif
-  enddo
+        wfn%hqpcc(ic, icp) = tmp/ryd
+      end if
+    end if
+  end do
 
 10 continue
-  if (verbose) write(6,'(/,a,i6,a,i6,a,i6,a)') ' All values in eV. Read ', &
-       ncount, ' spin ', isp, ' k-point ', ik, ' matrix elements.'
-  close(9)
+  if (verbose) write (6, '(/,a,i6,a,i6,a,i6,a)') ' All values in eV. Read ', &
+    ncount, ' spin ', isp, ' k-point ', ik, ' matrix elements.'
+  close (9)
   !-------------------------------------------------------------------
   ! Symmetrize QP hamiltonian.
   !
-  if (verbose) write(6,*) ' QP HAMILTONIAN IS SYMMETRIZED'
+  if (verbose) write (6, *) ' QP HAMILTONIAN IS SYMMETRIZED'
   do iv = 1, bsepol%nval
-     do ivp = iv + 1, bsepol%nval
-        tmp = wfn%hqpvv(iv,ivp) + wfn%hqpvv(ivp,iv)
-        tmp = tmp/2.d0
-        wfn%hqpvv(iv,ivp) = tmp
-        wfn%hqpvv(ivp,iv) = tmp
-     enddo
-  enddo
+    do ivp = iv + 1, bsepol%nval
+      tmp = wfn%hqpvv(iv, ivp) + wfn%hqpvv(ivp, iv)
+      tmp = tmp/2.d0
+      wfn%hqpvv(iv, ivp) = tmp
+      wfn%hqpvv(ivp, iv) = tmp
+    end do
+  end do
   do ic = 1, bsepol%ncond
-     do icp = ic + 1, bsepol%ncond
-        tmp = wfn%hqpcc(ic,icp) + wfn%hqpcc(icp,ic)
-        tmp = tmp/2.d0
-        wfn%hqpcc(ic,icp) = tmp
-        wfn%hqpcc(icp,ic) = tmp
-     enddo
-  enddo
+    do icp = ic + 1, bsepol%ncond
+      tmp = wfn%hqpcc(ic, icp) + wfn%hqpcc(icp, ic)
+      tmp = tmp/2.d0
+      wfn%hqpcc(ic, icp) = tmp
+      wfn%hqpcc(icp, ic) = tmp
+    end do
+  end do
   !-------------------------------------------------------------------
   ! Diagonalize QP hamiltonian separately for occupied (hqpvv) and
-  ! empty (hqpcc) states. The eigenvalues will be used later in the 
+  ! empty (hqpcc) states. The eigenvalues will be used later in the
   ! dynamical contribution of direct BSE kernel. Diagonalization is not
   ! parallelized.
   !
-  ! Assignment of DFT and QP states is done by assuming quasi-diagonal 
+  ! Assignment of DFT and QP states is done by assuming quasi-diagonal
   ! self-energy operator: the DFT orbital that gives major contribution
   ! to a given QP orbital will be assigned to that one. Must make sure
   ! the assignment is one-to-one.
@@ -197,143 +197,143 @@ subroutine quasiparticle(wfn,bsepol,verbose,isp,ik)
   !
   ! Start with occupied states.
   !
-  if (verbose) write(6,'(/,a)') repeat('-',65)
+  if (verbose) write (6, '(/,a)') repeat('-', 65)
 
   i_p = -eight*eight*eight*eight*eight
   if (bsepol%nval <= 0) return
-  allocate(qpmap(bsepol%nval))
+  allocate (qpmap(bsepol%nval))
   qpmap = 0
-  allocate(htmp(bsepol%nval))
-  allocate(eigvec(bsepol%nval,bsepol%nval))
+  allocate (htmp(bsepol%nval))
+  allocate (eigvec(bsepol%nval, bsepol%nval))
   eigvec = wfn%hqpvv
-  allocate(eqp_tmp(bsepol%nval))
+  allocate (eqp_tmp(bsepol%nval))
   wfn%hqpvv = zero
-  call deigensolver(verbose,0,1,0,bsepol%nval,bsepol%nval,eigvec,eqp_tmp,ierr)
+  call deigensolver(verbose, 0, 1, 0, bsepol%nval, bsepol%nval, eigvec, eqp_tmp, ierr)
   if (ierr /= 0) call die(' ')
 
   do iv = 1, bsepol%nval
-     htmp(:) = abs(eigvec(:,iv))
-     do
-        imax = maxloc(ARRAY=htmp)
-        ivp = imax(1)
-        ! Is DFT orbital ivp already assigned (i.e., qpmap(ivp) /= 0)? 
-        ! If it is, zero out its corresponding contribution and search
-        ! for the new DFT orbital with major contribution.
-        if (qpmap(ivp) == 0) then
-           qpmap(ivp) = iv
-           exit
-        endif
-        htmp(ivp) = zero
-     enddo
-  enddo
+    htmp(:) = abs(eigvec(:, iv))
+    do
+      imax = maxloc(ARRAY=htmp)
+      ivp = imax(1)
+      ! Is DFT orbital ivp already assigned (i.e., qpmap(ivp) /= 0)?
+      ! If it is, zero out its corresponding contribution and search
+      ! for the new DFT orbital with major contribution.
+      if (qpmap(ivp) == 0) then
+        qpmap(ivp) = iv
+        exit
+      end if
+      htmp(ivp) = zero
+    end do
+  end do
   ! Did we find a corresponding QP orbital for each DFT orbital?
   ivp = minval(qpmap)
-  if (ivp <= 0 ) then
-     write(lastwords,*) ' WARNING!!! Assignment of DFT/QP orbitals ', &
-          'failed. Could not find QP orbital corresponding to DFT ', &
-          'orbital ', bsepol%vmap(minloc(qpmap)), ' assignment map = ', qpmap
-     call die(lastwords)
-  endif
+  if (ivp <= 0) then
+    write (lastwords, *) ' WARNING!!! Assignment of DFT/QP orbitals ', &
+      'failed. Could not find QP orbital corresponding to DFT ', &
+      'orbital ', bsepol%vmap(minloc(qpmap)), ' assignment map = ', qpmap
+    call die(lastwords)
+  end if
 
   do ivp = 1, bsepol%nval
-     occ = wfn%occ1(bsepol%vmap(ivp))
-     if (occ > one-tol_occ) then
-        wfn%eqpv(ivp) = eqp_tmp(qpmap(ivp))
-        wfn%hqpvv(:,ivp) = eigvec(:,qpmap(ivp))
-     endif
-  enddo
+    occ = wfn%occ1(bsepol%vmap(ivp))
+    if (occ > one - tol_occ) then
+      wfn%eqpv(ivp) = eqp_tmp(qpmap(ivp))
+      wfn%hqpvv(:, ivp) = eigvec(:, qpmap(ivp))
+    end if
+  end do
 
   if (verbose) then
-     write(6,'(/,a)') &
-          ' 1-electron, quasi-particle eigenvalues, occupied states:'
-     if (isp == 1) write(6,*) ' SPIN UP'
-     if (isp == 2) write(6,*) ' SPIN DOWN'
-     write(6,*) ' DFT orbital  QP orbital   DFT energy [eV]   ', & 
-          'QP energy [eV]   proj     occ'
-     do ivp = 1,bsepol%nval
-        iv = qpmap(ivp)
-        occ = wfn%occ1(bsepol%vmap(ivp))
-        write(6,'(2x,i5,7x,i5,2(7x,f10.3),7x,f7.3,f8.3)') &
-             bsepol%vmap(ivp), bsepol%vmap(iv), wfn%e1(bsepol%vmap(ivp))*ryd, &
-             wfn%eqpv(ivp)*ryd, wfn%hqpvv(iv,iv)**2, occ
-     enddo
-     if (i_p < maxval(eqp_tmp)) i_p = maxval(eqp_tmp)
-     write(6,'(/,a,/)') repeat('-',65)
-  endif
-  deallocate(eqp_tmp)
-  deallocate(eigvec)
-  deallocate(htmp)
-  deallocate(qpmap)
+    write (6, '(/,a)') &
+      ' 1-electron, quasi-particle eigenvalues, occupied states:'
+    if (isp == 1) write (6, *) ' SPIN UP'
+    if (isp == 2) write (6, *) ' SPIN DOWN'
+    write (6, *) ' DFT orbital  QP orbital   DFT energy [eV]   ', &
+      'QP energy [eV]   proj     occ'
+    do ivp = 1, bsepol%nval
+      iv = qpmap(ivp)
+      occ = wfn%occ1(bsepol%vmap(ivp))
+      write (6, '(2x,i5,7x,i5,2(7x,f10.3),7x,f7.3,f8.3)') &
+        bsepol%vmap(ivp), bsepol%vmap(iv), wfn%e1(bsepol%vmap(ivp))*ryd, &
+        wfn%eqpv(ivp)*ryd, wfn%hqpvv(iv, iv)**2, occ
+    end do
+    if (i_p < maxval(eqp_tmp)) i_p = maxval(eqp_tmp)
+    write (6, '(/,a,/)') repeat('-', 65)
+  end if
+  deallocate (eqp_tmp)
+  deallocate (eigvec)
+  deallocate (htmp)
+  deallocate (qpmap)
   !-------------------------------------------------------------------
   ! Done! Repeat the process for empty states.
   !
   e_a = eight*eight*eight*eight*eight
   if (bsepol%ncond <= 0) return
-  allocate(qpmap(bsepol%ncond))
+  allocate (qpmap(bsepol%ncond))
   qpmap = 0
-  allocate(htmp(bsepol%ncond))
-  allocate(eigvec(bsepol%ncond,bsepol%ncond))
+  allocate (htmp(bsepol%ncond))
+  allocate (eigvec(bsepol%ncond, bsepol%ncond))
   eigvec = wfn%hqpcc
   wfn%hqpcc = zero
-  allocate(eqp_tmp(bsepol%ncond))
-  call deigensolver(verbose,0,1,0,bsepol%ncond,bsepol%ncond,eigvec,eqp_tmp,ierr)
+  allocate (eqp_tmp(bsepol%ncond))
+  call deigensolver(verbose, 0, 1, 0, bsepol%ncond, bsepol%ncond, eigvec, eqp_tmp, ierr)
   if (ierr /= 0) call die(' ')
 
   do ic = 1, bsepol%ncond
-     htmp(:) = abs(eigvec(:,ic))
-     do
-        imax = maxloc(ARRAY=htmp)
-        icp = imax(1)
-        if (qpmap(icp) == 0) then
-           qpmap(icp) = ic
-           exit
-        endif
-        htmp(icp) = zero
-     enddo
-  enddo
+    htmp(:) = abs(eigvec(:, ic))
+    do
+      imax = maxloc(ARRAY=htmp)
+      icp = imax(1)
+      if (qpmap(icp) == 0) then
+        qpmap(icp) = ic
+        exit
+      end if
+      htmp(icp) = zero
+    end do
+  end do
 
   icp = minval(qpmap)
-  if (icp <= 0 ) then
-     write(lastwords,*) ' WARNING!!! Assignment of DFT/QP orbitals ', &
-          'failed. Could not find QP orbital corresponding to DFT ', &
-          'orbital ', bsepol%cmap(minloc(qpmap)), ' assignment map = ', qpmap
-     call die(lastwords)
-  endif
+  if (icp <= 0) then
+    write (lastwords, *) ' WARNING!!! Assignment of DFT/QP orbitals ', &
+      'failed. Could not find QP orbital corresponding to DFT ', &
+      'orbital ', bsepol%cmap(minloc(qpmap)), ' assignment map = ', qpmap
+    call die(lastwords)
+  end if
 
   do icp = 1, bsepol%ncond
-     occ = wfn%occ1(bsepol%cmap(icp))
-     if (occ < tol_occ) then
-        wfn%eqpc(icp) = eqp_tmp(qpmap(icp))
-        wfn%hqpcc(:,icp) = eigvec(:,qpmap(icp))
-     endif
-  enddo
+    occ = wfn%occ1(bsepol%cmap(icp))
+    if (occ < tol_occ) then
+      wfn%eqpc(icp) = eqp_tmp(qpmap(icp))
+      wfn%hqpcc(:, icp) = eigvec(:, qpmap(icp))
+    end if
+  end do
 
   if (verbose) then
-     write(6,'(/,a)') &
-          ' 1-electron, quasi-particle eigenvalues, unoccupied states:'
-     if (isp == 1) write(6,*) ' SPIN UP'
-     if (isp == 2) write(6,*) ' SPIN DOWN'
-     write(6,*) ' DFT orbital  QP orbital   DFT energy [eV]   ', & 
-          'QP energy [eV]   proj     occ'
-     do icp = 1, bsepol%ncond
-        ic = qpmap(icp)
-        occ = wfn%occ1(bsepol%cmap(icp))
-        write(6,'(2x,i5,7x,i5,2(7x,f10.3),7x,f7.3,f8.3)') &
-             bsepol%cmap(icp), bsepol%cmap(ic), wfn%e1(bsepol%cmap(icp))*ryd, &
-             wfn%eqpc(icp)*ryd, wfn%hqpcc(ic,ic)**2, occ
-     enddo
-     if (e_a > minval(eqp_tmp)) e_a = minval(eqp_tmp)
-     write(6,'(/,a,/)') repeat('-',65)
-  endif
-  deallocate(eqp_tmp)
-  deallocate(eigvec)
-  deallocate(htmp)
-  deallocate(qpmap)
+    write (6, '(/,a)') &
+      ' 1-electron, quasi-particle eigenvalues, unoccupied states:'
+    if (isp == 1) write (6, *) ' SPIN UP'
+    if (isp == 2) write (6, *) ' SPIN DOWN'
+    write (6, *) ' DFT orbital  QP orbital   DFT energy [eV]   ', &
+      'QP energy [eV]   proj     occ'
+    do icp = 1, bsepol%ncond
+      ic = qpmap(icp)
+      occ = wfn%occ1(bsepol%cmap(icp))
+      write (6, '(2x,i5,7x,i5,2(7x,f10.3),7x,f7.3,f8.3)') &
+        bsepol%cmap(icp), bsepol%cmap(ic), wfn%e1(bsepol%cmap(icp))*ryd, &
+        wfn%eqpc(icp)*ryd, wfn%hqpcc(ic, ic)**2, occ
+    end do
+    if (e_a > minval(eqp_tmp)) e_a = minval(eqp_tmp)
+    write (6, '(/,a,/)') repeat('-', 65)
+  end if
+  deallocate (eqp_tmp)
+  deallocate (eigvec)
+  deallocate (htmp)
+  deallocate (qpmap)
 
   if (verbose) then
-     write(6,'(a,f10.3)') ' Energy of highest occupied level (eV) = ', i_p*ryd
-     write(6,'(a,f10.3)') ' Energy of lowest unoccupied level (eV) = ', e_a*ryd
-  endif
+    write (6, '(a,f10.3)') ' Energy of highest occupied level (eV) = ', i_p*ryd
+    write (6, '(a,f10.3)') ' Energy of lowest unoccupied level (eV) = ', e_a*ryd
+  end if
 
 end subroutine quasiparticle
 !===================================================================
