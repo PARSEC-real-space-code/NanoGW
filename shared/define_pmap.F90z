@@ -17,7 +17,7 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine Zdefine_pmap(syms,kpt,pol,irp,np_in,mapp_in,nspin,n_up,lanczos)
+subroutine Zdefine_pmap(syms, kpt, pol, irp, np_in, mapp_in, nspin, n_up, lanczos)
 
   use mpi_module
   use typedefs
@@ -25,16 +25,16 @@ subroutine Zdefine_pmap(syms,kpt,pol,irp,np_in,mapp_in,nspin,n_up,lanczos)
 
   ! arguments
   ! symmetries in the Abelian group
-  type (symmetries), intent(in) :: syms
+  type(symmetries), intent(in) :: syms
   ! k-points and information about electron orbitals
-  type (kptinfo), intent(in) :: kpt
+  type(kptinfo), intent(in) :: kpt
   ! polarizability structure for the current representation and q-vector
   type(polinfo), intent(inout) :: pol
   ! current representation, number of transitions (from all representations),
   ! number of spin channels, number of transitions with spin up
   integer, intent(in) :: irp, np_in, nspin, n_up
   ! set of transitions from all representations
-  integer, intent(in) :: mapp_in(4,np_in)
+  integer, intent(in) :: mapp_in(4, np_in)
   logical, intent(in) :: lanczos
 
   ! local variables
@@ -49,76 +49,75 @@ subroutine Zdefine_pmap(syms,kpt,pol,irp,np_in,mapp_in,nspin,n_up,lanczos)
   pol%n_up = 0
   jj = 0
   do ii = 1, np_in
-     iv = mapp_in(1,ii)
-     ic = mapp_in(2,ii)
-     jk = mapp_in(3,ii)
-     ik = mapp_in(4,ii)
-     isp = 1
-     if (ii > n_up) isp = 2
-     rprod = syms%prod(kpt%wfn(isp,jk)%irep(iv),kpt%wfn(isp,ik)%irep(ic))
-     if (rprod == irp) jj = jj + 1
-     if ( ii <= n_up ) pol%n_up = jj
-  enddo
+    iv = mapp_in(1, ii)
+    ic = mapp_in(2, ii)
+    jk = mapp_in(3, ii)
+    ik = mapp_in(4, ii)
+    isp = 1
+    if (ii > n_up) isp = 2
+    rprod = syms%prod(kpt%wfn(isp, jk)%irep(iv), kpt%wfn(isp, ik)%irep(ic))
+    if (rprod == irp) jj = jj + 1
+    if (ii <= n_up) pol%n_up = jj
+  end do
   pol%ntr = jj
   !-------------------------------------------------------------------
   ! Store the set of transitions with representation irp and corresponding
   ! dipole matrix elements.
   !
-  if ( pol%ntr /= 0 ) then
-     allocate(pol%tr(4,pol%ntr))
-     jj = 0
-     do ii = 1, np_in
-        iv = mapp_in(1,ii)
-        ic = mapp_in(2,ii)
-        jk = mapp_in(3,ii)
-        ik = mapp_in(4,ii)
-        isp = 1
-        if (ii > n_up) isp = 2
-        rprod = syms%prod(kpt%wfn(isp,jk)%irep(iv),kpt%wfn(isp,ik)%irep(ic))
-        if (rprod == irp) then
-           jj = jj + 1
-           pol%tr(:,jj) = mapp_in(:,ii)
-        endif
-     enddo
-     if (.not. lanczos) then
+  if (pol%ntr /= 0) then
+    allocate (pol%tr(4, pol%ntr))
+    jj = 0
+    do ii = 1, np_in
+      iv = mapp_in(1, ii)
+      ic = mapp_in(2, ii)
+      jk = mapp_in(3, ii)
+      ik = mapp_in(4, ii)
+      isp = 1
+      if (ii > n_up) isp = 2
+      rprod = syms%prod(kpt%wfn(isp, jk)%irep(iv), kpt%wfn(isp, ik)%irep(ic))
+      if (rprod == irp) then
+        jj = jj + 1
+        pol%tr(:, jj) = mapp_in(:, ii)
+      end if
+    end do
+    if (.not. lanczos) then
 
-     allocate(pol%eig(pol%ntr))
-     allocate(pol%ostr(pol%ntr,3))
-     if (kpt%lcplx) then
-        allocate(pol%zdipole(pol%ntr,3))
+      allocate (pol%eig(pol%ntr))
+      allocate (pol%ostr(pol%ntr, 3))
+      if (kpt%lcplx) then
+        allocate (pol%zdipole(pol%ntr, 3))
         pol%zdipole = zero
-     else
-        allocate(pol%ddipole(pol%ntr,3))
+      else
+        allocate (pol%ddipole(pol%ntr, 3))
         pol%ddipole = zero
-     endif
-     do ik = 1, kpt%nk
-        allocate(map_in(pol%ntr))
+      end if
+      do ik = 1, kpt%nk
+        allocate (map_in(pol%ntr))
         map_in = 0
-        call mapinverse(4,pol%n_up, &
-             pol%tr,kpt%wfn(1,ik)%ndip,kpt%wfn(1,ik)%mapd,map_in(1))
+        call mapinverse(4, pol%n_up, &
+                        pol%tr, kpt%wfn(1, ik)%ndip, kpt%wfn(1, ik)%mapd, map_in(1))
         if (pol%ntr > pol%n_up) &
-             call mapinverse(4,pol%ntr-pol%n_up, &
-             pol%tr(1,pol%n_up+1),kpt%wfn(2,ik)%ndip, &
-             kpt%wfn(2,ik)%mapd,map_in(pol%n_up+1))
+          call mapinverse(4, pol%ntr - pol%n_up, &
+                          pol%tr(1, pol%n_up + 1), kpt%wfn(2, ik)%ndip, &
+                          kpt%wfn(2, ik)%mapd, map_in(pol%n_up + 1))
         do jj = 1, pol%ntr
-           if (map_in(jj) == 0) cycle
-           if (jj <= pol%n_up) then
-              pol%Zdipole(jj,:) = kpt%wfn(1,ik)%Zdipole(map_in(jj),:)
-           else
-              pol%Zdipole(jj,:) = kpt%wfn(2,ik)%Zdipole(map_in(jj),:)
-           endif
-        enddo
+          if (map_in(jj) == 0) cycle
+          if (jj <= pol%n_up) then
+            pol%Zdipole(jj, :) = kpt%wfn(1, ik)%Zdipole(map_in(jj), :)
+          else
+            pol%Zdipole(jj, :) = kpt%wfn(2, ik)%Zdipole(map_in(jj), :)
+          end if
+        end do
         ! print *, "finish assign dipole"
-        pol%Zdipole = pol%Zdipole / sqrt(real(nspin,dp))
+        pol%Zdipole = pol%Zdipole/sqrt(real(nspin, dp))
         ! print *, "deallc map_in"
-        deallocate(map_in)
+        deallocate (map_in)
         ! print *, "finish dealloc map_in"
-     enddo
+      end do
 
-     endif ! .not. lanczos
-  endif
+    end if ! .not. lanczos
+  end if
   pol%nn = 0
- 
 
 end subroutine Zdefine_pmap
 !===============================================================

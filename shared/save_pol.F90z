@@ -8,14 +8,14 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine Zsave_pol(pol,iunit,irp,iq)
+subroutine Zsave_pol(pol, iunit, irp, iq)
 
   use typedefs
   use mpi_module
   implicit none
 
   ! arguments
-  type (polinfo), intent(in) :: pol
+  type(polinfo), intent(in) :: pol
   ! number of output unit (local variable)
   integer, intent(in) :: iunit
   ! index of current representation
@@ -29,19 +29,19 @@ subroutine Zsave_pol(pol,iunit,irp,iq)
 
   jtape = iunit + peinf%inode
   do pcol = 1, pol%nn
-     icol = pcol + r_grp%inode*pol%nn
-     if (icol > pol%ntr) cycle
-     do irow = 1, pol%ntr
-        write(jtape,'(2i2,2i5,8i4,2e18.6)') iq, irp, irow, icol, &
-             pol%tr(:,irow), pol%tr(:,icol), &
+    icol = pcol + r_grp%inode*pol%nn
+    if (icol > pol%ntr) cycle
+    do irow = 1, pol%ntr
+      write (jtape, '(2i2,2i5,8i4,2e18.6)') iq, irp, irow, icol, &
+        pol%tr(:, irow), pol%tr(:, icol), &
 #ifdef CPLX
-             real(pol%Zv(irow,pcol),dp), aimag(pol%Zv(irow,pcol))
+        real(pol%Zv(irow, pcol), dp), aimag(pol%Zv(irow, pcol))
 #else
-             pol%Zv(irow,pcol)
+      pol%Zv(irow, pcol)
 #endif
-     enddo
-  enddo
-  call flush(jtape)
+    end do
+  end do
+  call flush (jtape)
 #endif
   return
 

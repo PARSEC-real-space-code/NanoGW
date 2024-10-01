@@ -41,7 +41,7 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine Zget_dipole(gvec,wfn,ik,kvec,wfn_occ)
+subroutine Zget_dipole(gvec, wfn, ik, kvec, wfn_occ)
 
   use typedefs
   use mpi_module
@@ -51,8 +51,8 @@ subroutine Zget_dipole(gvec,wfn,ik,kvec,wfn_occ)
   implicit none
 
   ! arguments
-  type (gspace), intent(inout) :: gvec
-  type (wavefunction), intent(inout) :: wfn
+  type(gspace), intent(inout) :: gvec
+  type(wavefunction), intent(inout) :: wfn
   ! index of current k-point
   integer, intent(in) :: ik
   ! coordinates of current k-point, in units of reciprocal lattice vectors
@@ -61,10 +61,10 @@ subroutine Zget_dipole(gvec,wfn,ik,kvec,wfn_occ)
   real(dp), intent(in) :: wfn_occ(wfn%nstate)
 
   ! local variables
-  character (len=800) :: lastwords
+  character(len=800) :: lastwords
   logical :: use_velocity
   integer :: ii, jj, iv, ic, jv, jc, nv, nc, mv, mc, irp, gr(3), &
-       occ_bnds(4), ngrid, off, ioff, joff, mygrid, jj_loc, icol_pe, ipe
+             occ_bnds(4), ngrid, off, ioff, joff, mygrid, jj_loc, icol_pe, ipe
   real(dp) :: vwr, etr
   SCALAR :: rr(3)
   ! Cartesian coordinates of k-vector
@@ -74,208 +74,208 @@ subroutine Zget_dipole(gvec,wfn,ik,kvec,wfn_occ)
 
   integer, allocatable :: chi_tmp(:)
   SCALAR, allocatable :: wfn1(:), wfn2(:), wfn_loc(:), &
-       wvec_loc(:,:), w_distr(:,:), wvec(:,:), dip(:,:,:)
+    wvec_loc(:, :), w_distr(:, :), wvec(:, :), dip(:, :, :)
   SCALAR, external :: Zdot_c
 
-  call dmatvec3('N',gvec%bvec,kvec,kcart)
+  call dmatvec3('N', gvec%bvec, kvec, kcart)
 
   occ_bnds = 0
   occ_bnds(1) = wfn%nstate
   do ii = 1, wfn%nstate
-     if ( wfn%map(ii) == 0 ) cycle
-     if ( ii < occ_bnds(1) ) occ_bnds(1) = ii
-  enddo
+    if (wfn%map(ii) == 0) cycle
+    if (ii < occ_bnds(1)) occ_bnds(1) = ii
+  end do
   do ii = 1, wfn%nstate
-     if ( wfn%map(ii) == 0 ) cycle
-     if ( ii > occ_bnds(4) ) occ_bnds(4) = ii
-  enddo
+    if (wfn%map(ii) == 0) cycle
+    if (ii > occ_bnds(4)) occ_bnds(4) = ii
+  end do
   do ii = 1, wfn%nstate
-     if ( wfn%map(ii) == 0 ) cycle
-     if (wfn_occ(ii) > tol_occ)  occ_bnds(2) = ii
-  enddo
+    if (wfn%map(ii) == 0) cycle
+    if (wfn_occ(ii) > tol_occ) occ_bnds(2) = ii
+  end do
   do ii = wfn%nstate, 1, -1
-     if ( wfn%map(ii) == 0 ) cycle
-     if (wfn_occ(ii) < one - tol_occ) occ_bnds(3) = ii
-  enddo
+    if (wfn%map(ii) == 0) cycle
+    if (wfn_occ(ii) < one - tol_occ) occ_bnds(3) = ii
+  end do
 
   if (gvec%per > 0) then
-     use_velocity = .true.
+    use_velocity = .true.
   else
-     use_velocity = .false.
-  endif
+    use_velocity = .false.
+  end if
 
-  ngrid = w_grp%ldn * w_grp%npes * gvec%syms%ntrans
+  ngrid = w_grp%ldn*w_grp%npes*gvec%syms%ntrans
   off = w_grp%offset
   mygrid = w_grp%mydim
   nv = occ_bnds(2) - occ_bnds(1) + 1
   nc = occ_bnds(4) - occ_bnds(3) + 1
   if (nv < 1 .or. nc < 1) then
-     wfn%ndip = 0
-     return
-  endif
-  allocate(dip(nv,nc,3))
+    wfn%ndip = 0
+    return
+  end if
+  allocate (dip(nv, nc, 3))
   dip = Zzero
   !-------------------------------------------------------------------
   ! Allocate data.
   !
-  allocate(wvec(3,ngrid),stat=ii)
-  call alccheck('wvec','dipole',3*ngrid,ii)
+  allocate (wvec(3, ngrid), stat=ii)
+  call alccheck('wvec', 'dipole', 3*ngrid, ii)
   wvec = Zzero
-  allocate(wfn1(ngrid),stat=ii)
-  call alccheck('wfn1','dipole',ngrid,ii)
-  allocate(wfn2(w_grp%ldn*gvec%syms%ntrans),stat=ii)
-  call alccheck('wfn2','dipole',w_grp%ldn*gvec%syms%ntrans,ii)
+  allocate (wfn1(ngrid), stat=ii)
+  call alccheck('wfn1', 'dipole', ngrid, ii)
+  allocate (wfn2(w_grp%ldn*gvec%syms%ntrans), stat=ii)
+  call alccheck('wfn2', 'dipole', w_grp%ldn*gvec%syms%ntrans, ii)
   wfn2 = Zzero
-  allocate(chi_tmp(gvec%syms%ntrans))
+  allocate (chi_tmp(gvec%syms%ntrans))
   if (use_velocity) then
-     allocate(w_distr(w_grp%ldn,w_grp%npes),stat=ii)
-     call alccheck('w_distr','dipole',w_grp%ldn*w_grp%npes,ii)
-     w_distr = Zzero
-     allocate(wvec_loc(3,w_grp%nr * gvec%syms%ntrans),stat=ii)
-     call alccheck('wvec_loc','dipole',3*w_grp%nr*gvec%syms%ntrans,ii)
-     allocate(wfn_loc(w_grp%nr),stat=ii)
-     call alccheck('wfn_loc','dipole',w_grp%nr,ii)
+    allocate (w_distr(w_grp%ldn, w_grp%npes), stat=ii)
+    call alccheck('w_distr', 'dipole', w_grp%ldn*w_grp%npes, ii)
+    w_distr = Zzero
+    allocate (wvec_loc(3, w_grp%nr*gvec%syms%ntrans), stat=ii)
+    call alccheck('wvec_loc', 'dipole', 3*w_grp%nr*gvec%syms%ntrans, ii)
+    allocate (wfn_loc(w_grp%nr), stat=ii)
+    call alccheck('wfn_loc', 'dipole', w_grp%nr, ii)
   else
-     !
-     ! Calculate wvec = (r1,r2,r3) in the real space grid.
-     !
-     do irp = 1, gvec%syms%ntrans
-        do ii = 1, mygrid
-           call unfold(gvec%r(1,ii+off),gvec%syms%trans(1,1,irp),gvec%shift,gr)
-           rr = (real(gr,dp) + gvec%shift(:) )*gvec%step(:)
-           jj = w_grp%ldn*(irp-1) + ii
-           wvec(:,jj) = rr
-        enddo
-     enddo
-  endif
+    !
+    ! Calculate wvec = (r1,r2,r3) in the real space grid.
+    !
+    do irp = 1, gvec%syms%ntrans
+      do ii = 1, mygrid
+        call unfold(gvec%r(1, ii + off), gvec%syms%trans(1, 1, irp), gvec%shift, gr)
+        rr = (real(gr, dp) + gvec%shift(:))*gvec%step(:)
+        jj = w_grp%ldn*(irp - 1) + ii
+        wvec(:, jj) = rr
+      end do
+    end do
+  end if
 
 #ifdef CPLX
-  if (fd%norder < 0) call zinitialize_FFT(peinf%inode,fft_box)
+  if (fd%norder < 0) call zinitialize_FFT(peinf%inode, fft_box)
 #endif
 
   !-------------------------------------------------------------------
   ! Start calculation.
   !
   do icol_pe = 1, nc, peinf%npes
-     if (use_velocity) then
-        do ipe = 0, w_grp%npes - 1
-           ic = icol_pe + ipe + &
-                w_grp%npes * w_grp%mygr + r_grp%npes * r_grp%mygr
-           if (ic > nc) cycle
-           mc = ic + occ_bnds(3) - 1
-           jc = wfn%map(mc)
-           if (jc == 0) then
-              write(lastwords,*) ' ERROR in dipole: could not find ', &
-                   'wavefunction ',mc,' in memory! ',ic, jc
-              call die(lastwords)
-           endif
-           call Zcopy(mygrid,wfn%Zwf(1,jc),1,w_distr(1,ipe+1),1)
-        enddo
-        call Zgather(1,w_distr,wfn_loc)
-     endif
-     ic = icol_pe + w_grp%inode + &
-          w_grp%npes * w_grp%mygr + r_grp%npes * r_grp%mygr
-     if (ic <= nc) then
+    if (use_velocity) then
+      do ipe = 0, w_grp%npes - 1
+        ic = icol_pe + ipe + &
+             w_grp%npes*w_grp%mygr + r_grp%npes*r_grp%mygr
+        if (ic > nc) cycle
         mc = ic + occ_bnds(3) - 1
         jc = wfn%map(mc)
         if (jc == 0) then
-           write(lastwords,*) ' ERROR in dipole: could not find ', &
-                'wavefunction ', mc, ' in memory! ', ic, jc
-           call die(lastwords)
-        endif
-        if (use_velocity) then
-           irp = wfn%jrep(0,mc)
-           if (fd%norder < 0) then
-              call Zget_grad_FFT(gvec,wfn_loc,wvec_loc,irp)
-           else
-              call Zget_grad_fd(gvec%syms,wfn_loc,wvec_loc,irp)
-           endif
+          write (lastwords, *) ' ERROR in dipole: could not find ', &
+            'wavefunction ', mc, ' in memory! ', ic, jc
+          call die(lastwords)
+        end if
+        call Zcopy(mygrid, wfn%Zwf(1, jc), 1, w_distr(1, ipe + 1), 1)
+      end do
+      call Zgather(1, w_distr, wfn_loc)
+    end if
+    ic = icol_pe + w_grp%inode + &
+         w_grp%npes*w_grp%mygr + r_grp%npes*r_grp%mygr
+    if (ic <= nc) then
+      mc = ic + occ_bnds(3) - 1
+      jc = wfn%map(mc)
+      if (jc == 0) then
+        write (lastwords, *) ' ERROR in dipole: could not find ', &
+          'wavefunction ', mc, ' in memory! ', ic, jc
+        call die(lastwords)
+      end if
+      if (use_velocity) then
+        irp = wfn%jrep(0, mc)
+        if (fd%norder < 0) then
+          call Zget_grad_FFT(gvec, wfn_loc, wvec_loc, irp)
         else
-           do ipe = 0, w_grp%npes - 1
-              ic = icol_pe + ipe + &
-                   w_grp%npes * w_grp%mygr + r_grp%npes * r_grp%mygr
-              if (ic > nc) cycle
-              mc = ic + occ_bnds(3) - 1
-              jc = wfn%map(mc)
-              if (jc == 0) then
-                 write(lastwords,*) ' ERROR in dipole: could not find ', &
-                      'wavefunction ',mc,' in memory! ',ic, jc
-                 call die(lastwords)
-              endif
-              do irp = 1, gvec%syms%ntrans
-                 do ii = 1, mygrid
-                    jj = w_grp%ldn*((irp-1)*w_grp%npes + ipe) + ii
-                    wfn1(jj) = wfn%Zwf(ii,jc) * real(gvec%syms%chi(wfn%jrep(0,mc),irp),dp)
-                 enddo
-              enddo
-           enddo
-        endif
-     endif
-     if (use_velocity) then
+          call Zget_grad_fd(gvec%syms, wfn_loc, wvec_loc, irp)
+        end if
+      else
+        do ipe = 0, w_grp%npes - 1
+          ic = icol_pe + ipe + &
+               w_grp%npes*w_grp%mygr + r_grp%npes*r_grp%mygr
+          if (ic > nc) cycle
+          mc = ic + occ_bnds(3) - 1
+          jc = wfn%map(mc)
+          if (jc == 0) then
+            write (lastwords, *) ' ERROR in dipole: could not find ', &
+              'wavefunction ', mc, ' in memory! ', ic, jc
+            call die(lastwords)
+          end if
+          do irp = 1, gvec%syms%ntrans
+            do ii = 1, mygrid
+              jj = w_grp%ldn*((irp - 1)*w_grp%npes + ipe) + ii
+              wfn1(jj) = wfn%Zwf(ii, jc)*real(gvec%syms%chi(wfn%jrep(0, mc), irp), dp)
+            end do
+          end do
+        end do
+      end if
+    end if
+    if (use_velocity) then
+      do irp = 1, gvec%syms%ntrans
+        ii = w_grp%ldn*w_grp%npes*(irp - 1) + 1
+        jj = w_grp%nr*(irp - 1) + 1
+        call Zscatter(3, wvec(1, ii), wvec_loc(1, jj))
+      end do
+    end if
+    do ipe = 0, w_grp%npes - 1
+      ic = icol_pe + ipe + w_grp%npes*w_grp%mygr + r_grp%npes*r_grp%mygr
+      if (ic > nc) cycle
+      do iv = 1, nv
+        mv = iv + occ_bnds(1) - 1
+        jv = wfn%map(mv)
+        if (jv == 0) then
+          write (lastwords, *) ' ERROR in dipole : orbital ', mv, &
+            ' not found ! STOP'
+          call die(lastwords)
+        end if
+        irp = wfn%jrep(0, mv)
+        chi_tmp = gvec%syms%chi(irp, :)
         do irp = 1, gvec%syms%ntrans
-           ii = w_grp%ldn*w_grp%npes*(irp-1) + 1
-           jj = w_grp%nr * ( irp - 1 ) + 1
-           call Zscatter(3,wvec(1,ii),wvec_loc(1,jj))
-        enddo
-     endif
-     do ipe = 0, w_grp%npes - 1
-        ic = icol_pe + ipe + w_grp%npes * w_grp%mygr + r_grp%npes * r_grp%mygr
-        if (ic > nc) cycle
-        do iv = 1, nv
-           mv = iv + occ_bnds(1) - 1
-           jv = wfn%map(mv)
-           if (jv == 0) then
-              write(lastwords,*) ' ERROR in dipole : orbital ', mv, &
-                   ' not found ! STOP'
-              call die(lastwords)
-           endif
-           irp = wfn%jrep(0,mv)
-           chi_tmp = gvec%syms%chi(irp,:)
-           do irp = 1, gvec%syms%ntrans
-              do ii = 1, mygrid
-                 jj = w_grp%ldn*(irp-1) + ii
-                 if (use_velocity) then
-                    jj_loc = w_grp%nr * ( irp - 1 ) + ii + off
-                    wfn2(jj) =  chi_tmp(gvec%rtrans(jj_loc)) * &
-                         wfn%Zwf(gvec%rindex(jj_loc)-off,jv)
-                 else
-                    wfn2(jj) = wfn%Zwf(ii,jv) * real(chi_tmp(irp),dp)
-                 endif
-                 wfn2(jj) = MYCONJG(wfn2(jj))
-              enddo
-           enddo
-           if (use_velocity) then
-              !  dip(iv,ic,:)  --> < v | Grad/m + i k/m | c >
-              do irp = 1, gvec%syms%ntrans
-                 ioff = ((irp-1)*w_grp%npes + ipe)*w_grp%ldn + 1
-                 joff = (irp-1)*w_grp%ldn + 1
-                 call Zgemv('N',3,mygrid,Zone,wvec(1,ioff),3,wfn2(joff),1,Zzero,rr,1)
-                 dip(iv,ic,:) = dip(iv,ic,:) + rr * two
-              enddo
+          do ii = 1, mygrid
+            jj = w_grp%ldn*(irp - 1) + ii
+            if (use_velocity) then
+              jj_loc = w_grp%nr*(irp - 1) + ii + off
+              wfn2(jj) = chi_tmp(gvec%rtrans(jj_loc))* &
+                         wfn%Zwf(gvec%rindex(jj_loc) - off, jv)
+            else
+              wfn2(jj) = wfn%Zwf(ii, jv)*real(chi_tmp(irp), dp)
+            end if
+            wfn2(jj) = MYCONJG(wfn2(jj))
+          end do
+        end do
+        if (use_velocity) then
+          !  dip(iv,ic,:)  --> < v | Grad/m + i k/m | c >
+          do irp = 1, gvec%syms%ntrans
+            ioff = ((irp - 1)*w_grp%npes + ipe)*w_grp%ldn + 1
+            joff = (irp - 1)*w_grp%ldn + 1
+            call Zgemv('N', 3, mygrid, Zone, wvec(1, ioff), 3, wfn2(joff), 1, Zzero, rr, 1)
+            dip(iv, ic, :) = dip(iv, ic, :) + rr*two
+          end do
 #ifdef CPLX
-              do ii = 1, gvec%per
-                 dip(iv,ic,ii) = dip(iv,ic,ii) + &
-                      zi * two * kcart(ii) * real(gvec%syms%ntrans,dp) * &
-                      Zdot_c(mygrid,wfn%Zwf(1,jv),1,wfn%Zwf(1,jc),1)
-              enddo
-#endif   
-           else
-              !  dip(iv,ic,:)  --> < v | r | c >
-              do irp = 1, gvec%syms%ntrans
-                 ioff = ((irp-1)*w_grp%npes + ipe)*w_grp%ldn + 1
-                 joff = (irp-1)*w_grp%ldn + 1
-                 call Zmultiply_vec(mygrid,wfn1(ioff),wfn2(joff))
-                 ioff = (irp-1)*w_grp%ldn + 1
-                 call Zgemv('N',3,mygrid,Zone,wvec(1,ioff),3,wfn2(joff),1,Zzero,rr,1)
-                 dip(iv,ic,:) = dip(iv,ic,:) + rr
-              enddo
-           endif
-        enddo  !iv
-     enddo  ! do ipe = 0, w_grp%npes-1
-  enddo  !ic
+          do ii = 1, gvec%per
+            dip(iv, ic, ii) = dip(iv, ic, ii) + &
+                              zi*two*kcart(ii)*real(gvec%syms%ntrans, dp)* &
+                              Zdot_c(mygrid, wfn%Zwf(1, jv), 1, wfn%Zwf(1, jc), 1)
+          end do
+#endif
+        else
+          !  dip(iv,ic,:)  --> < v | r | c >
+          do irp = 1, gvec%syms%ntrans
+            ioff = ((irp - 1)*w_grp%npes + ipe)*w_grp%ldn + 1
+            joff = (irp - 1)*w_grp%ldn + 1
+            call Zmultiply_vec(mygrid, wfn1(ioff), wfn2(joff))
+            ioff = (irp - 1)*w_grp%ldn + 1
+            call Zgemv('N', 3, mygrid, Zone, wvec(1, ioff), 3, wfn2(joff), 1, Zzero, rr, 1)
+            dip(iv, ic, :) = dip(iv, ic, :) + rr
+          end do
+        end if
+      end do  !iv
+    end do  ! do ipe = 0, w_grp%npes-1
+  end do  !ic
 
 #ifdef CPLX
-  if (fd%norder < 0) call zfinalize_FFT(peinf%inode,fft_box)
+  if (fd%norder < 0) call zfinalize_FFT(peinf%inode, fft_box)
 #endif
 
   !-------------------------------------------------------------------
@@ -284,60 +284,60 @@ subroutine Zget_dipole(gvec,wfn,ik,kvec,wfn_occ)
   !
   if (use_velocity) then
 
-     do ii = 1, type_num
-        call Znonloc(gvec,psp(ii),wfn,occ_bnds,ii,kcart,dip)
-     enddo
+    do ii = 1, type_num
+      call Znonloc(gvec, psp(ii), wfn, occ_bnds, ii, kcart, dip)
+    end do
 
-     do ic = occ_bnds(3), occ_bnds(4)
-        jc = ic - occ_bnds(3) + 1
-        vwr = wfn%e1(ic)
-        do iv = occ_bnds(1), occ_bnds(2)
-           jv = iv - occ_bnds(1) + 1
-           etr = vwr - wfn%e1(iv)
-           if ( etr < EN_DEG ) then
-              if (peinf%master) then
-                 write(6,*) ' WARNING: states ',ic,iv,' are almost degenerate!'
-                 write(6,*) 'Cannot calculate velocity matrix element. ', &
-                      'Reset it to zero.'
-              endif
-              dip(jv,jc,:) = Zzero
-           else
-              dip(jv,jc,:) = dip(jv,jc,:) / etr
-           endif
-        enddo
-     enddo
-  endif
+    do ic = occ_bnds(3), occ_bnds(4)
+      jc = ic - occ_bnds(3) + 1
+      vwr = wfn%e1(ic)
+      do iv = occ_bnds(1), occ_bnds(2)
+        jv = iv - occ_bnds(1) + 1
+        etr = vwr - wfn%e1(iv)
+        if (etr < EN_DEG) then
+          if (peinf%master) then
+            write (6, *) ' WARNING: states ', ic, iv, ' are almost degenerate!'
+            write (6, *) 'Cannot calculate velocity matrix element. ', &
+              'Reset it to zero.'
+          end if
+          dip(jv, jc, :) = Zzero
+        else
+          dip(jv, jc, :) = dip(jv, jc, :)/etr
+        end if
+      end do
+    end do
+  end if
 
   !-------------------------------------------------------------------
   ! Done. Deallocate memory and save data.
   !
-  deallocate(wvec)
-  deallocate(wfn1)
-  deallocate(wfn2)
-  deallocate(chi_tmp)
+  deallocate (wvec)
+  deallocate (wfn1)
+  deallocate (wfn2)
+  deallocate (chi_tmp)
   if (use_velocity) then
-     deallocate(wvec_loc)
-     deallocate(wfn_loc)
-     deallocate(w_distr)
-  endif
-  call Zpsum(nv*nc*3,peinf%npes,peinf%comm,dip)
+    deallocate (wvec_loc)
+    deallocate (wfn_loc)
+    deallocate (w_distr)
+  end if
+  call Zpsum(nv*nc*3, peinf%npes, peinf%comm, dip)
 
   wfn%ndip = nv*nc
-  allocate(wfn%Zdipole(wfn%ndip,3))
-  allocate(wfn%mapd(4,wfn%ndip))
+  allocate (wfn%Zdipole(wfn%ndip, 3))
+  allocate (wfn%mapd(4, wfn%ndip))
   ii = 0
-  do ic = occ_bnds(3),occ_bnds(4)
-     do iv = occ_bnds(1),occ_bnds(2)
-        ii = ii + 1
-        wfn%mapd(1,ii) = iv
-        wfn%mapd(2,ii) = ic
-        wfn%mapd(3,ii) = ik
-        wfn%mapd(4,ii) = ik
-        wfn%Zdipole(ii,:) = dip(iv-occ_bnds(1)+1,ic-occ_bnds(3)+1,:)
-     enddo
-  enddo
+  do ic = occ_bnds(3), occ_bnds(4)
+    do iv = occ_bnds(1), occ_bnds(2)
+      ii = ii + 1
+      wfn%mapd(1, ii) = iv
+      wfn%mapd(2, ii) = ic
+      wfn%mapd(3, ii) = ik
+      wfn%mapd(4, ii) = ik
+      wfn%Zdipole(ii, :) = dip(iv - occ_bnds(1) + 1, ic - occ_bnds(3) + 1, :)
+    end do
+  end do
 
-  deallocate(dip)
+  deallocate (dip)
 
 end subroutine Zget_dipole
 !===============================================================

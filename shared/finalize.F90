@@ -19,7 +19,7 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine finalize(verbose,comm,count1,count2,routnam,timerlist)
+subroutine finalize(verbose, comm, count1, count2, routnam, timerlist)
 
   use myconstants
   implicit none
@@ -28,10 +28,10 @@ subroutine finalize(verbose,comm,count1,count2,routnam,timerlist)
   include 'mpif.h'
 #endif
   logical, intent(in) :: verbose
-  integer, intent(in) :: comm, count1, count2, timerlist(count1+count2)
-  character (len=40), intent(in) :: routnam(count1+count2)
+  integer, intent(in) :: comm, count1, count2, timerlist(count1 + count2)
+  character(len=40), intent(in) :: routnam(count1 + count2)
 
-  character (len=26) :: datelabel
+  character(len=26) :: datelabel
   integer :: ii, jj
   real(dp) :: tsec(2)
 #ifdef MPI
@@ -42,7 +42,7 @@ subroutine finalize(verbose,comm,count1,count2,routnam,timerlist)
 !-------------------------------------------------------------------
 
   if (verbose) write (6, '(/,a,/,48x,a10,3x,a10,4x,a8,/)') &
-      repeat('-', 65), 'CPU [s]', 'WALL [s]', '#'
+    repeat('-', 65), 'CPU [s]', 'WALL [s]', '#'
   do ii = 1, count1 + count2
     if (ii == count1 .and. verbose) write (6, *)
     jj = 3
@@ -54,36 +54,36 @@ subroutine finalize(verbose,comm,count1,count2,routnam,timerlist)
     if (verbose .and. jj > 0) then
 #ifdef MPI
       write (6, '(1x,a40,a,f10.3,3x,f10.3)') &
-          routnam(ii), '( min. )', tmin(1), tmin(2)
+        routnam(ii), '( min. )', tmin(1), tmin(2)
       write (6, '(41x,a,f10.3,3x,f10.3,3x,i8)') &
-          '(master)', tsec(1), tsec(2), jj
+        '(master)', tsec(1), tsec(2), jj
       write (6, '(41x,a,f10.3,3x,f10.3)') '( max. )', tmax(1), tmax(2)
 #else
       write (6, '(1x,a40,8x,f10.3,3x,f10.3,3x,i8)') &
-          routnam(ii), tsec(1), tsec(2), jj
+        routnam(ii), tsec(1), tsec(2), jj
 #endif
-    endif
-  enddo
+    end if
+  end do
   jj = 3
   call timacc(1, jj, tsec)
 #ifdef MPI
-  call MPI_ALLREDUCE(tsec, tmin, 2, MPI_DOUBLE_PRECISION, MPI_MIN, comm,info)
-  call MPI_ALLREDUCE(tsec, tmax, 2, MPI_DOUBLE_PRECISION, MPI_MAX, comm,info)
+  call MPI_ALLREDUCE(tsec, tmin, 2, MPI_DOUBLE_PRECISION, MPI_MIN, comm, info)
+  call MPI_ALLREDUCE(tsec, tmax, 2, MPI_DOUBLE_PRECISION, MPI_MAX, comm, info)
 #endif
 
   if (verbose) then
 #ifdef MPI
     write (6, '(/,1x,a40,a,f10.3,3x,f10.3)') &
-        'TOTAL', '( min. )', tmin(1), tmin(2)
+      'TOTAL', '( min. )', tmin(1), tmin(2)
     write (6, '(41x,a,f10.3,3x,f10.3)') '(master)', tsec(1), tsec(2)
     write (6, '(41x,a,f10.3,3x,f10.3,/)') '( max. )', tmax(1), tmax(2)
 #else
     write (6, '(/,1x,a40,8x,f10.3,3x,f10.3,/)') &
-        'TOTAL', tsec(1), tsec(2)
+      'TOTAL', tsec(1), tsec(2)
 #endif
     call get_date(datelabel)
     write (6, '(3a,/,a)') ' Finished ', datelabel, ' UTC', repeat('-', 65)
-  endif
+  end if
 
 #ifdef MPI
   call MPI_FINALIZE(info)

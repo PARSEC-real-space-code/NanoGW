@@ -13,19 +13,19 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine Zsetup_g(gvec,kpt,qpt,pol_in,pol,k_p,nspin,tdldacut,lanczos,lessmemory,verbose)
+subroutine Zsetup_g(gvec, kpt, qpt, pol_in, pol, k_p, nspin, tdldacut, lanczos, lessmemory, verbose)
 
   use typedefs
   use mpi_module
   implicit none
 
   ! arguments
-  type (gspace), intent(in) :: gvec
-  type (kptinfo), intent(inout) :: kpt
-  type (qptinfo), intent(inout) :: qpt
-  type (polinfo),dimension(2), intent(inout) :: pol_in
-  type (polinfo), dimension(gvec%syms%ntrans,qpt%nk), intent(inout) :: pol
-  type (kernelinfo), dimension(gvec%syms%ntrans,qpt%nk), intent(inout) :: k_p
+  type(gspace), intent(in) :: gvec
+  type(kptinfo), intent(inout) :: kpt
+  type(qptinfo), intent(inout) :: qpt
+  type(polinfo), dimension(2), intent(inout) :: pol_in
+  type(polinfo), dimension(gvec%syms%ntrans, qpt%nk), intent(inout) :: pol
+  type(kernelinfo), dimension(gvec%syms%ntrans, qpt%nk), intent(inout) :: k_p
   ! number of spins
   integer, intent(in) :: nspin
   ! whether printout extra debug info
@@ -39,88 +39,88 @@ subroutine Zsetup_g(gvec,kpt,qpt,pol_in,pol,k_p,nspin,tdldacut,lanczos,lessmemor
 
   ! local variables
   integer :: ii, jj, isp, ik, iq, jk, imin, imax, n_p, n_p_up, nv, nc
-  integer, allocatable :: map_p(:,:)
+  integer, allocatable :: map_p(:, :)
   real(dp) :: occ_v, occ_c, tmp
 
   !-------------------------------------------------------------------
   ! Calculate dipole matrix elements.
   !
-  if ( .not. lanczos ) then
+  if (.not. lanczos) then
   do isp = 1, nspin
-     do ik = 1, kpt%nk
-        call Zget_dipole(gvec,kpt%wfn(isp,ik),ik,kpt%fk(1,ik), &
-             kpt%wfn(isp,ik)%occ0)
-        ! W Gao dbg 
-        if(peinf%master .and. verbose) then
-          write(*, '(" isp = ",i2," ik = ",i4)') isp, ik
-          write(*, '("    ii    mapd(1,ii)  mapd(2,ii)" )')
-          do ii = 1, kpt%wfn(isp,ik)%ndip
-             write(*,'(3i8)') ii, kpt%wfn(isp,ik)%mapd(1,ii), &
-                kpt%wfn(isp,ik)%mapd(2,ii)
-          enddo
-        endif
-     enddo
-  enddo
-  endif ! end if lanczos
+    do ik = 1, kpt%nk
+      call Zget_dipole(gvec, kpt%wfn(isp, ik), ik, kpt%fk(1, ik), &
+                       kpt%wfn(isp, ik)%occ0)
+      ! W Gao dbg
+      if (peinf%master .and. verbose) then
+        write (*, '(" isp = ",i2," ik = ",i4)') isp, ik
+        write (*, '("    ii    mapd(1,ii)  mapd(2,ii)" )')
+        do ii = 1, kpt%wfn(isp, ik)%ndip
+          write (*, '(3i8)') ii, kpt%wfn(isp, ik)%mapd(1, ii), &
+            kpt%wfn(isp, ik)%mapd(2, ii)
+        end do
+      end if
+    end do
+  end do
+  end if ! end if lanczos
   !-------------------------------------------------------------------
   ! In periodic systems, calculate the matching pairs of (k,k') vectors:
   ! for each q-vector in the polarizability operator, conduction
   ! wave-functions are taken from point k and valence wave-functions are
   ! taken from point k' = k - q.
   !
-  allocate(qpt%match(kpt%nk,qpt%nk))
-  call qpt_matching(kpt%nk,kpt%nk,qpt%nk,kpt%fk,kpt%fk,qpt%fk,gvec%bdot,qpt%match)
+  allocate (qpt%match(kpt%nk, qpt%nk))
+  call qpt_matching(kpt%nk, kpt%nk, qpt%nk, kpt%fk, kpt%fk, qpt%fk, gvec%bdot, qpt%match)
   if (peinf%master .and. gvec%per > 0) then
-     write(6,*)
-     write(6,*) ' Matching k-points : '
-     do iq = 1, qpt%nk
-        write(6,'(a,i2,a,3f20.10)') ' q-point # ',iq,' = ',qpt%fk(:,iq)
-        write(6,*) ' k-point and (k-q) point '
-        do ik = 1, kpt%nk
-           if (qpt%match(ik,iq) > 0) write(6,'(3f10.4,5x,3f10.4)') &
-                kpt%fk(:,ik), kpt%fk(:,qpt%match(ik,iq))
-        enddo
-     enddo
-  endif
+    write (6, *)
+    write (6, *) ' Matching k-points : '
+    do iq = 1, qpt%nk
+      write (6, '(a,i2,a,3f20.10)') ' q-point # ', iq, ' = ', qpt%fk(:, iq)
+      write (6, *) ' k-point and (k-q) point '
+      do ik = 1, kpt%nk
+        if (qpt%match(ik, iq) > 0) write (6, '(3f10.4,5x,3f10.4)') &
+          kpt%fk(:, ik), kpt%fk(:, qpt%match(ik, iq))
+      end do
+    end do
+  end if
   if (minval(qpt%match) == 0) then
-     if (peinf%master) write(6,'(a,/,a,/,a)') &
-          ' ERROR: grids kpt and qpt are not regular!', &
-          ' Could not find matching between points kpt and qpt.', &
-          ' Make sure the k-point grid is a full regular (Monkhorst-Pack) grid.'
-     call die('Stop')
-  endif
+    if (peinf%master) write (6, '(a,/,a,/,a)') &
+      ' ERROR: grids kpt and qpt are not regular!', &
+      ' Could not find matching between points kpt and qpt.', &
+      ' Make sure the k-point grid is a full regular (Monkhorst-Pack) grid.'
+    call die('Stop')
+  end if
   !-------------------------------------------------------------------
   ! If no sets of occupied/empty orbitals were given by the user,
   ! take them from the calculated dipole matrix elements.
   !
   do isp = 1, nspin
-     if (pol_in(isp)%ncond < 0) then
-        imax = 0
-        imin = kpt%wfn(isp,1)%mapd(2,1)
-        do ik = 1, kpt%nk
-           imax = max(imax,maxval(kpt%wfn(isp,ik)%mapd(2,:)))
-           imin = min(imin,minval(kpt%wfn(isp,ik)%mapd(2,:)))
-        enddo
-        pol_in(isp)%ncond = imax - imin + 1
-        allocate(pol_in(isp)%cmap(pol_in(isp)%ncond))
-        do jj = 1, pol_in(isp)%ncond
-           pol_in(isp)%cmap(jj) = jj + imin - 1
-        enddo
-     endif
-     if (pol_in(isp)%nval < 0) then
-        imax = 0
-        imin = kpt%wfn(isp,1)%mapd(2,1)
-        do ik = 1, kpt%nk
-           imax = max(imax,maxval(kpt%wfn(isp,ik)%mapd(1,:)))
-           imin = min(imin,minval(kpt%wfn(isp,ik)%mapd(1,:)))
-        enddo
-        pol_in(isp)%nval = imax - imin + 1
-        allocate(pol_in(isp)%vmap(pol_in(isp)%nval))
-        do jj = 1, pol_in(isp)%nval
-           pol_in(isp)%vmap(jj) = jj + imin - 1
-        enddo
-     endif
-  enddo
+    if (pol_in(isp)%ncond < 0) then
+      imax = 0
+      imin = kpt%wfn(isp, 1)%mapd(2, 1)
+      do ik = 1, kpt%nk
+        imax = max(imax, maxval(kpt%wfn(isp, ik)%mapd(2, :)))
+        imin = min(imin, minval(kpt%wfn(isp, ik)%mapd(2, :)))
+      end do
+      pol_in(isp)%ncond = imax - imin + 1
+      allocate (pol_in(isp)%cmap(pol_in(isp)%ncond))
+      do jj = 1, pol_in(isp)%ncond
+        pol_in(isp)%cmap(jj) = jj + imin - 1
+      end do
+    end if
+    if (pol_in(isp)%nval < 0) then
+      imax = 0
+      imin = kpt%wfn(isp, 1)%mapd(2, 1)
+      do ik = 1, kpt%nk
+        imax = max(imax, maxval(kpt%wfn(isp, ik)%mapd(1, :)))
+        imin = min(imin, minval(kpt%wfn(isp, ik)%mapd(1, :)))
+      end do
+      pol_in(isp)%nval = imax - imin + 1
+      allocate (pol_in(isp)%vmap(pol_in(isp)%nval))
+      do jj = 1, pol_in(isp)%nval
+        pol_in(isp)%vmap(jj) = jj + imin - 1
+      end do
+    end if
+  end do
   !-------------------------------------------------------------------
   ! If there are LDA states present in both mapd(1,:) and mapd(2,:),
   ! they belong to partially occupied states at the Fermi energy.
@@ -132,61 +132,61 @@ subroutine Zsetup_g(gvec,kpt,qpt,pol_in,pol,k_p,nspin,tdldacut,lanczos,lessmemor
   ! polarizability.
   !
   !allocate(map_p(4,kpt%wfn(1,1)%nstate*kpt%wfn(1,1)%nstate*nspin*kpt%nk))
-  if ( nspin .eq. 2 ) then
-  nv = max(pol_in(1)%nval, pol_in(2)%nval) 
-  nc = max(pol_in(1)%ncond, pol_in(2)%ncond)
+  if (nspin == 2) then
+    nv = max(pol_in(1)%nval, pol_in(2)%nval)
+    nc = max(pol_in(1)%ncond, pol_in(2)%ncond)
   else
-  nv = pol_in(1)%nval
-  nc = pol_in(1)%ncond
-  endif
-  if (peinf%inode .eq. peinf%npes - 1) print *, " lanczos = ", lanczos, " lessmemory = ", lessmemory
-  if ( (.not. lanczos) .or. &
-       (lanczos .and. (lessmemory .ne. 4)) .or. &
-       (lanczos .and. (lessmemory .eq. 4) .and. (gvec%syms%ntrans .eq. 1)) ) then
-  !
-  allocate(map_p(4, nc*nv*nspin*kpt%nk))
-  do iq = 1, qpt%nk
-     n_p = 0
-     map_p = 0
-     do isp = 1, nspin
+    nv = pol_in(1)%nval
+    nc = pol_in(1)%ncond
+  end if
+  if (peinf%inode == peinf%npes - 1) print *, " lanczos = ", lanczos, " lessmemory = ", lessmemory
+  if ((.not. lanczos) .or. &
+      (lanczos .and. (lessmemory /= 4)) .or. &
+      (lanczos .and. (lessmemory == 4) .and. (gvec%syms%ntrans == 1))) then
+    !
+    allocate (map_p(4, nc*nv*nspin*kpt%nk))
+    do iq = 1, qpt%nk
+      n_p = 0
+      map_p = 0
+      do isp = 1, nspin
         do ik = 1, kpt%nk
-           jk = qpt%match(ik,iq)
-           do ii = 1, pol_in(isp)%ncond
-              occ_c = kpt%wfn(isp,ik)%occ0(pol_in(isp)%cmap(ii))
-              if ( occ_c > one-tol_occ ) cycle
-              do jj = 1, pol_in(isp)%nval
-                 occ_v = kpt%wfn(isp,jk)%occ0(pol_in(isp)%vmap(jj))
-                 if ( occ_v < tol_occ ) cycle
-                 if ( occ_c > tol_occ .and. occ_v < one-tol_occ ) cycle
-                 tmp = kpt%wfn(isp,ik)%e0(pol_in(isp)%cmap(ii)) - &
-                      kpt%wfn(isp,jk)%e0(pol_in(isp)%vmap(jj))
-                 if (tdldacut > zero .and. tdldacut < tmp) cycle
-                 n_p = n_p + 1
-                 map_p(1,n_p) = pol_in(isp)%vmap(jj)
-                 map_p(2,n_p) = pol_in(isp)%cmap(ii)
-                 map_p(3,n_p) = jk
-                 map_p(4,n_p) = ik
-              enddo
-           enddo
-        enddo
-        if ( isp == 1) n_p_up = n_p
-     enddo
+          jk = qpt%match(ik, iq)
+          do ii = 1, pol_in(isp)%ncond
+            occ_c = kpt%wfn(isp, ik)%occ0(pol_in(isp)%cmap(ii))
+            if (occ_c > one - tol_occ) cycle
+            do jj = 1, pol_in(isp)%nval
+              occ_v = kpt%wfn(isp, jk)%occ0(pol_in(isp)%vmap(jj))
+              if (occ_v < tol_occ) cycle
+              if (occ_c > tol_occ .and. occ_v < one - tol_occ) cycle
+              tmp = kpt%wfn(isp, ik)%e0(pol_in(isp)%cmap(ii)) - &
+                    kpt%wfn(isp, jk)%e0(pol_in(isp)%vmap(jj))
+              if (tdldacut > zero .and. tdldacut < tmp) cycle
+              n_p = n_p + 1
+              map_p(1, n_p) = pol_in(isp)%vmap(jj)
+              map_p(2, n_p) = pol_in(isp)%cmap(ii)
+              map_p(3, n_p) = jk
+              map_p(4, n_p) = ik
+            end do
+          end do
+        end do
+        if (isp == 1) n_p_up = n_p
+      end do
 
-     do ii = 1, gvec%syms%ntrans
+      do ii = 1, gvec%syms%ntrans
         ! If ntr < 0, skip the construction of kernel.
         if (peinf%master) print *, "call_pmap"
-        if (pol(ii,iq)%ntr >= 0) &
-             call Zdefine_pmap(gvec%syms,kpt,pol(ii,iq),ii,n_p,map_p,nspin,n_p_up,lanczos)
+        if (pol(ii, iq)%ntr >= 0) &
+          call Zdefine_pmap(gvec%syms, kpt, pol(ii, iq), ii, n_p, map_p, nspin, n_p_up, lanczos)
         if (peinf%master) print *, "Start define_pmap"
-        if (k_p(ii,iq)%ncol >= 0) &
-             call define_kmap(gvec%syms,kpt,k_p(ii,iq),ii,n_p,map_p,n_p, &
-             map_p,n_p_up,n_p_up)
+        if (k_p(ii, iq)%ncol >= 0) &
+          call define_kmap(gvec%syms, kpt, k_p(ii, iq), ii, n_p, map_p, n_p, &
+                           map_p, n_p_up, n_p_up)
         if (peinf%master) print *, "Finished define_kmap"
-     enddo
-  enddo
-  deallocate(map_p)
-  !
-  endif ! .not. lanczos
+      end do
+    end do
+    deallocate (map_p)
+    !
+  end if ! .not. lanczos
   print *, "exit setup_g "
 
 end subroutine Zsetup_g
