@@ -7,7 +7,7 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine input_t(tamm_d,rpaonly,trip_flag,noxchange,trunc_c)
+subroutine input_t(tamm_d, rpaonly, trip_flag, noxchange, trunc_c)
   !
   ! Read input parameters from file rgwbs.in
   !
@@ -31,18 +31,18 @@ subroutine input_t(tamm_d,rpaonly,trip_flag,noxchange,trunc_c)
   !
   call esdf_init('rgwbs.in')
 
-  rpaonly =  (esdf_defined('rpa_spectrum_only'))
+  rpaonly = (esdf_defined('rpa_spectrum_only'))
 
-  trip_flag =  (esdf_defined('tdlda_triplet_kernel'))
+  trip_flag = (esdf_defined('tdlda_triplet_kernel'))
 
-  noxchange =  (esdf_defined('no_exchange'))
+  noxchange = (esdf_defined('no_exchange'))
 
-  trunc_c =  (esdf_defined('truncate_coulomb'))
+  trunc_c = (esdf_defined('truncate_coulomb'))
 
   call esdf_close
 
-  if ( trip_flag ) noxchange = .true.
-  if ( trunc_c ) tamm_d = .true.
+  if (trip_flag) noxchange = .true.
+  if (trunc_c) tamm_d = .true.
 
   return
 

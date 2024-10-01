@@ -13,9 +13,9 @@
 !             x_zero - xacc < x < x_zero + xacc
 ! At input, x_zero is a first estimate of the root, and xacc is the
 ! desired accuracy.
-! 
+!
 !-------------------------------------------------------------------
-subroutine newtonr(ntable,xtable,ftable,x_zero,xacc,fx,ierr)
+subroutine newtonr(ntable, xtable, ftable, x_zero, xacc, fx, ierr)
 
   use myconstants
   implicit none
@@ -45,14 +45,14 @@ subroutine newtonr(ntable,xtable,ftable,x_zero,xacc,fx,ierr)
 
   ierr = 0
   do jj = 1, MAX_IT
-     call spline_evaluate(ntable,xtable,ftable,x_zero,fx,df)
-     dx = real(fx,dp) / df
-     x_zero = x_zero - dx
-     if( abs(dx) < xacc ) then
-        call spline_evaluate(ntable,xtable,ftable,x_zero,fx,df)
-        return
-     endif
-  enddo
+    call spline_evaluate(ntable, xtable, ftable, x_zero, fx, df)
+    dx = real(fx, dp)/df
+    x_zero = x_zero - dx
+    if (abs(dx) < xacc) then
+      call spline_evaluate(ntable, xtable, ftable, x_zero, fx, df)
+      return
+    end if
+  end do
   ierr = jj
 
 end subroutine newtonr

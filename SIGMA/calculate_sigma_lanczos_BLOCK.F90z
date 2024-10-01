@@ -6,11 +6,11 @@
 ! Author: Weiwei Gao @ Dalian Univ. of Tech.
 !
 !---------------------------------------------------------------
-subroutine Zcalculate_sigma_lanczos_BLOCK (nspin,nkpt, &
-     sig_en,dft_code,gvec,kpt,qpt,k_c,k_p,sig_in, &
-     sig,q_p,nolda,tamm_d,writeqp,snorm,cohsex, &
-     ecuts,sig_cut,max_sig,&
-     isdf_in,doisdf,opt)
+subroutine Zcalculate_sigma_lanczos_BLOCK(nspin, nkpt, &
+                                          sig_en, dft_code, gvec, kpt, qpt, k_c, k_p, sig_in, &
+                                          sig, q_p, nolda, tamm_d, writeqp, snorm, cohsex, &
+                                          ecuts, sig_cut, max_sig, &
+                                          isdf_in, doisdf, opt)
 
   use typedefs
   use mpi_module
@@ -21,70 +21,70 @@ subroutine Zcalculate_sigma_lanczos_BLOCK (nspin,nkpt, &
 
   ! arguments
   integer, intent(in) :: &
-       nspin, &    ! number of spin channels
-       nkpt, &     ! number of k-points where self-energy is computed
-       sig_en, &   ! number of energy values where self-energy is computed
-       dft_code    ! choice of DFT code
+    nspin, &    ! number of spin channels
+    nkpt, &     ! number of k-points where self-energy is computed
+    sig_en, &   ! number of energy values where self-energy is computed
+    dft_code    ! choice of DFT code
   ! real-space grid
-  type (gspace), intent(inout) :: gvec
+  type(gspace), intent(inout) :: gvec
   ! k-points and wavefunctions, q-space in TDLDA
-  type (kptinfo), intent(inout) :: kpt
-  type (qptinfo), intent(inout) :: qpt
-  type (kernelinfo), dimension(gvec%syms%ntrans,qpt%nk), intent(inout) :: &
-       k_c, &        ! kernel for correlation, vertex
-       k_p           ! kernel for TDLDA
+  type(kptinfo), intent(inout) :: kpt
+  type(qptinfo), intent(inout) :: qpt
+  type(kernelinfo), dimension(gvec%syms%ntrans, qpt%nk), intent(inout) :: &
+    k_c, &        ! kernel for correlation, vertex
+    k_p           ! kernel for TDLDA
   ! input self-energy data
-  type (siginfo), intent(inout) :: sig_in
+  type(siginfo), intent(inout) :: sig_in
   ! self-energy data
-  type (siginfo), dimension(nspin,nkpt), intent(inout) :: sig
+  type(siginfo), dimension(nspin, nkpt), intent(inout) :: sig
   ! quasi-particle data
-  type (qpinfo), dimension(gvec%syms%ntrans,nspin,nkpt), intent(inout) :: q_p
+  type(qpinfo), dimension(gvec%syms%ntrans, nspin, nkpt), intent(inout) :: q_p
 
   logical, intent(in) :: &
-       nolda, &      ! true if LDA kernel is not used
-       tamm_d, &     ! true if Tamm-Dancof approximation is used
-       writeqp, &    ! true if QP wavefunctions are printed in file parsec_qp.dat
-       snorm, &      ! true if sum rule is renormalized
-       cohsex        ! true if self-energy is computed within the COHSEX approximation
+    nolda, &      ! true if LDA kernel is not used
+    tamm_d, &     ! true if Tamm-Dancof approximation is used
+    writeqp, &    ! true if QP wavefunctions are printed in file parsec_qp.dat
+    snorm, &      ! true if sum rule is renormalized
+    cohsex        ! true if self-energy is computed within the COHSEX approximation
 
   real(dp), intent(in) :: &
-       ecuts, &      ! resolution in energy denominators, in Ry
-       sig_cut       ! cut-off in self-energy corrections
+    ecuts, &      ! resolution in energy denominators, in Ry
+    sig_cut       ! cut-off in self-energy corrections
   ! maximum amplitude of self-energy correction
   real(dp), intent(out) :: max_sig
   ! Additional input parameters for ISDF method
-  type (ISDF), intent(inout) :: isdf_in
+  type(ISDF), intent(inout) :: isdf_in
   logical, intent(in) :: doisdf
-  type (options), intent(in) :: opt
+  type(options), intent(in) :: opt
   ! local variables
-  character (len=100) :: file_name
+  character(len=100) :: file_name
 
   logical :: staticcorr
-  integer :: ii, jj, irp, jrp, iq, ik, jk,  isp,  isig, &
-       info, chkpt, neig_qp, ien, n_intp_loc, ic, iv, icv, &
-       icv_start, icv_end, intp_start, intp_end, ij, incr, &
-       jn, m1, ncv, ncv_loc, iprocs, nval, inode, ipe, &
-       ldncv, mycv_end, mycv_start, myn_intp_end, myn_intp_start, &
-       myn_intp_r, myncv, this_ncv, jnend, npoly, jnblock
+  integer :: ii, jj, irp, jrp, iq, ik, jk, isp, isig, &
+             info, chkpt, neig_qp, ien, n_intp_loc, ic, iv, icv, &
+             icv_start, icv_end, intp_start, intp_end, ij, incr, &
+             jn, m1, ncv, ncv_loc, iprocs, nval, inode, ipe, &
+             ldncv, mycv_end, mycv_start, myn_intp_end, myn_intp_start, &
+             myn_intp_r, myncv, this_ncv, jnend, npoly, jnblock
   real(dp) :: tsec(2), xsum, rtmp, epsinv, deltae, emin, &
-    emax, en0, res
-  real(dp), allocatable :: polynomial(:), Pvec(:,:), &
-    tmp_Cmtrx(:,:), tmp_Cvec(:,:), tmp_CvecM(:,:), tmp_poly(:), &
-    sqrtR(:), tmp_Pvec(:,:), Cmtrx_bl(:,:)
+              emax, en0, res
+  real(dp), allocatable :: polynomial(:), Pvec(:, :), &
+                           tmp_Cmtrx(:, :), tmp_Cvec(:, :), tmp_CvecM(:, :), tmp_poly(:), &
+                           sqrtR(:), tmp_Pvec(:, :), Cmtrx_bl(:, :)
   integer, allocatable :: iord(:) !, cvpair(:,:)
   integer, parameter :: it_scf = 0
   real(dp), parameter :: qpmix = 1.d0
-  complex(dp), allocatable :: zz(:), ezz(:,:), sigma_corr(:), &
-    sigma_corr_tmp(:,:)
+  complex(dp), allocatable :: zz(:), ezz(:, :), sigma_corr(:), &
+                              sigma_corr_tmp(:, :)
   ! -------- temporary arrays for lanczos iterations --------
-  integer :: tmp_cvpair(2,w_grp%ldncv), nvblks, nblks, ncblks, &
-    kk, blksz, iblk
-  integer, allocatable :: blks(:,:)
+  integer :: tmp_cvpair(2, w_grp%ldncv), nvblks, nblks, ncblks, &
+             kk, blksz, iblk
+  integer, allocatable :: blks(:, :)
   real(dp) :: pnorm2(opt%jnblock), pnorm(opt%jnblock), fit_error
   real(dp) :: MC_vec(w_grp%myn_intp_r, opt%jnblock), &
-    CMC_vec(w_grp%ldncv, opt%jnblock), &
-    tmp_vec(isdf_in%n_intp_r, opt%jnblock), &
-    tmp_Hvec(w_grp%ldncv, opt%jnblock)
+              CMC_vec(w_grp%ldncv, opt%jnblock), &
+              tmp_vec(isdf_in%n_intp_r, opt%jnblock), &
+              tmp_Hvec(w_grp%ldncv, opt%jnblock)
   ! ---------------------------------------------------------
   real(dp), external :: ddot
 
@@ -93,374 +93,374 @@ subroutine Zcalculate_sigma_lanczos_BLOCK (nspin,nkpt, &
   ! Prepare to calculate self-energy.
   !
   staticcorr = .false.
-  
-  if (nspin .ne. 1) call die("For now, GW lanczos is only implemented for nspin = 1.")
-  if (nkpt .ne. 1)  call die("For now, GW lanczos is only implemented for nkpt = 1.")
-  if (peinf%num .ne. 1) call die(" GW lanczos is only implemented for 1 peinf group.")
-  if (peinf%master) write(6, *) " lanczos niter = ", opt%lanczos_niter, " polynomial degree = ", opt%lanczos_npoly
-  jnblock = opt%jnblock 
-  if (peinf%master) write(6, *) " jnblock = ", jnblock
+
+  if (nspin /= 1) call die("For now, GW lanczos is only implemented for nspin = 1.")
+  if (nkpt /= 1) call die("For now, GW lanczos is only implemented for nkpt = 1.")
+  if (peinf%num /= 1) call die(" GW lanczos is only implemented for 1 peinf group.")
+  if (peinf%master) write (6, *) " lanczos niter = ", opt%lanczos_niter, " polynomial degree = ", opt%lanczos_npoly
+  jnblock = opt%jnblock
+  if (peinf%master) write (6, *) " jnblock = ", jnblock
 
   do ik = 1, nkpt
-     do isp = 1, nspin
-        if (sig(isp,ik)%ndiag_s > 0) then
-           sig(isp,ik)%xdiag = zzero
-           sig(isp,ik)%scsdiag = zzero
-        endif
-        if (sig(isp,ik)%noffd_s > 0) then
-           sig(isp,ik)%xoffd = zzero
-           sig(isp,ik)%scsoffd = zzero
-        endif
-        if (sig_in%xc == XC_GW) then
-           if (sig(isp,ik)%ndiag > 0) then
-              sig(isp,ik)%scdiag = zzero
-              sig(isp,ik)%sexdiag = zzero
-              sig(isp,ik)%sgdiag = zzero
-           endif
-           if (sig(isp,ik)%ndiag_s > 0) sig(isp,ik)%sgsdiag = zzero
-           if (sig(isp,ik)%noffd > 0) then
-              sig(isp,ik)%scoffd = zzero
-              sig(isp,ik)%sgoffd = zzero
-           endif
-           if (sig(isp,ik)%noffd_s > 0) sig(isp,ik)%sgsoffd = zzero
-        endif
-     enddo
-  enddo
+    do isp = 1, nspin
+      if (sig(isp, ik)%ndiag_s > 0) then
+        sig(isp, ik)%xdiag = zzero
+        sig(isp, ik)%scsdiag = zzero
+      end if
+      if (sig(isp, ik)%noffd_s > 0) then
+        sig(isp, ik)%xoffd = zzero
+        sig(isp, ik)%scsoffd = zzero
+      end if
+      if (sig_in%xc == XC_GW) then
+        if (sig(isp, ik)%ndiag > 0) then
+          sig(isp, ik)%scdiag = zzero
+          sig(isp, ik)%sexdiag = zzero
+          sig(isp, ik)%sgdiag = zzero
+        end if
+        if (sig(isp, ik)%ndiag_s > 0) sig(isp, ik)%sgsdiag = zzero
+        if (sig(isp, ik)%noffd > 0) then
+          sig(isp, ik)%scoffd = zzero
+          sig(isp, ik)%sgoffd = zzero
+        end if
+        if (sig(isp, ik)%noffd_s > 0) sig(isp, ik)%sgsoffd = zzero
+      end if
+    end do
+  end do
 
   !-------------------------------------------------------------------
   ! Calculate bare exchange part of self-energy.
   !
   !if (chkpt < (qpt%nk + 1) * gvec%syms%ntrans) then
-     call stopwatch(r_grp%master,' Calling exchange ')
-     do ik = 1, nkpt
-        do isp = 1, nspin
-           jk = sig(isp,ik)%indxk
-           call timacc(6,1,tsec)
-           if (sig_in%xc == XC_GW .or. sig_in%xc == XC_HF .or. &
-                sig_in%xc == XC_B3LYP) &
-                call Zfock_exchange(gvec,kpt,sig(isp,ik),isp,jk)
-           call timacc(6,2,tsec)
-        enddo
-     enddo
+  call stopwatch(r_grp%master, ' Calling exchange ')
+  do ik = 1, nkpt
+    do isp = 1, nspin
+      jk = sig(isp, ik)%indxk
+      call timacc(6, 1, tsec)
+      if (sig_in%xc == XC_GW .or. sig_in%xc == XC_HF .or. &
+          sig_in%xc == XC_B3LYP) &
+        call Zfock_exchange(gvec, kpt, sig(isp, ik), isp, jk)
+      call timacc(6, 2, tsec)
+    end do
+  end do
   !endif
 
   if (sig_in%xc == XC_GW) then
-     inode = w_grp%inode
-     mycv_start   = w_grp%ncv_start(inode)
-     mycv_end     = w_grp%ncv_end(inode)
-     myncv        = w_grp%myncv
-     ldncv        = w_grp%ldncv
-     ncv          = w_grp%ncv
-     myn_intp_start = w_grp%n_intp_start(inode)
-     myn_intp_end   = w_grp%n_intp_end(inode)
-     myn_intp_r   = w_grp%myn_intp_r
+    inode = w_grp%inode
+    mycv_start = w_grp%ncv_start(inode)
+    mycv_end = w_grp%ncv_end(inode)
+    myncv = w_grp%myncv
+    ldncv = w_grp%ldncv
+    ncv = w_grp%ncv
+    myn_intp_start = w_grp%n_intp_start(inode)
+    myn_intp_end = w_grp%n_intp_end(inode)
+    myn_intp_r = w_grp%myn_intp_r
 
-     allocate(zz(sig_in%nen))
-     allocate(ezz(sig_in%nen + 1, jnblock))
+    allocate (zz(sig_in%nen))
+    allocate (ezz(sig_in%nen + 1, jnblock))
 
-     npoly = opt%lanczos_npoly
-     allocate(polynomial(npoly+1)) 
-     allocate(tmp_poly(npoly+1)) 
-     ! fit a polynomial
-     nval = sum(kpt%wfn(1,1)%occ0) ! only works for systems with a gap
-     if (peinf%master) then
-        emin = (kpt%wfn(1,1)%e1(nval+1) - &
-          kpt%wfn(1,1)%e1(nval))**2.0 / 1.25d0
-        emax = (kpt%wfn(1,1)%e1(isdf_in%maxicc) - &
-          kpt%wfn(1,1)%e1(1))**2.0 * 1.25d0
-        print *, "emin = ", emin, " emax = ", emax
-        call polyfit_sqrt(emin, emax, npoly, 20, peinf%inode, tmp_poly, fit_error, .True.)
-     endif
-     do ii = 1, npoly+1
-        polynomial(ii) = tmp_poly(npoly+2-ii)
-     enddo
-     if (peinf%master) print *, "polynomial ", polynomial(1:(npoly+1))
-     call MPI_BCAST(polynomial,npoly+1,MPI_DOUBLE,peinf%masterid,peinf%comm,ii)
-     !
-     !-------------------------------------------------------------------
-     ! Calculate correlation and vertex. Must reset the file with
-     ! polarizability eigenvectors.
-     !
-     ! Todo: currently, gw_lanczos only support qpt%nk = 1 and r_grp%num = 1
-     ! Todo: gw_lanczos for vertex part
-     ! Prepare C^\nu_{vc}
-     ! k_p(1,1)%col(1,ij) --> valance band index
-     ! k_p(1,1)%col(2,ij) --> conduction bands index
-     ! determine the local (v,c) pairs
-     !
-     !allocate(cvpair(2, myncv))
-     !cvpair(1:2, 1:myncv) = &
-     !  k_p(1,1)%col(1:2, mycv_start:mycv_end)
-     ! local number of interpolation points
-     allocate (Pvec(myncv, jnblock))
-     allocate (tmp_Pvec(ldncv, jnblock))
-     allocate (tmp_Cvec(isdf_in%n_intp_r, jnblock))
-     allocate (tmp_CvecM(myn_intp_r, jnblock))
-     allocate (sqrtR(myncv))
-     allocate (Cmtrx_bl(ldncv, myn_intp_r))
-     do ij = mycv_start, mycv_end ! ij
-       iv = k_p(1,1)%col(1,ij)
-       ic = k_p(1,1)%col(2,ij)
-       sqrtR(ij-mycv_start+1) = (kpt%wfn(1,1)%e1(ic)-kpt%wfn(1,1)%e1(iv))**0.5
-       !tmp_Cmtrx(1:isdf_in%n_intp_r, ij-icv_start+1) = &
-       !  isdf_in%Psi_intp(1:isdf_in%n_intp_r, ic, 1, 1) * &
-       !  isdf_in%Psi_intp(1:isdf_in%n_intp_r, iv, 1, 1)
-     enddo ! ij
+    npoly = opt%lanczos_npoly
+    allocate (polynomial(npoly + 1))
+    allocate (tmp_poly(npoly + 1))
+    ! fit a polynomial
+    nval = sum(kpt%wfn(1, 1)%occ0) ! only works for systems with a gap
+    if (peinf%master) then
+      emin = (kpt%wfn(1, 1)%e1(nval + 1) - &
+              kpt%wfn(1, 1)%e1(nval))**2.0/1.25d0
+      emax = (kpt%wfn(1, 1)%e1(isdf_in%maxicc) - &
+              kpt%wfn(1, 1)%e1(1))**2.0*1.25d0
+      print *, "emin = ", emin, " emax = ", emax
+      call polyfit_sqrt(emin, emax, npoly, 20, peinf%inode, tmp_poly, fit_error, .true.)
+    end if
+    do ii = 1, npoly + 1
+      polynomial(ii) = tmp_poly(npoly + 2 - ii)
+    end do
+    if (peinf%master) print *, "polynomial ", polynomial(1:(npoly + 1))
+    call MPI_BCAST(polynomial, npoly + 1, MPI_DOUBLE, peinf%masterid, peinf%comm, ii)
+    !
+    !-------------------------------------------------------------------
+    ! Calculate correlation and vertex. Must reset the file with
+    ! polarizability eigenvectors.
+    !
+    ! Todo: currently, gw_lanczos only support qpt%nk = 1 and r_grp%num = 1
+    ! Todo: gw_lanczos for vertex part
+    ! Prepare C^\nu_{vc}
+    ! k_p(1,1)%col(1,ij) --> valance band index
+    ! k_p(1,1)%col(2,ij) --> conduction bands index
+    ! determine the local (v,c) pairs
+    !
+    !allocate(cvpair(2, myncv))
+    !cvpair(1:2, 1:myncv) = &
+    !  k_p(1,1)%col(1:2, mycv_start:mycv_end)
+    ! local number of interpolation points
+    allocate (Pvec(myncv, jnblock))
+    allocate (tmp_Pvec(ldncv, jnblock))
+    allocate (tmp_Cvec(isdf_in%n_intp_r, jnblock))
+    allocate (tmp_CvecM(myn_intp_r, jnblock))
+    allocate (sqrtR(myncv))
+    allocate (Cmtrx_bl(ldncv, myn_intp_r))
+    do ij = mycv_start, mycv_end ! ij
+      iv = k_p(1, 1)%col(1, ij)
+      ic = k_p(1, 1)%col(2, ij)
+      sqrtR(ij - mycv_start + 1) = (kpt%wfn(1, 1)%e1(ic) - kpt%wfn(1, 1)%e1(iv))**0.5
+      !tmp_Cmtrx(1:isdf_in%n_intp_r, ij-icv_start+1) = &
+      !  isdf_in%Psi_intp(1:isdf_in%n_intp_r, ic, 1, 1) * &
+      !  isdf_in%Psi_intp(1:isdf_in%n_intp_r, iv, 1, 1)
+    end do ! ij
 
-     nvblks = nval/jnblock
+    nvblks = nval/jnblock
     !print *, nvblks
-     if ( mod(nval, jnblock) .gt. 0) nvblks = nvblks + 1
-     ncblks = (isdf_in%maxicc-nval)/jnblock
-     if ( mod(isdf_in%maxicc-nval, jnblock) .gt. 0) ncblks = ncblks+1
+    if (mod(nval, jnblock) > 0) nvblks = nvblks + 1
+    ncblks = (isdf_in%maxicc - nval)/jnblock
+    if (mod(isdf_in%maxicc - nval, jnblock) > 0) ncblks = ncblks + 1
     !print *, ncblks
-     nblks = ncblks + nvblks
-     allocate (blks(nblks,3))
+    nblks = ncblks + nvblks
+    allocate (blks(nblks, 3))
     !print *, "nvblks: ", nvblks, " ncblks: ", ncblks, " nblks: ", nblks
-     if (nvblks .ge. 1) then
-     do kk = 1, nval/jnblock
-       blks(kk,1) = (kk-1)*jnblock+1
-       blks(kk,2) = kk*jnblock
-       blks(kk,3) = 1
-     enddo
-     endif
+    if (nvblks >= 1) then
+    do kk = 1, nval/jnblock
+      blks(kk, 1) = (kk - 1)*jnblock + 1
+      blks(kk, 2) = kk*jnblock
+      blks(kk, 3) = 1
+    end do
+    end if
     !print *, 1
-     if ( mod(nval, jnblock) .gt. 0) then
-       blks(nvblks,1) = (nvblks-1)*jnblock+1
-       blks(nvblks,2) = nval
-       blks(nvblks,3) = 1
-     endif
+    if (mod(nval, jnblock) > 0) then
+      blks(nvblks, 1) = (nvblks - 1)*jnblock + 1
+      blks(nvblks, 2) = nval
+      blks(nvblks, 3) = 1
+    end if
     !print *, 2
-     if (ncblks .ge. 1) then
-     do kk = 1, (isdf_in%maxicc-nval)/jnblock
-       blks(nvblks+kk,1) = nval+(kk-1)*jnblock+1
-       blks(nvblks+kk,2) = nval+kk*jnblock
-       blks(nvblks+kk,3) = 0
-     enddo
-     endif
+    if (ncblks >= 1) then
+    do kk = 1, (isdf_in%maxicc - nval)/jnblock
+      blks(nvblks + kk, 1) = nval + (kk - 1)*jnblock + 1
+      blks(nvblks + kk, 2) = nval + kk*jnblock
+      blks(nvblks + kk, 3) = 0
+    end do
+    end if
     !print *, 3
-     if ( mod(isdf_in%maxicc-nval, jnblock) .gt. 0) then
-       blks(nblks,1) = nval+(ncblks-1)*jnblock+1
-       blks(nblks,2) = isdf_in%maxicc
-       blks(nblks,3) = 0
-     endif
-     allocate(sigma_corr_tmp(sig_in%nen + 1, jnblock))
-     allocate(sigma_corr(sig_in%nen))
-     if (w_grp%master) then
-       do kk = 1, nblks
-         print *, kk, blks(kk, 1:3)
-       enddo
-     endif
-     !print *, sqrtR(1:10)
-     deltae = sig_in%deltae / (sig_in%nen - 1) ! in rydberg
-     do ik = 1, nkpt  
-     do isp = 1, nspin
-       do isig = 1, sig_in%ndiag
-         sigma_corr = 0.d0
-         m1 = sig_in%map(sig_in%diag(isig))
-         en0 = kpt%wfn(isp,ik)%e1(m1) - sig_in%deltae*half
-         do ien = 1, sig_in%nen
-           zz(ien) = deltae*(ien-1) + en0
-         enddo ! ien energy index
-         do iblk = 1, nblks
-         ! ----------------------------------------------------------------
-         ! prepare vector |P_mn>
-         ! m is the band which we want to compute its GW quasiparticle energy
-         ! n is the band appear in the summation-over-band
-         ! |P_mn> = \sum_{vc} (mn|vc) (e_c-e_v)^1/2 |vc>
-         ! (mn|vc) (e_c-e_v)^1/2 
-         !  = \sum_{\mu} C^\mu_{mn} (\mu|\nu) C^\nu_{vc} (e_c-e_v)^1/2
-         ! where:
-         ! C^\mu_{mn} = Psi_intp(\mu,m) * Psi_intp(\mu,n)
-         ! (\mu|\nu) = Mmtrx(:, :)
-         ! C^\nu_{vc} = Psi_intp(\nu,v) * Psi_intp(\nu,c)
-         ! perform lanczos iteration to find the spectra
-         ! function
+    if (mod(isdf_in%maxicc - nval, jnblock) > 0) then
+      blks(nblks, 1) = nval + (ncblks - 1)*jnblock + 1
+      blks(nblks, 2) = isdf_in%maxicc
+      blks(nblks, 3) = 0
+    end if
+    allocate (sigma_corr_tmp(sig_in%nen + 1, jnblock))
+    allocate (sigma_corr(sig_in%nen))
+    if (w_grp%master) then
+      do kk = 1, nblks
+        print *, kk, blks(kk, 1:3)
+      end do
+    end if
+    !print *, sqrtR(1:10)
+    deltae = sig_in%deltae/(sig_in%nen - 1) ! in rydberg
+    do ik = 1, nkpt
+    do isp = 1, nspin
+      do isig = 1, sig_in%ndiag
+        sigma_corr = 0.d0
+        m1 = sig_in%map(sig_in%diag(isig))
+        en0 = kpt%wfn(isp, ik)%e1(m1) - sig_in%deltae*half
+        do ien = 1, sig_in%nen
+          zz(ien) = deltae*(ien - 1) + en0
+        end do ! ien energy index
+        do iblk = 1, nblks
+          ! ----------------------------------------------------------------
+          ! prepare vector |P_mn>
+          ! m is the band which we want to compute its GW quasiparticle energy
+          ! n is the band appear in the summation-over-band
+          ! |P_mn> = \sum_{vc} (mn|vc) (e_c-e_v)^1/2 |vc>
+          ! (mn|vc) (e_c-e_v)^1/2
+          !  = \sum_{\mu} C^\mu_{mn} (\mu|\nu) C^\nu_{vc} (e_c-e_v)^1/2
+          ! where:
+          ! C^\mu_{mn} = Psi_intp(\mu,m) * Psi_intp(\mu,n)
+          ! (\mu|\nu) = Mmtrx(:, :)
+          ! C^\nu_{vc} = Psi_intp(\nu,v) * Psi_intp(\nu,c)
+          ! perform lanczos iteration to find the spectra
+          ! function
 
-         ! prepare C^\mu_{mn}
-         ! m1 is the index of states which GW energy is calculated
-         ! jn is sum over bands
-         jn    = blks(iblk, 1) 
-         jnend = blks(iblk, 2)
-         blksz = jnend - jn + 1
-         call stopwatch(peinf%master, "prepare Pvec ")
-         tmp_Cvec = 0.d0
-         do kk = 1, blksz
-           tmp_Cvec(myn_intp_start:myn_intp_end, kk) = &
-             isdf_in%Psi_intp_loc(1:myn_intp_r, m1, 1, 1) * &
-             isdf_in%Psi_intp_loc(1:myn_intp_r, jn+kk-1, 1, 1)
-         enddo
-         if (w_grp%npes .gt. 1) then
-           call mpi_allreduce(MPI_IN_PLACE, tmp_Cvec, isdf_in%n_intp_r*blksz,&
-             MPI_DOUBLE, MPI_SUM, w_grp%comm, info)
-         endif
-         !if (w_grp%master) print *, "tmp_Cvec", tmp_Cvec(1:10)
-         ! Compute tmp_CvecM(1:n_intp_loc)
-         ! = tmp_Cvec(1, n_intp_r) @ Mmtrx(1:n_intp_r, intp_start:intp_end) 
-         ! or 
-         ! = Mmtrx(intp_start:intp_end, 1:n_intp_r) @ tmp_Cvec(n_intp_r)
-         !call dgemv( 'N', myn_intp_r, isdf_in%n_intp_r, 1.d0, &
-         !  isdf_in%Mmtrx_loc(1, 1, 1, 1, 1, 1, 1), myn_intp_r, &
-         !  tmp_Cvec, 1, 0.d0, tmp_CvecM, 1 )
-         call dgemm( 'N', 'N', myn_intp_r, blksz, isdf_in%n_intp_r, 1.d0, &
-            isdf_in%Mmtrx_loc(1, 1, 1, 1, 1, 1, 1), myn_intp_r, &
-            tmp_Cvec, isdf_in%n_intp_r, 0.d0, tmp_CvecM, myn_intp_r )
+          ! prepare C^\mu_{mn}
+          ! m1 is the index of states which GW energy is calculated
+          ! jn is sum over bands
+          jn = blks(iblk, 1)
+          jnend = blks(iblk, 2)
+          blksz = jnend - jn + 1
+          call stopwatch(peinf%master, "prepare Pvec ")
+          tmp_Cvec = 0.d0
+          do kk = 1, blksz
+            tmp_Cvec(myn_intp_start:myn_intp_end, kk) = &
+              isdf_in%Psi_intp_loc(1:myn_intp_r, m1, 1, 1)* &
+              isdf_in%Psi_intp_loc(1:myn_intp_r, jn + kk - 1, 1, 1)
+          end do
+          if (w_grp%npes > 1) then
+            call mpi_allreduce(MPI_IN_PLACE, tmp_Cvec, isdf_in%n_intp_r*blksz, &
+                               MPI_DOUBLE, MPI_SUM, w_grp%comm, info)
+          end if
+          !if (w_grp%master) print *, "tmp_Cvec", tmp_Cvec(1:10)
+          ! Compute tmp_CvecM(1:n_intp_loc)
+          ! = tmp_Cvec(1, n_intp_r) @ Mmtrx(1:n_intp_r, intp_start:intp_end)
+          ! or
+          ! = Mmtrx(intp_start:intp_end, 1:n_intp_r) @ tmp_Cvec(n_intp_r)
+          !call dgemv( 'N', myn_intp_r, isdf_in%n_intp_r, 1.d0, &
+          !  isdf_in%Mmtrx_loc(1, 1, 1, 1, 1, 1, 1), myn_intp_r, &
+          !  tmp_Cvec, 1, 0.d0, tmp_CvecM, 1 )
+          call dgemm('N', 'N', myn_intp_r, blksz, isdf_in%n_intp_r, 1.d0, &
+                     isdf_in%Mmtrx_loc(1, 1, 1, 1, 1, 1, 1), myn_intp_r, &
+                     tmp_Cvec, isdf_in%n_intp_r, 0.d0, tmp_CvecM, myn_intp_r)
          !!tmp_Cvec = 0.d0
          !!tmp_Cvec(myn_intp_start:myn_intp_end) = tmp_CvecM(1:myn_intp_r)
          !!call mpi_allreduce(MPI_IN_PLACE, tmp_Cvec, isdf_in%n_intp_r,&
          !!  MPI_DOUBLE, MPI_SUM, w_grp%comm, info)
-         !if (w_grp%master) print *, "tmp_CvecM", tmp_CvecM(1:10)
-         ! Pvec stores the icv_start to icv_end elements of the global_Pvec
-         ! compute Pvec(1:ncv_loc) = tmp_Cvec(1:isdf_in%n_intp_r)*tmp_Cmtrx(1:isdf_in%n_intp_r, 1:ncv_loc)
-         Pvec = 0.d0 ! initialize Pvec with zeros
-         ! call dgemv('T', isdf_in%n_intp_r, ncv_loc, 1.d0, tmp_Cmtrx, isdf_in%n_intp_r, tmp_Cvec, 1, 0.d0, Pvec, 1)
-         do ipe = 0, w_grp%npes-1
-           tmp_Pvec = 0.d0
-           do ij = w_grp%ncv_start(ipe), w_grp%ncv_end(ipe)
-             ic = k_p(1,1)%col(1,ij)
-             iv = k_p(1,1)%col(2,ij)
-             Cmtrx_bl(ij-w_grp%ncv_start(ipe)+1, 1:myn_intp_r) = &
-               isdf_in%Psi_intp_loc(1:myn_intp_r, ic, 1, 1) * &
-               isdf_in%Psi_intp_loc(1:myn_intp_r, iv, 1, 1) 
-           enddo ! ij
-           this_ncv = w_grp%ncv_end(ipe) - w_grp%ncv_start(ipe) + 1
-           call dgemm('n', 'n', this_ncv, blksz, myn_intp_r, 1.d0, &
-              Cmtrx_bl, ldncv, tmp_CvecM, myn_intp_r, 0.d0, &
-              tmp_Pvec, ldncv)
-           !print *, iv, ic
-           !print *, tmp_Cvec(1:5)
-           !print *, isdf_in%Psi_intp_loc(1, ic, 1, 1)
-           !print *, "iband", jn, tmp_Pvec(1:5)
-           if ( w_grp%npes .gt. 1 ) then
-             if ( w_grp%inode  .eq. ipe ) then
-             call MPI_REDUCE( MPI_IN_PLACE, tmp_Pvec, ldncv*blksz, &
-               MPI_DOUBLE, MPI_SUM, ipe, w_grp%comm, info )
-             Pvec(1:myncv, 1:blksz) = tmp_Pvec(1:myncv, 1:blksz)
-             else ! inode .ne. ipe
-             call MPI_REDUCE( tmp_Pvec, tmp_Pvec, ldncv*blksz, &
-               MPI_DOUBLE, MPI_SUM, ipe, w_grp%comm, info )
-             endif
-           else
-             Pvec(1:myncv, 1:blksz) = tmp_Pvec(1:myncv, 1:blksz)
-           endif
-         enddo ! ipe loop
-         !if (w_grp%master) print *, "sqrtR ", sqrtR(1:5)
-         !if (w_grp%master) print *, "iband ", jn , Pvec(1:5, 1)
-         !if (w_grp%master) print *, "iband ", jn , Pvec(1:5, 2)
-         pnorm2 = 0.d0
-         do kk = 1, blksz
-           Pvec(1:myncv, kk) = Pvec(1:myncv, kk) * sqrtR(1:myncv)
-           pnorm2(kk) = ddot(myncv, Pvec(1,kk), 1, Pvec(1,kk), 1)
-         enddo
-         call mpi_allreduce(MPI_IN_PLACE, pnorm2, blksz, MPI_DOUBLE, &
-           MPI_SUM, w_grp%comm, info)
-         do kk = 1, blksz
-           pnorm(kk) = sqrt(pnorm2(kk))
-         enddo
-         call stopwatch(peinf%master, "Finished preparing Pvec ")
-         !if (w_grp%master) print *, "pnorm**2 ", pnorm2
-         !stop
-         if (blks(iblk,3) .eq. 1) then ! occupied states
-           !
-           !print *, " occupied states "
-           do kk = 1, blksz
-           ezz(1:sig_in%nen, kk) = &
-             -(zz(1:sig_in%nen)-kpt%wfn(isp,ik)%e1(jn+kk-1)) &
-             + cmplx(0.d0, 1.d0)*ecuts
-           enddo
-           !print *, " done loop "
-           ezz(sig_in%nen + 1, 1:blksz) = cmplx(0.d0, 0.d0)
-           ! call lanczos_spectra to compute <Pvec| 1/(ezz-H_aux) |Pvec>
-           call lanczos_spectra_isdf_BLOCK(Pvec, pnorm(1:blksz), &
-              myncv, ezz, sig_in%nen+1, opt%lanczos_niter, isdf_in, &
-              kpt%wfn(isp,ik), k_p(1,1)%col, ncv, sqrtR, polynomial, &
-              npoly, sigma_corr_tmp, &
-              MC_vec(1:myn_intp_r, 1:blksz), &
-              CMC_vec(1:ldncv, 1:blksz), &
-              tmp_vec(1:isdf_in%n_intp_r, 1:blksz), &
-              tmp_Hvec(1:ldncv, 1:blksz), tmp_cvpair, blksz)
-           do kk = 1, blksz
+          !if (w_grp%master) print *, "tmp_CvecM", tmp_CvecM(1:10)
+          ! Pvec stores the icv_start to icv_end elements of the global_Pvec
+          ! compute Pvec(1:ncv_loc) = tmp_Cvec(1:isdf_in%n_intp_r)*tmp_Cmtrx(1:isdf_in%n_intp_r, 1:ncv_loc)
+          Pvec = 0.d0 ! initialize Pvec with zeros
+          ! call dgemv('T', isdf_in%n_intp_r, ncv_loc, 1.d0, tmp_Cmtrx, isdf_in%n_intp_r, tmp_Cvec, 1, 0.d0, Pvec, 1)
+          do ipe = 0, w_grp%npes - 1
+            tmp_Pvec = 0.d0
+            do ij = w_grp%ncv_start(ipe), w_grp%ncv_end(ipe)
+              ic = k_p(1, 1)%col(1, ij)
+              iv = k_p(1, 1)%col(2, ij)
+              Cmtrx_bl(ij - w_grp%ncv_start(ipe) + 1, 1:myn_intp_r) = &
+                isdf_in%Psi_intp_loc(1:myn_intp_r, ic, 1, 1)* &
+                isdf_in%Psi_intp_loc(1:myn_intp_r, iv, 1, 1)
+            end do ! ij
+            this_ncv = w_grp%ncv_end(ipe) - w_grp%ncv_start(ipe) + 1
+            call dgemm('n', 'n', this_ncv, blksz, myn_intp_r, 1.d0, &
+                       Cmtrx_bl, ldncv, tmp_CvecM, myn_intp_r, 0.d0, &
+                       tmp_Pvec, ldncv)
+            !print *, iv, ic
+            !print *, tmp_Cvec(1:5)
+            !print *, isdf_in%Psi_intp_loc(1, ic, 1, 1)
+            !print *, "iband", jn, tmp_Pvec(1:5)
+            if (w_grp%npes > 1) then
+              if (w_grp%inode == ipe) then
+                call MPI_REDUCE(MPI_IN_PLACE, tmp_Pvec, ldncv*blksz, &
+                                MPI_DOUBLE, MPI_SUM, ipe, w_grp%comm, info)
+                Pvec(1:myncv, 1:blksz) = tmp_Pvec(1:myncv, 1:blksz)
+              else ! inode .ne. ipe
+                call MPI_REDUCE(tmp_Pvec, tmp_Pvec, ldncv*blksz, &
+                                MPI_DOUBLE, MPI_SUM, ipe, w_grp%comm, info)
+              end if
+            else
+              Pvec(1:myncv, 1:blksz) = tmp_Pvec(1:myncv, 1:blksz)
+            end if
+          end do ! ipe loop
+          !if (w_grp%master) print *, "sqrtR ", sqrtR(1:5)
+          !if (w_grp%master) print *, "iband ", jn , Pvec(1:5, 1)
+          !if (w_grp%master) print *, "iband ", jn , Pvec(1:5, 2)
+          pnorm2 = 0.d0
+          do kk = 1, blksz
+            Pvec(1:myncv, kk) = Pvec(1:myncv, kk)*sqrtR(1:myncv)
+            pnorm2(kk) = ddot(myncv, Pvec(1, kk), 1, Pvec(1, kk), 1)
+          end do
+          call mpi_allreduce(MPI_IN_PLACE, pnorm2, blksz, MPI_DOUBLE, &
+                             MPI_SUM, w_grp%comm, info)
+          do kk = 1, blksz
+            pnorm(kk) = sqrt(pnorm2(kk))
+          end do
+          call stopwatch(peinf%master, "Finished preparing Pvec ")
+          !if (w_grp%master) print *, "pnorm**2 ", pnorm2
+          !stop
+          if (blks(iblk, 3) == 1) then ! occupied states
+            !
+            !print *, " occupied states "
+            do kk = 1, blksz
+              ezz(1:sig_in%nen, kk) = &
+                -(zz(1:sig_in%nen) - kpt%wfn(isp, ik)%e1(jn + kk - 1)) &
+                + cmplx(0.d0, 1.d0)*ecuts
+            end do
+            !print *, " done loop "
+            ezz(sig_in%nen + 1, 1:blksz) = cmplx(0.d0, 0.d0)
+            ! call lanczos_spectra to compute <Pvec| 1/(ezz-H_aux) |Pvec>
+            call lanczos_spectra_isdf_BLOCK(Pvec, pnorm(1:blksz), &
+                                            myncv, ezz, sig_in%nen + 1, opt%lanczos_niter, isdf_in, &
+                                            kpt%wfn(isp, ik), k_p(1, 1)%col, ncv, sqrtR, polynomial, &
+                                            npoly, sigma_corr_tmp, &
+                                            MC_vec(1:myn_intp_r, 1:blksz), &
+                                            CMC_vec(1:ldncv, 1:blksz), &
+                                            tmp_vec(1:isdf_in%n_intp_r, 1:blksz), &
+                                            tmp_Hvec(1:ldncv, 1:blksz), tmp_cvpair, blksz)
+            do kk = 1, blksz
               sigma_corr(1:sig_in%nen) = sigma_corr(1:sig_in%nen) + &
-                2.0 * pnorm2(kk) * ( -sigma_corr_tmp(sig_in%nen+1, kk) + sigma_corr_tmp(1:sig_in%nen, kk))/(-ezz(1:sig_in%nen, kk))
+                                         2.0*pnorm2(kk)*(-sigma_corr_tmp(sig_in%nen + 1, kk) + sigma_corr_tmp(1:sig_in%nen, kk))/(-ezz(1:sig_in%nen, kk))
 #ifdef DEBUG
-              if (peinf%master) print *, jn+kk-1, "incr ", 2.0 * pnorm2(kk) * ( -sigma_corr_tmp(sig_in%nen+1,kk) + sigma_corr_tmp(2, kk) )/(-ezz(2, kk))
+              if (peinf%master) print *, jn + kk - 1, "incr ", 2.0*pnorm2(kk)*(-sigma_corr_tmp(sig_in%nen + 1, kk) + sigma_corr_tmp(2, kk))/(-ezz(2, kk))
 #endif
-           enddo
-           !
-         else ! for unoccupied states
-           !
-           do kk = 1, blksz
-           ezz(1:sig_in%nen, kk) = &
-              (zz(1:sig_in%nen)-kpt%wfn(isp,ik)%e1(jn+kk-1)) &
-             + cmplx(0.d0, 1.d0)*ecuts
-           enddo
-           ezz(sig_in%nen + 1, 1:blksz) = cmplx(0.d0, 0.d0)
-           ! call lanczos_spectra to compute <Pvec| 1/(ezz-H_aux) |Pvec>
-           call lanczos_spectra_isdf_BLOCK(Pvec, pnorm(1:blksz), &
-              myncv, ezz, sig_in%nen+1, opt%lanczos_niter, isdf_in, &
-              kpt%wfn(isp,ik), k_p(1,1)%col, ncv, sqrtR, polynomial, &
-              npoly, sigma_corr_tmp, &
-              MC_vec(1:myn_intp_r, 1:blksz), &
-              CMC_vec(1:ldncv, 1:blksz), &
-              tmp_vec(1:isdf_in%n_intp_r, 1:blksz), &
-              tmp_Hvec(1:ldncv, 1:blksz), tmp_cvpair, blksz)
-           do kk = 1, blksz
+            end do
+            !
+          else ! for unoccupied states
+            !
+            do kk = 1, blksz
+              ezz(1:sig_in%nen, kk) = &
+                (zz(1:sig_in%nen) - kpt%wfn(isp, ik)%e1(jn + kk - 1)) &
+                + cmplx(0.d0, 1.d0)*ecuts
+            end do
+            ezz(sig_in%nen + 1, 1:blksz) = cmplx(0.d0, 0.d0)
+            ! call lanczos_spectra to compute <Pvec| 1/(ezz-H_aux) |Pvec>
+            call lanczos_spectra_isdf_BLOCK(Pvec, pnorm(1:blksz), &
+                                            myncv, ezz, sig_in%nen + 1, opt%lanczos_niter, isdf_in, &
+                                            kpt%wfn(isp, ik), k_p(1, 1)%col, ncv, sqrtR, polynomial, &
+                                            npoly, sigma_corr_tmp, &
+                                            MC_vec(1:myn_intp_r, 1:blksz), &
+                                            CMC_vec(1:ldncv, 1:blksz), &
+                                            tmp_vec(1:isdf_in%n_intp_r, 1:blksz), &
+                                            tmp_Hvec(1:ldncv, 1:blksz), tmp_cvpair, blksz)
+            do kk = 1, blksz
               sigma_corr(1:sig_in%nen) = sigma_corr(1:sig_in%nen) + &
-                2.0 * pnorm2(kk) * ( -sigma_corr_tmp(sig_in%nen+1, kk) + sigma_corr_tmp(1:sig_in%nen, kk))/ezz(1:sig_in%nen, kk)
+                                         2.0*pnorm2(kk)*(-sigma_corr_tmp(sig_in%nen + 1, kk) + sigma_corr_tmp(1:sig_in%nen, kk))/ezz(1:sig_in%nen, kk)
 #ifdef DEBUG
-              if (peinf%master) print *, jn+kk-1, "incr ", 2.0 * pnorm2(kk) * ( -sigma_corr_tmp(sig_in%nen+1,kk) + sigma_corr_tmp(2, kk) )/ezz(2, kk)
+              if (peinf%master) print *, jn + kk - 1, "incr ", 2.0*pnorm2(kk)*(-sigma_corr_tmp(sig_in%nen + 1, kk) + sigma_corr_tmp(2, kk))/ezz(2, kk)
 #endif
-           enddo
-           !
-         endif
-         call stopwatch(peinf%master,' summation over bands ')
-         do kk = 68, 78
-         jj = 3
-         call timacc(kk, jj, tsec)
-         if (peinf%master) print *, kk, tsec(1), tsec(2), "sec", jj
-         enddo
-         jj = 3
-         call timacc(58, jj, tsec)
-         if (peinf%master) print *, 58, tsec(1), tsec(2), "sec", jj, " matvec_isdf runs"
-         ! stop
-         !          
-         enddo ! iblk 
-         if (peinf%master) then
-           print *, "sigma_corr", sig_in%map(sig_in%diag(isig))
-           do ien = 1, sig_in%nen
-             write(6,'(a,i7,f15.6,f15.6,f15.6)') " #sigma_c ", ien, ryd*(deltae*(ien-1) + en0), real(sigma_corr(ien))*ryd, aimag(sigma_corr(ien))*ryd
-           enddo
-           print *, "E_qp(E)", sig_in%map(sig_in%diag(isig))
-           do ien = 1, sig_in%nen
-             write(6,'(a,i7,f15.6,f15.6)') " #E_qp ", ien, ryd*(deltae*(ien-1) + en0), (kpt%wfn(1,1)%e1(m1)+real(sig(1,1)%xdiag(isig)+sigma_corr(ien)-sig(1,1)%vxcdiag(isig)) )*ryd
-           enddo
-         endif ! peinf%master
-         do ien = 1, sig_in%nen
-           sig(isp,ik)%scdiag(ien, isig) = real(sigma_corr(ien))
-           sig(isp,ik)%scdiag(ien, sig_in%ndiag+isig) = aimag(sigma_corr(ien))
-         enddo
-         ! sig(isp,ik)%scdiag
-       enddo ! isig sigma
-     enddo ! isp (spin) loop
-     enddo ! ik (kpoint) loop
-     deallocate (zz,ezz)
-     deallocate (Pvec)
-     ! deallocate (tmp_Cmtrx)
-     deallocate (tmp_Cvec)
-     deallocate (tmp_CvecM)
-     deallocate (sqrtR)
+            end do
+            !
+          end if
+          call stopwatch(peinf%master, ' summation over bands ')
+          do kk = 68, 78
+            jj = 3
+            call timacc(kk, jj, tsec)
+            if (peinf%master) print *, kk, tsec(1), tsec(2), "sec", jj
+          end do
+          jj = 3
+          call timacc(58, jj, tsec)
+          if (peinf%master) print *, 58, tsec(1), tsec(2), "sec", jj, " matvec_isdf runs"
+          ! stop
+          !
+        end do ! iblk
+        if (peinf%master) then
+          print *, "sigma_corr", sig_in%map(sig_in%diag(isig))
+          do ien = 1, sig_in%nen
+            write (6, '(a,i7,f15.6,f15.6,f15.6)') " #sigma_c ", ien, ryd*(deltae*(ien - 1) + en0), real(sigma_corr(ien))*ryd, aimag(sigma_corr(ien))*ryd
+          end do
+          print *, "E_qp(E)", sig_in%map(sig_in%diag(isig))
+          do ien = 1, sig_in%nen
+            write (6, '(a,i7,f15.6,f15.6)') " #E_qp ", ien, ryd*(deltae*(ien - 1) + en0), (kpt%wfn(1, 1)%e1(m1) + real(sig(1, 1)%xdiag(isig) + sigma_corr(ien) - sig(1, 1)%vxcdiag(isig)))*ryd
+          end do
+        end if ! peinf%master
+        do ien = 1, sig_in%nen
+          sig(isp, ik)%scdiag(ien, isig) = real(sigma_corr(ien))
+          sig(isp, ik)%scdiag(ien, sig_in%ndiag + isig) = aimag(sigma_corr(ien))
+        end do
+        ! sig(isp,ik)%scdiag
+      end do ! isig sigma
+    end do ! isp (spin) loop
+    end do ! ik (kpoint) loop
+    deallocate (zz, ezz)
+    deallocate (Pvec)
+    ! deallocate (tmp_Cmtrx)
+    deallocate (tmp_Cvec)
+    deallocate (tmp_CvecM)
+    deallocate (sqrtR)
   else ! xc != GW
-     print *, "lanczos method only support GW."
-     call die("lanczos method only support GW. You asked for other xc type in the input file.")
-  endif ! xc 
+    print *, "lanczos method only support GW."
+    call die("lanczos method only support GW. You asked for other xc type in the input file.")
+  end if ! xc
 
 23 continue
 
   call stopwatch(r_grp%master, &
-       ' All matrix elements calculated. Start printout')
+                 ' All matrix elements calculated. Start printout')
 
   if (peinf%master .and. sig_in%xc == XC_GW) then
-     open(12,file='hmat_qp_nostatic',form='formatted')
-  endif
+    open (12, file='hmat_qp_nostatic', form='formatted')
+  end if
 
   max_sig = mone
 
@@ -468,115 +468,115 @@ subroutine Zcalculate_sigma_lanczos_BLOCK (nspin,nkpt, &
   ! From now on, unit of energy is eV.
   !
   do ik = 1, nkpt
-     do isp = 1, nspin
-        jk = sig(isp,ik)%indxk
-        if (sig(isp,ik)%ndiag_s > 0) then
-           sig(isp,ik)%vxcdiag = sig(isp,ik)%vxcdiag*ryd
-           sig(isp,ik)%xdiag = sig(isp,ik)%xdiag*ryd
-           sig(isp,ik)%scsdiag = sig(isp,ik)%scsdiag*ryd
-        endif
-        if (sig(isp,ik)%noffd_s > 0) then
-           sig(isp,ik)%vxcoffd = sig(isp,ik)%vxcoffd*ryd
-           sig(isp,ik)%xoffd = sig(isp,ik)%xoffd*ryd
-           sig(isp,ik)%scsoffd = sig(isp,ik)%scsoffd*ryd
-        endif
-        if (sig_in%xc == XC_GW) then
-           if (sig(isp,ik)%ndiag_s > 0) &
-                sig(isp,ik)%sgsdiag = sig(isp,ik)%sgsdiag*ryd
-           if (sig(isp,ik)%noffd_s > 0) &
-                sig(isp,ik)%sgsoffd = sig(isp,ik)%sgsoffd*ryd
-           if (sig(isp,ik)%ndiag > 0) then
-              sig(isp,ik)%scdiag = sig(isp,ik)%scdiag*ryd
-              sig(isp,ik)%sexdiag = sig(isp,ik)%sexdiag*ryd
-              sig(isp,ik)%sgdiag = sig(isp,ik)%sgdiag*ryd
-           endif
-           if (sig(isp,ik)%noffd > 0) then
-              sig(isp,ik)%scoffd = sig(isp,ik)%scoffd*ryd
-              sig(isp,ik)%sgoffd = sig(isp,ik)%sgoffd*ryd
-           endif
-        endif
+    do isp = 1, nspin
+      jk = sig(isp, ik)%indxk
+      if (sig(isp, ik)%ndiag_s > 0) then
+        sig(isp, ik)%vxcdiag = sig(isp, ik)%vxcdiag*ryd
+        sig(isp, ik)%xdiag = sig(isp, ik)%xdiag*ryd
+        sig(isp, ik)%scsdiag = sig(isp, ik)%scsdiag*ryd
+      end if
+      if (sig(isp, ik)%noffd_s > 0) then
+        sig(isp, ik)%vxcoffd = sig(isp, ik)%vxcoffd*ryd
+        sig(isp, ik)%xoffd = sig(isp, ik)%xoffd*ryd
+        sig(isp, ik)%scsoffd = sig(isp, ik)%scsoffd*ryd
+      end if
+      if (sig_in%xc == XC_GW) then
+        if (sig(isp, ik)%ndiag_s > 0) &
+          sig(isp, ik)%sgsdiag = sig(isp, ik)%sgsdiag*ryd
+        if (sig(isp, ik)%noffd_s > 0) &
+          sig(isp, ik)%sgsoffd = sig(isp, ik)%sgsoffd*ryd
+        if (sig(isp, ik)%ndiag > 0) then
+          sig(isp, ik)%scdiag = sig(isp, ik)%scdiag*ryd
+          sig(isp, ik)%sexdiag = sig(isp, ik)%sexdiag*ryd
+          sig(isp, ik)%sgdiag = sig(isp, ik)%sgdiag*ryd
+        end if
+        if (sig(isp, ik)%noffd > 0) then
+          sig(isp, ik)%scoffd = sig(isp, ik)%scoffd*ryd
+          sig(isp, ik)%sgoffd = sig(isp, ik)%sgoffd*ryd
+        end if
+      end if
 
-        !-------------------------------------------------------------------
-        ! Sort quasiparticle orbitals according to representation.
-        !
-        allocate(iord(sig(isp,ik)%nmap))
-        iord = 0
-        do irp = 1, gvec%syms%ntrans
-           jj = 0
-           do isig = 1, sig(isp,ik)%nmap
-              ii = sig(isp,ik)%map(isig)
-              if (kpt%wfn(isp,jk)%irep(ii) == irp) then
-                 jj = jj + 1
-                 iord(isig) = jj
-              endif
-           enddo
-           neig_qp = jj
-           q_p(irp,isp,ik)%neig = neig_qp
-           if (neig_qp > 0) then
-              allocate(q_p(irp,isp,ik)%jrep(neig_qp))
-              q_p(irp,isp,ik)%jrep = 0
-              allocate(q_p(irp,isp,ik)%hqp(neig_qp,neig_qp))
-              q_p(irp,isp,ik)%hqp = zzero
-              allocate(q_p(irp,isp,ik)%sigmaqp(neig_qp,neig_qp))
-              q_p(irp,isp,ik)%sigmaqp = zzero
-              allocate(q_p(irp,isp,ik)%sigmai(neig_qp))
-              q_p(irp,isp,ik)%sigmai = ecuts * ryd
-              allocate(q_p(irp,isp,ik)%eqp(neig_qp))
-              q_p(irp,isp,ik)%eqp = zero
-              allocate(q_p(irp,isp,ik)%vqp(neig_qp,neig_qp))
-              q_p(irp,isp,ik)%vqp = zzero
-              jj = 0
-              do isig = 1, sig(isp,ik)%nmap
-                 ii = sig(isp,ik)%map(isig)
-                 if (kpt%wfn(isp,jk)%irep(ii) == irp) then
-                    jj = jj + 1
-                    q_p(irp,isp,ik)%jrep(jj) = ii
-                    q_p(irp,isp,ik)%hqp(jj,jj) = zone*kpt%wfn(isp,jk)%e1(ii)*ryd
-                 endif
-              enddo
-           endif
-        enddo
-        !-------------------------------------------------------------------
-        ! Print self-energy corrections.
-        !
-        if (gvec%per > 0) then
-           if (nspin == 1) then
-              write(file_name,'(a,i3.3,a,i4.4)') 'sigma_nostatic_', ik, '_', it_scf
-           else
-              if (isp == 1) then
-                 write(file_name,'(a,i3.3,a,i4.4)') 'sigma_nostatic_up_', ik, '_', it_scf
-              else
-                 write(file_name,'(a,i3.3,a,i4.4)') 'sigma_nostatic_down_', ik, '_', it_scf
-              endif
-           endif
+      !-------------------------------------------------------------------
+      ! Sort quasiparticle orbitals according to representation.
+      !
+      allocate (iord(sig(isp, ik)%nmap))
+      iord = 0
+      do irp = 1, gvec%syms%ntrans
+        jj = 0
+        do isig = 1, sig(isp, ik)%nmap
+          ii = sig(isp, ik)%map(isig)
+          if (kpt%wfn(isp, jk)%irep(ii) == irp) then
+            jj = jj + 1
+            iord(isig) = jj
+          end if
+        end do
+        neig_qp = jj
+        q_p(irp, isp, ik)%neig = neig_qp
+        if (neig_qp > 0) then
+          allocate (q_p(irp, isp, ik)%jrep(neig_qp))
+          q_p(irp, isp, ik)%jrep = 0
+          allocate (q_p(irp, isp, ik)%hqp(neig_qp, neig_qp))
+          q_p(irp, isp, ik)%hqp = zzero
+          allocate (q_p(irp, isp, ik)%sigmaqp(neig_qp, neig_qp))
+          q_p(irp, isp, ik)%sigmaqp = zzero
+          allocate (q_p(irp, isp, ik)%sigmai(neig_qp))
+          q_p(irp, isp, ik)%sigmai = ecuts*ryd
+          allocate (q_p(irp, isp, ik)%eqp(neig_qp))
+          q_p(irp, isp, ik)%eqp = zero
+          allocate (q_p(irp, isp, ik)%vqp(neig_qp, neig_qp))
+          q_p(irp, isp, ik)%vqp = zzero
+          jj = 0
+          do isig = 1, sig(isp, ik)%nmap
+            ii = sig(isp, ik)%map(isig)
+            if (kpt%wfn(isp, jk)%irep(ii) == irp) then
+              jj = jj + 1
+              q_p(irp, isp, ik)%jrep(jj) = ii
+              q_p(irp, isp, ik)%hqp(jj, jj) = zone*kpt%wfn(isp, jk)%e1(ii)*ryd
+            end if
+          end do
+        end if
+      end do
+      !-------------------------------------------------------------------
+      ! Print self-energy corrections.
+      !
+      if (gvec%per > 0) then
+        if (nspin == 1) then
+          write (file_name, '(a,i3.3,a,i4.4)') 'sigma_nostatic_', ik, '_', it_scf
         else
-           if (nspin == 1) then
-              write(file_name,'(a,i3.3,a,i4.4)') 'sigma_nostatic_', ik, '_', it_scf
-           else
-              if (isp == 1) then
-                 write(file_name,'(a,i3.3,a,i4.4)') 'sigma_nostatic_up_', ik, '_', it_scf
-              else
-                 write(file_name,'(a,i3.3,a,i4.4)') 'sigma_nostatic_down_', ik, '_', it_scf
-              endif
-           endif
-        endif
-        !
-        ! Print self-energy tables without static correction.
-        !
-        call printsigma(gvec%syms%ntrans,sig_in,sig(isp,ik), &
-             kpt%wfn(isp,jk),q_p(1:gvec%syms%ntrans,isp,ik),12, &
-             isp,ik,iord,qpmix,rtmp,file_name)
+          if (isp == 1) then
+            write (file_name, '(a,i3.3,a,i4.4)') 'sigma_nostatic_up_', ik, '_', it_scf
+          else
+            write (file_name, '(a,i3.3,a,i4.4)') 'sigma_nostatic_down_', ik, '_', it_scf
+          end if
+        end if
+      else
+        if (nspin == 1) then
+          write (file_name, '(a,i3.3,a,i4.4)') 'sigma_nostatic_', ik, '_', it_scf
+        else
+          if (isp == 1) then
+            write (file_name, '(a,i3.3,a,i4.4)') 'sigma_nostatic_up_', ik, '_', it_scf
+          else
+            write (file_name, '(a,i3.3,a,i4.4)') 'sigma_nostatic_down_', ik, '_', it_scf
+          end if
+        end if
+      end if
+      !
+      ! Print self-energy tables without static correction.
+      !
+      call printsigma(gvec%syms%ntrans, sig_in, sig(isp, ik), &
+                      kpt%wfn(isp, jk), q_p(1:gvec%syms%ntrans, isp, ik), 12, &
+                      isp, ik, iord, qpmix, rtmp, file_name)
 
-        deallocate(iord)
-     enddo
-  enddo
+      deallocate (iord)
+    end do
+  end do
 
   if (peinf%master .and. sig_in%xc == XC_GW) then
-     close(12)
-  endif
+    close (12)
+  end if
 #ifdef MPI
-  call MPI_BCAST(max_sig,1,MPI_DOUBLE_PRECISION, &
-       peinf%masterid,peinf%comm,info)
+  call MPI_BCAST(max_sig, 1, MPI_DOUBLE_PRECISION, &
+                 peinf%masterid, peinf%comm, info)
 #endif
 
   !-------------------------------------------------------------------
@@ -585,7 +585,7 @@ subroutine Zcalculate_sigma_lanczos_BLOCK (nspin,nkpt, &
   !call Zetotal(gvec,kpt,nspin)
 
   if (writeqp .and. sig_in%xc == XC_GW .and. dft_code == PARSEC) &
-       call Zprint_qp(nspin,gvec%syms%ntrans,66,77,gvec,kpt)
+    call Zprint_qp(nspin, gvec%syms%ntrans, 66, 77, gvec, kpt)
 
-end subroutine Zcalculate_sigma_lanczos_BLOCK 
+end subroutine Zcalculate_sigma_lanczos_BLOCK
 !===================================================================

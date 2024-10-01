@@ -13,23 +13,23 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine Zsetup_b(gvec,kpt,qpt,q_bse,pol_in,pol,bsepol_in,bsepol, &
-     k_p,k_vv,k_cc,k_vc,k_x,nspin,readocc,tdldacut,bsecut)
+subroutine Zsetup_b(gvec, kpt, qpt, q_bse, pol_in, pol, bsepol_in, bsepol, &
+                    k_p, k_vv, k_cc, k_vc, k_x, nspin, readocc, tdldacut, bsecut)
 
   use typedefs
   use mpi_module
   implicit none
 
   ! arguments
-  type (gspace), intent(in) :: gvec
-  type (kptinfo), intent(inout) :: kpt
-  type (qptinfo), intent(inout) :: qpt, q_bse
-  type (polinfo), dimension(2), intent(inout) :: pol_in, bsepol_in
-  type (polinfo), dimension(gvec%syms%ntrans,qpt%nk), intent(inout) :: pol
-  type (polinfo), dimension(gvec%syms%ntrans), intent(inout) :: bsepol
-  type (kernelinfo), dimension(gvec%syms%ntrans,qpt%nk), intent(inout) :: &
-       k_p, k_vv, k_cc
-  type (kernelinfo), dimension(gvec%syms%ntrans), intent(inout) :: k_x, k_vc
+  type(gspace), intent(in) :: gvec
+  type(kptinfo), intent(inout) :: kpt
+  type(qptinfo), intent(inout) :: qpt, q_bse
+  type(polinfo), dimension(2), intent(inout) :: pol_in, bsepol_in
+  type(polinfo), dimension(gvec%syms%ntrans, qpt%nk), intent(inout) :: pol
+  type(polinfo), dimension(gvec%syms%ntrans), intent(inout) :: bsepol
+  type(kernelinfo), dimension(gvec%syms%ntrans, qpt%nk), intent(inout) :: &
+    k_p, k_vv, k_cc
+  type(kernelinfo), dimension(gvec%syms%ntrans), intent(inout) :: k_x, k_vc
   ! number of spins
   integer, intent(in) :: nspin
   ! true if DFT occupancy factors are overriden by data read from disk
@@ -39,14 +39,14 @@ subroutine Zsetup_b(gvec,kpt,qpt,q_bse,pol_in,pol,bsepol_in,bsepol, &
 
   ! local variables
   integer :: ii, jj, nn, isp, iq, ik, ikp, jk, imin, imax, minc(2), &
-       maxv(2), n_b, n_b_up, n_c, n_c_up, n_v, n_v_up
+             maxv(2), n_b, n_b_up, n_c, n_c_up, n_v, n_v_up
   real(dp) :: occ_v, occ_c, tmp
-  integer, dimension(:,:), allocatable :: map_b, map_c, map_v, itmp
+  integer, dimension(:, :), allocatable :: map_b, map_c, map_v, itmp
 
   !-------------------------------------------------------------------
   ! Define polarizability map.
   !
-  call Zsetup_g(gvec,kpt,qpt,pol_in,pol,k_p,nspin,tdldacut,.false.,0,.false.)
+  call Zsetup_g(gvec, kpt, qpt, pol_in, pol, k_p, nspin, tdldacut, .false., 0, .false.)
   !-------------------------------------------------------------------
   ! In periodic systems, calculate the matching pairs of (k,k') vectors:
   ! for each q-vector in the polarizability operator, conduction
@@ -54,38 +54,38 @@ subroutine Zsetup_b(gvec,kpt,qpt,q_bse,pol_in,pol,bsepol_in,bsepol, &
   ! taken from point k' = k - q.
   !
   if (peinf%master) print *, "finish setup_g"
-  allocate(q_bse%match(kpt%nk,1))
-  call qpt_matching(kpt%nk,kpt%nk,q_bse%nk,kpt%fk,kpt%fk,q_bse%fk,gvec%bdot,q_bse%match)
+  allocate (q_bse%match(kpt%nk, 1))
+  call qpt_matching(kpt%nk, kpt%nk, q_bse%nk, kpt%fk, kpt%fk, q_bse%fk, gvec%bdot, q_bse%match)
   if (peinf%master .and. gvec%per > 0) then
-     write(6,*)
-     write(6,*) ' Matching k-points (BSE) : '
-     write(6,'(a,3f20.10)') ' q-point # 1 = ',q_bse%fk(:,1)
-     write(6,*) ' k-point and (k-q) point '
-     do ik = 1, kpt%nk
-        if (qpt%match(ik,iq) > 0) write(6,'(3f10.4,5x,3f10.4)') &
-             kpt%fk(:,ik), kpt%fk(:,q_bse%match(ik,1))
-     enddo
-  endif
+    write (6, *)
+    write (6, *) ' Matching k-points (BSE) : '
+    write (6, '(a,3f20.10)') ' q-point # 1 = ', q_bse%fk(:, 1)
+    write (6, *) ' k-point and (k-q) point '
+    do ik = 1, kpt%nk
+      if (qpt%match(ik, iq) > 0) write (6, '(3f10.4,5x,3f10.4)') &
+        kpt%fk(:, ik), kpt%fk(:, q_bse%match(ik, 1))
+    end do
+  end if
   if (minval(q_bse%match) == 0) then
-     if (peinf%master) write(6,'(a,/,a,/,a)') &
-          ' ERROR: grids kpt and qpt are not regular!', &
-          ' Could not find matching between points kpt and q_bse.', &
-          ' Make sure the k-point grid is a full regular (Monkhorst-Pack) grid.'
-     call die('Stop')
-  endif
+    if (peinf%master) write (6, '(a,/,a,/,a)') &
+      ' ERROR: grids kpt and qpt are not regular!', &
+      ' Could not find matching between points kpt and q_bse.', &
+      ' Make sure the k-point grid is a full regular (Monkhorst-Pack) grid.'
+    call die('Stop')
+  end if
   !
   ! Do the q-vectors form a regular grid?
   !
-  allocate(map_c(qpt%nk,qpt%nk))
-  call qpt_matching(qpt%nk,qpt%nk,qpt%nk,qpt%fk,qpt%fk,qpt%fk,gvec%bdot,map_c)
+  allocate (map_c(qpt%nk, qpt%nk))
+  call qpt_matching(qpt%nk, qpt%nk, qpt%nk, qpt%fk, qpt%fk, qpt%fk, gvec%bdot, map_c)
   if (minval(qpt%match) == 0) then
-     if (peinf%master) write(6,'(a,/,a,/,a)') &
-          ' ERROR: qpt grid is not regular!', &
-          ' Could not find matching between points in qpt.', &
-          ' Make sure the q-point grid is a full regular (Monkhorst-Pack) grid.'
-     call die('Stop')
-  endif
-  deallocate(map_c)
+    if (peinf%master) write (6, '(a,/,a,/,a)') &
+      ' ERROR: qpt grid is not regular!', &
+      ' Could not find matching between points in qpt.', &
+      ' Make sure the q-point grid is a full regular (Monkhorst-Pack) grid.'
+    call die('Stop')
+  end if
+  deallocate (map_c)
 
   !-------------------------------------------------------------------
   ! Keep LDA occupancies for calculation of quasi-particle energy.
@@ -93,90 +93,90 @@ subroutine Zsetup_b(gvec,kpt,qpt,q_bse,pol_in,pol,bsepol_in,bsepol, &
   ! in parsec.in) and ignore the data read from wavefunction file.
   !
   do isp = 1, nspin
-     do ik = 1, kpt%nk
-        allocate(kpt%wfn(isp,ik)%occ1(kpt%wfn(isp,ik)%nstate))
-        kpt%wfn(isp,ik)%occ1 = kpt%wfn(isp,ik)%occ0
-     enddo
-  enddo
+    do ik = 1, kpt%nk
+      allocate (kpt%wfn(isp, ik)%occ1(kpt%wfn(isp, ik)%nstate))
+      kpt%wfn(isp, ik)%occ1 = kpt%wfn(isp, ik)%occ0
+    end do
+  end do
   if (readocc) then
-     if (peinf%master) write(6,*) &
-          ' Reading occup.in and overriding orbital occupancies.'
-     do ik = 1, kpt%nk
-        open(90,file='occup.in',status='old',form='formatted')
-        do isp = 1, nspin
-           tmp = zero
-           do ii = 1, kpt%wfn(isp,ik)%nstate
-              tmp = tmp + kpt%wfn(isp,ik)%occ1(ii)
-           enddo
-           if (peinf%master) write(6,'(a,i3,/,a,i3,a,g20.6)') ' Spin ', &
-                isp, ' Number of electrons with spin ', isp, ' = ', tmp
-           ! Skip title line.
-           read(90,*)
-           ! Occupy all states up to some specified order.
-           read(90,*) jj
-           kpt%wfn(isp,ik)%occ1(1:jj) = one
-           kpt%wfn(isp,ik)%occ1(jj+1:kpt%wfn(isp,1)%nstate) = zero
-           ! Read in manual over-ride for occupancy of specific states.
-           read(90,*) nn
-           do ii = 1, nn
-              read(90,*) jj, kpt%wfn(isp,ik)%occ1(jj)
-           enddo
-           ! Check if occupancy consistent with number of electrons.
-           tmp = zero
-           do ii = 1, kpt%wfn(isp,ik)%nstate
-              tmp = tmp + kpt%wfn(isp,ik)%occ1(ii)
-           enddo
-           if (peinf%master) write(6,'(a,i3,a,g20.6,/)') &
-                ' New number of electrons with spin ', isp, ' = ', tmp
-        enddo
-        close(90)
-     enddo
-  endif
+    if (peinf%master) write (6, *) &
+      ' Reading occup.in and overriding orbital occupancies.'
+    do ik = 1, kpt%nk
+      open (90, file='occup.in', status='old', form='formatted')
+      do isp = 1, nspin
+        tmp = zero
+        do ii = 1, kpt%wfn(isp, ik)%nstate
+          tmp = tmp + kpt%wfn(isp, ik)%occ1(ii)
+        end do
+        if (peinf%master) write (6, '(a,i3,/,a,i3,a,g20.6)') ' Spin ', &
+          isp, ' Number of electrons with spin ', isp, ' = ', tmp
+        ! Skip title line.
+        read (90, *)
+        ! Occupy all states up to some specified order.
+        read (90, *) jj
+        kpt%wfn(isp, ik)%occ1(1:jj) = one
+        kpt%wfn(isp, ik)%occ1(jj + 1:kpt%wfn(isp, 1)%nstate) = zero
+        ! Read in manual over-ride for occupancy of specific states.
+        read (90, *) nn
+        do ii = 1, nn
+          read (90, *) jj, kpt%wfn(isp, ik)%occ1(jj)
+        end do
+        ! Check if occupancy consistent with number of electrons.
+        tmp = zero
+        do ii = 1, kpt%wfn(isp, ik)%nstate
+          tmp = tmp + kpt%wfn(isp, ik)%occ1(ii)
+        end do
+        if (peinf%master) write (6, '(a,i3,a,g20.6,/)') &
+          ' New number of electrons with spin ', isp, ' = ', tmp
+      end do
+      close (90)
+    end do
+  end if
   !
   ! For the calculation of occupied/empty orbitals in BSE, must override
   ! the dipole matrix elements.
   !
   do isp = 1, nspin
-     do ik = 1, kpt%nk
-        deallocate(kpt%wfn(isp,ik)%mapd)
-        deallocate(kpt%wfn(isp,ik)%Zdipole)
-        call Zget_dipole(gvec,kpt%wfn(isp,ik),ik,kpt%fk(1,ik), &
-             kpt%wfn(isp,ik)%occ1)
-     enddo
-  enddo
+    do ik = 1, kpt%nk
+      deallocate (kpt%wfn(isp, ik)%mapd)
+      deallocate (kpt%wfn(isp, ik)%Zdipole)
+      call Zget_dipole(gvec, kpt%wfn(isp, ik), ik, kpt%fk(1, ik), &
+                       kpt%wfn(isp, ik)%occ1)
+    end do
+  end do
 
   !-------------------------------------------------------------------
   ! If no sets of occupied/empty orbitals were given by the user,
   ! take them from the calculated dipole matrix elements.
   !
   do isp = 1, nspin
-     if (bsepol_in(isp)%ncond < 0) then
-        imax = 0
-        imin = kpt%wfn(isp,1)%mapd(2,1)
-        do ik = 1, kpt%nk
-           imax = max(imax,maxval(kpt%wfn(isp,ik)%mapd(2,:)))
-           imin = min(imin,minval(kpt%wfn(isp,ik)%mapd(2,:)))
-        enddo
-        bsepol_in(isp)%ncond = imax - imin + 1
-        allocate(bsepol_in(isp)%cmap(bsepol_in(isp)%ncond))
-        do jj = 1, bsepol_in(isp)%ncond
-           bsepol_in(isp)%cmap(jj) = jj + imin - 1
-        enddo
-     endif
-     if (bsepol_in(isp)%nval < 0) then
-        imax = 0
-        imin = kpt%wfn(isp,1)%mapd(2,1)
-        do ik = 1, kpt%nk
-           imax = max(imax,maxval(kpt%wfn(isp,ik)%mapd(1,:)))
-           imin = min(imin,minval(kpt%wfn(isp,ik)%mapd(1,:)))
-        enddo
-        bsepol_in(isp)%nval = imax - imin + 1
-        allocate(bsepol_in(isp)%vmap(bsepol_in(isp)%nval))
-        do jj = 1, bsepol_in(isp)%nval
-           bsepol_in(isp)%vmap(jj) = jj + imin - 1
-        enddo
-     endif
-  enddo
+    if (bsepol_in(isp)%ncond < 0) then
+      imax = 0
+      imin = kpt%wfn(isp, 1)%mapd(2, 1)
+      do ik = 1, kpt%nk
+        imax = max(imax, maxval(kpt%wfn(isp, ik)%mapd(2, :)))
+        imin = min(imin, minval(kpt%wfn(isp, ik)%mapd(2, :)))
+      end do
+      bsepol_in(isp)%ncond = imax - imin + 1
+      allocate (bsepol_in(isp)%cmap(bsepol_in(isp)%ncond))
+      do jj = 1, bsepol_in(isp)%ncond
+        bsepol_in(isp)%cmap(jj) = jj + imin - 1
+      end do
+    end if
+    if (bsepol_in(isp)%nval < 0) then
+      imax = 0
+      imin = kpt%wfn(isp, 1)%mapd(2, 1)
+      do ik = 1, kpt%nk
+        imax = max(imax, maxval(kpt%wfn(isp, ik)%mapd(1, :)))
+        imin = min(imin, minval(kpt%wfn(isp, ik)%mapd(1, :)))
+      end do
+      bsepol_in(isp)%nval = imax - imin + 1
+      allocate (bsepol_in(isp)%vmap(bsepol_in(isp)%nval))
+      do jj = 1, bsepol_in(isp)%nval
+        bsepol_in(isp)%vmap(jj) = jj + imin - 1
+      end do
+    end if
+  end do
 
   !-------------------------------------------------------------------
   ! If there are LDA states present in both mapd(:,1) and mapd(:,2),
@@ -189,70 +189,70 @@ subroutine Zsetup_b(gvec,kpt,qpt,q_bse,pol_in,pol,bsepol_in,bsepol, &
   !
   n_b = 0
   do isp = 1, nspin
-     do ik = 1, kpt%nk
-        jk = q_bse%match(ik,1)
-        do ii = 1, bsepol_in(isp)%ncond
-           occ_c = kpt%wfn(isp,ik)%occ1(bsepol_in(isp)%cmap(ii))
-           if ( occ_c > one-tol_occ ) cycle
-           do jj = 1, bsepol_in(isp)%nval
-              occ_v = kpt%wfn(isp,jk)%occ1(bsepol_in(isp)%vmap(jj))
-              if ( occ_v < tol_occ ) cycle
-              if ( occ_c > tol_occ .and. occ_v < one-tol_occ ) cycle
-              tmp = kpt%wfn(isp,ik)%e0(bsepol_in(isp)%cmap(ii)) - &
-                   kpt%wfn(isp,jk)%e0(bsepol_in(isp)%vmap(jj))
-              if (bsecut > zero .and. bsecut < tmp) cycle
-              n_b = n_b + 1
-           enddo
-        enddo
-        if ( isp == 1) n_b_up = n_b
-     enddo
-  enddo
+    do ik = 1, kpt%nk
+      jk = q_bse%match(ik, 1)
+      do ii = 1, bsepol_in(isp)%ncond
+        occ_c = kpt%wfn(isp, ik)%occ1(bsepol_in(isp)%cmap(ii))
+        if (occ_c > one - tol_occ) cycle
+        do jj = 1, bsepol_in(isp)%nval
+          occ_v = kpt%wfn(isp, jk)%occ1(bsepol_in(isp)%vmap(jj))
+          if (occ_v < tol_occ) cycle
+          if (occ_c > tol_occ .and. occ_v < one - tol_occ) cycle
+          tmp = kpt%wfn(isp, ik)%e0(bsepol_in(isp)%cmap(ii)) - &
+                kpt%wfn(isp, jk)%e0(bsepol_in(isp)%vmap(jj))
+          if (bsecut > zero .and. bsecut < tmp) cycle
+          n_b = n_b + 1
+        end do
+      end do
+      if (isp == 1) n_b_up = n_b
+    end do
+  end do
 
-  allocate(map_b(4,n_b))
+  allocate (map_b(4, n_b))
   n_b = 0
   do isp = 1, nspin
-     do ik = 1, kpt%nk
-        jk = q_bse%match(ik,1)
-        do ii = 1, bsepol_in(isp)%ncond
-           occ_c = kpt%wfn(isp,ik)%occ1(bsepol_in(isp)%cmap(ii))
-           if ( occ_c > one-tol_occ ) cycle
-           do jj = 1, bsepol_in(isp)%nval
-              occ_v = kpt%wfn(isp,jk)%occ1(bsepol_in(isp)%vmap(jj))
-              if ( occ_v < tol_occ ) cycle
-              if ( occ_c > tol_occ .and. occ_v < one-tol_occ ) cycle
-              tmp = kpt%wfn(isp,ik)%e0(bsepol_in(isp)%cmap(ii)) - &
-                   kpt%wfn(isp,jk)%e0(bsepol_in(isp)%vmap(jj))
-              if (bsecut > zero .and. bsecut < tmp) cycle
-              n_b = n_b + 1
-              map_b(1,n_b) = bsepol_in(isp)%vmap(jj)
-              map_b(2,n_b) = bsepol_in(isp)%cmap(ii)
-              map_b(3,n_b) = jk
-              map_b(4,n_b) = ik
-           enddo
-        enddo
-     enddo
-  enddo
+    do ik = 1, kpt%nk
+      jk = q_bse%match(ik, 1)
+      do ii = 1, bsepol_in(isp)%ncond
+        occ_c = kpt%wfn(isp, ik)%occ1(bsepol_in(isp)%cmap(ii))
+        if (occ_c > one - tol_occ) cycle
+        do jj = 1, bsepol_in(isp)%nval
+          occ_v = kpt%wfn(isp, jk)%occ1(bsepol_in(isp)%vmap(jj))
+          if (occ_v < tol_occ) cycle
+          if (occ_c > tol_occ .and. occ_v < one - tol_occ) cycle
+          tmp = kpt%wfn(isp, ik)%e0(bsepol_in(isp)%cmap(ii)) - &
+                kpt%wfn(isp, jk)%e0(bsepol_in(isp)%vmap(jj))
+          if (bsecut > zero .and. bsecut < tmp) cycle
+          n_b = n_b + 1
+          map_b(1, n_b) = bsepol_in(isp)%vmap(jj)
+          map_b(2, n_b) = bsepol_in(isp)%cmap(ii)
+          map_b(3, n_b) = jk
+          map_b(4, n_b) = ik
+        end do
+      end do
+    end do
+  end do
 
   do ii = 1, gvec%syms%ntrans
-     ! If ntr < 0, skip the construction of kernel
-     if (bsepol(ii)%ntr >= 0 .and. n_b > 0) &
-          call Zdefine_pmap(gvec%syms,kpt,bsepol(ii),ii,n_b,map_b,nspin,n_b_up,.False.)
-     ! If ntr < 0, skip the construction of kernel
-     if (k_vc(ii)%ncol >= 0 .and. n_b > 0) &
-          call define_kmap(gvec%syms,kpt,k_vc(ii),ii,n_b,map_b, &
-          n_b,map_b,n_b_up,n_b_up)
-  enddo
+    ! If ntr < 0, skip the construction of kernel
+    if (bsepol(ii)%ntr >= 0 .and. n_b > 0) &
+      call Zdefine_pmap(gvec%syms, kpt, bsepol(ii), ii, n_b, map_b, nspin, n_b_up, .false.)
+    ! If ntr < 0, skip the construction of kernel
+    if (k_vc(ii)%ncol >= 0 .and. n_b > 0) &
+      call define_kmap(gvec%syms, kpt, k_vc(ii), ii, n_b, map_b, &
+                       n_b, map_b, n_b_up, n_b_up)
+  end do
   !
   ! Revert dipole matrix elements.
   !
   do isp = 1, nspin
-     do ik = 1, kpt%nk
-        deallocate(kpt%wfn(isp,ik)%mapd)
-        deallocate(kpt%wfn(isp,ik)%Zdipole)
-        call Zget_dipole(gvec,kpt%wfn(isp,ik),ik,kpt%fk(1,ik), &
-             kpt%wfn(isp,ik)%occ0)
-     enddo
-  enddo
+    do ik = 1, kpt%nk
+      deallocate (kpt%wfn(isp, ik)%mapd)
+      deallocate (kpt%wfn(isp, ik)%Zdipole)
+      call Zget_dipole(gvec, kpt%wfn(isp, ik), ik, kpt%fk(1, ik), &
+                       kpt%wfn(isp, ik)%occ0)
+    end do
+  end do
 
   !-------------------------------------------------------------------
   ! Define sets of orbitals for K_cc: use (v,c;c',c') where "c'" is as
@@ -261,104 +261,104 @@ subroutine Zsetup_b(gvec,kpt,qpt,q_bse,pol_in,pol,bsepol_in,bsepol, &
   ! cutoff at tdldacut on "c".
   !
   do iq = 1, qpt%nk
-     ii = 0
-     do isp = 1, nspin
-        ii = ii + bsepol_in(isp)%ncond * bsepol_in(isp)%ncond * kpt%nk
-     enddo
-     allocate(itmp(4,ii))
-     maxv = 0
-     if (n_b_up > 0) maxv(1) = maxval(map_b(1,1:n_b_up))
-     if (n_b > n_b_up) maxv(2) = maxval(map_b(1,n_b_up+1:n_b))
-     n_c = 0
-     do isp = 1, nspin
-        do ik = 1, kpt%nk
-           jk = qpt%match(ik,iq)
-           do ii = 1, bsepol_in(isp)%ncond
-              if (maxv(isp) == 0) exit
-              do jj = 1, bsepol_in(isp)%ncond
-                 tmp = kpt%wfn(isp,ik)%e0(bsepol_in(isp)%cmap(ii)) - &
-                      kpt%wfn(isp,ik)%e0(maxv(isp))
-                 if (bsecut > zero .and. bsecut < tmp) cycle
-                 tmp = kpt%wfn(isp,jk)%e0(bsepol_in(isp)%cmap(jj)) - &
-                      kpt%wfn(isp,jk)%e0(maxv(isp))
-                 if (bsecut > zero .and. bsecut < tmp) cycle
-                 n_c = n_c + 1
-                 itmp(1,n_c) = bsepol_in(isp)%cmap(jj)
-                 itmp(2,n_c) = bsepol_in(isp)%cmap(ii)
-                 itmp(3,n_c) = ik
-                 itmp(4,n_c) = jk
-              enddo
-           enddo
-        enddo
-        if (isp == 1) n_c_up = n_c
-     enddo
-     allocate(map_c(4,n_c))
-     do ii = 1, n_c
-        map_c(:,ii) = itmp(:,ii)
-     enddo
-     deallocate(itmp)
-     !
-     ! Define sets of orbitals for K_vv: use (v,c;v',v').
-     !
-     ii = 0
-     do isp = 1, nspin
-        ii = ii + bsepol_in(isp)%nval * bsepol_in(isp)%nval * kpt%nk
-     enddo
-     allocate(itmp(4,ii))
-     n_v = 0
-     minc = 0
-     if (n_b_up > 0) minc(1) = minval(map_b(2,1:n_b_up))
-     if (n_b > n_b_up) minc(2) = minval(map_b(2,n_b_up+1:n_b))
-     do isp = 1, nspin
-        do ik = 1, kpt%nk
-           ikp = q_bse%match(ik,1)
-           jk = qpt%match(ikp,iq)
-           do ii = 1, bsepol_in(isp)%nval
-              if (minc(isp) == 0) exit
-              do jj = 1, bsepol_in(isp)%nval
-                 tmp = kpt%wfn(isp,ikp)%e0(minc(isp)) - &
-                      kpt%wfn(isp,ikp)%e0(bsepol_in(isp)%vmap(ii))
-                 if (bsecut > zero .and. bsecut < tmp) cycle
-                 tmp = kpt%wfn(isp,jk)%e0(minc(isp)) - &
-                      kpt%wfn(isp,jk)%e0(bsepol_in(isp)%vmap(jj))
-                 if (bsecut > zero .and. bsecut < tmp) cycle
-                 n_v = n_v + 1
-                 itmp(1,n_v) = bsepol_in(isp)%vmap(jj)
-                 itmp(2,n_v) = bsepol_in(isp)%vmap(ii)
-                 itmp(3,n_v) = ikp
-                 itmp(4,n_v) = jk
-              enddo
-           enddo
-        enddo
-        if (isp == 1) n_v_up = n_v
-     enddo
-     allocate(map_v(4,n_v))
-     do ii = 1, n_v
-        map_v(:,ii) = itmp(:,ii)
-     enddo
-     deallocate(itmp)
+    ii = 0
+    do isp = 1, nspin
+      ii = ii + bsepol_in(isp)%ncond*bsepol_in(isp)%ncond*kpt%nk
+    end do
+    allocate (itmp(4, ii))
+    maxv = 0
+    if (n_b_up > 0) maxv(1) = maxval(map_b(1, 1:n_b_up))
+    if (n_b > n_b_up) maxv(2) = maxval(map_b(1, n_b_up + 1:n_b))
+    n_c = 0
+    do isp = 1, nspin
+      do ik = 1, kpt%nk
+        jk = qpt%match(ik, iq)
+        do ii = 1, bsepol_in(isp)%ncond
+          if (maxv(isp) == 0) exit
+          do jj = 1, bsepol_in(isp)%ncond
+            tmp = kpt%wfn(isp, ik)%e0(bsepol_in(isp)%cmap(ii)) - &
+                  kpt%wfn(isp, ik)%e0(maxv(isp))
+            if (bsecut > zero .and. bsecut < tmp) cycle
+            tmp = kpt%wfn(isp, jk)%e0(bsepol_in(isp)%cmap(jj)) - &
+                  kpt%wfn(isp, jk)%e0(maxv(isp))
+            if (bsecut > zero .and. bsecut < tmp) cycle
+            n_c = n_c + 1
+            itmp(1, n_c) = bsepol_in(isp)%cmap(jj)
+            itmp(2, n_c) = bsepol_in(isp)%cmap(ii)
+            itmp(3, n_c) = ik
+            itmp(4, n_c) = jk
+          end do
+        end do
+      end do
+      if (isp == 1) n_c_up = n_c
+    end do
+    allocate (map_c(4, n_c))
+    do ii = 1, n_c
+      map_c(:, ii) = itmp(:, ii)
+    end do
+    deallocate (itmp)
+    !
+    ! Define sets of orbitals for K_vv: use (v,c;v',v').
+    !
+    ii = 0
+    do isp = 1, nspin
+      ii = ii + bsepol_in(isp)%nval*bsepol_in(isp)%nval*kpt%nk
+    end do
+    allocate (itmp(4, ii))
+    n_v = 0
+    minc = 0
+    if (n_b_up > 0) minc(1) = minval(map_b(2, 1:n_b_up))
+    if (n_b > n_b_up) minc(2) = minval(map_b(2, n_b_up + 1:n_b))
+    do isp = 1, nspin
+      do ik = 1, kpt%nk
+        ikp = q_bse%match(ik, 1)
+        jk = qpt%match(ikp, iq)
+        do ii = 1, bsepol_in(isp)%nval
+          if (minc(isp) == 0) exit
+          do jj = 1, bsepol_in(isp)%nval
+            tmp = kpt%wfn(isp, ikp)%e0(minc(isp)) - &
+                  kpt%wfn(isp, ikp)%e0(bsepol_in(isp)%vmap(ii))
+            if (bsecut > zero .and. bsecut < tmp) cycle
+            tmp = kpt%wfn(isp, jk)%e0(minc(isp)) - &
+                  kpt%wfn(isp, jk)%e0(bsepol_in(isp)%vmap(jj))
+            if (bsecut > zero .and. bsecut < tmp) cycle
+            n_v = n_v + 1
+            itmp(1, n_v) = bsepol_in(isp)%vmap(jj)
+            itmp(2, n_v) = bsepol_in(isp)%vmap(ii)
+            itmp(3, n_v) = ikp
+            itmp(4, n_v) = jk
+          end do
+        end do
+      end do
+      if (isp == 1) n_v_up = n_v
+    end do
+    allocate (map_v(4, n_v))
+    do ii = 1, n_v
+      map_v(:, ii) = itmp(:, ii)
+    end do
+    deallocate (itmp)
 
-     do ii = 1, gvec%syms%ntrans
-        if (iq == 1) then
-           ! If ntr < 0, skip the construction of kernel
-           if (k_x(ii)%ncol >= 0 .and. n_c > 0 .and. n_v > 0) &
-                call define_kmap(gvec%syms,kpt,k_x(ii),ii,n_c,map_c, &
-                n_v,map_v,n_c_up,n_v_up)
-        endif
+    do ii = 1, gvec%syms%ntrans
+      if (iq == 1) then
         ! If ntr < 0, skip the construction of kernel
-        if (k_vv(ii,iq)%ncol >= 0 .and. n_v > 0 .and. pol(ii,iq)%ntr > 0) &
-             call define_kmap(gvec%syms,kpt,k_vv(ii,iq),ii,n_v,map_v, &
-             pol(ii,iq)%ntr,pol(ii,iq)%tr,n_v_up,pol(ii,iq)%n_up)
-        ! If ntr < 0, skip the construction of kernel
-        if (k_cc(ii,iq)%ncol >= 0 .and. n_c > 0 .and. pol(ii,iq)%ntr > 0) &
-             call define_kmap(gvec%syms,kpt,k_cc(ii,iq),ii,n_c,map_c, &
-             pol(ii,iq)%ntr,pol(ii,iq)%tr,n_c_up,pol(ii,iq)%n_up)
-     enddo
+        if (k_x(ii)%ncol >= 0 .and. n_c > 0 .and. n_v > 0) &
+          call define_kmap(gvec%syms, kpt, k_x(ii), ii, n_c, map_c, &
+                           n_v, map_v, n_c_up, n_v_up)
+      end if
+      ! If ntr < 0, skip the construction of kernel
+      if (k_vv(ii, iq)%ncol >= 0 .and. n_v > 0 .and. pol(ii, iq)%ntr > 0) &
+        call define_kmap(gvec%syms, kpt, k_vv(ii, iq), ii, n_v, map_v, &
+                         pol(ii, iq)%ntr, pol(ii, iq)%tr, n_v_up, pol(ii, iq)%n_up)
+      ! If ntr < 0, skip the construction of kernel
+      if (k_cc(ii, iq)%ncol >= 0 .and. n_c > 0 .and. pol(ii, iq)%ntr > 0) &
+        call define_kmap(gvec%syms, kpt, k_cc(ii, iq), ii, n_c, map_c, &
+                         pol(ii, iq)%ntr, pol(ii, iq)%tr, n_c_up, pol(ii, iq)%n_up)
+    end do
 
-     deallocate(map_c)
-     deallocate(map_v)
-  enddo
-  deallocate(map_b)
+    deallocate (map_c)
+    deallocate (map_v)
+  end do
+  deallocate (map_b)
 
   return
 
