@@ -12,21 +12,21 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !---------------------------------------------------------------
-subroutine alccheck(wst,wloc,isize,istat)
+subroutine alccheck(wst, wloc, isize, istat)
   implicit none
 
   ! name of array, name of parent subroutine
-  character (len=*), intent(in) :: wst, wloc
+  character(len=*), intent(in) :: wst, wloc
   ! size of array, allocation status (see above)
   integer, intent(in) :: isize, istat
 
-  character (len=600) :: lastwords
+  character(len=600) :: lastwords
 
-  if(istat /= 0) then
-     write(lastwords,'(a,a,a,a,a,i12)') 'Cannot allocate ', wst, &
-          ' in ', wloc, ' , ARRAY SIZE= ', isize
-     call die(lastwords)
-  endif
+  if (istat /= 0) then
+    write (lastwords, '(a,a,a,a,a,i12)') 'Cannot allocate ', wst, &
+      ' in ', wloc, ' , ARRAY SIZE= ', isize
+    call die(lastwords)
+  end if
 
 end subroutine alccheck
 !===============================================================

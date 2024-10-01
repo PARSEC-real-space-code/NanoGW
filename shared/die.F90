@@ -16,20 +16,20 @@ subroutine die(lastwords)
 #endif
 
   ! arguments
-  character (len=*), intent(in) :: lastwords
+  character(len=*), intent(in) :: lastwords
 
   ! local variables
-  character (len=26) :: datelabel
+  character(len=26) :: datelabel
 #ifdef MPI
   integer :: info
 #endif
 
-  write(6,'(1x,a)') lastwords(1:len(trim(lastwords)))
+  write (6, '(1x,a)') lastwords(1:len(trim(lastwords)))
   call get_date(datelabel)
-  write(6,'(a,i5,3a)') ' PE # ', peinf%inode, ' stops. ', datelabel, ' UTC'
-  call flush(6)
+  write (6, '(a,i5,3a)') ' PE # ', peinf%inode, ' stops. ', datelabel, ' UTC'
+  call flush (6)
 #ifdef MPI
-  call MPI_ABORT(peinf%comm,info)
+  call MPI_ABORT(peinf%comm, info)
 #endif
   stop
 

@@ -13,7 +13,7 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine Zget_pol_isdf(pol,iunit,nrep,nq,irp,iq,nn)
+subroutine Zget_pol_isdf(pol, iunit, nrep, nq, irp, iq, nn)
 
   use typedefs
   use mpi_module
@@ -24,18 +24,17 @@ subroutine Zget_pol_isdf(pol,iunit,nrep,nq,irp,iq,nn)
 
   ! arguments
   ! polarizability structure
-  type (polinfo), intent(inout) :: pol
+  type(polinfo), intent(inout) :: pol
   integer, intent(in) :: &
-       iunit, &       ! number of file pol_diag.dat
-       nrep, &        ! number of representations
-       nq, &          ! number of q-vectors
-       irp, &         ! index of current representation
-       iq, &          ! index of current q-vector
-       nn             ! number of eigenpairs per processor (local variable)
-
+    iunit, &       ! number of file pol_diag.dat
+    nrep, &        ! number of representations
+    nq, &          ! number of q-vectors
+    irp, &         ! index of current representation
+    iq, &          ! index of current q-vector
+    nn             ! number of eigenpairs per processor (local variable)
 
   ! local variables
-  character (len=800) :: lastwords
+  character(len=800) :: lastwords
   ! counters and temporary arrays
   integer :: ii, jj, npol, icol, jrp, jq, ipe, pcol
   SCALAR, allocatable :: tmpv(:)
@@ -45,48 +44,48 @@ subroutine Zget_pol_isdf(pol,iunit,nrep,nq,irp,iq,nn)
 #endif
 
   pol%nn = nn
-  allocate(pol%Zv(pol%nn,pol%ntr))
+  allocate (pol%Zv(pol%nn, pol%ntr))
   pol%lv = .true.
   pol%Zv = Zzero
   if (r_grp%master) then
-     do ii = 1, nrep * nq
-        read(iunit) jrp, jq, npol
-        write(6,'(a,i3,a,2i3,i8)') ' Seek representation ', irp, &
-             ' in pol_diag.dat. ', jrp, jq, npol
-        if (jrp == irp .and. jq == iq) goto 60
-        do jj = 1, npol + 2
-           read(iunit)
-        enddo
-        if (jrp == nrep .and. jq == nq) then
-           rewind(iunit)
-           read(iunit)
-           read(iunit)
-        endif
-     enddo
-     write(lastwords,*) 'ERROR: representation ', irp, ' q-vector ', &
-          iq, 'not found in pol_diag.dat!'
-     call die(lastwords)
-60   continue
-     if (npol /= pol%ntr) then
-        write(lastwords,*) 'ERROR: number of transitions in ', &
-             'pol_diag.dat is wrong!', npol, pol%ntr
-        call die(lastwords)
-     endif
-     read(iunit)
-     read(iunit)
-  endif
-  allocate(tmpv(pol%nn*r_grp%npes))
+    do ii = 1, nrep*nq
+      read (iunit) jrp, jq, npol
+      write (6, '(a,i3,a,2i3,i8)') ' Seek representation ', irp, &
+        ' in pol_diag.dat. ', jrp, jq, npol
+      if (jrp == irp .and. jq == iq) goto 60
+      do jj = 1, npol + 2
+        read (iunit)
+      end do
+      if (jrp == nrep .and. jq == nq) then
+        rewind (iunit)
+        read (iunit)
+        read (iunit)
+      end if
+    end do
+    write (lastwords, *) 'ERROR: representation ', irp, ' q-vector ', &
+      iq, 'not found in pol_diag.dat!'
+    call die(lastwords)
+60  continue
+    if (npol /= pol%ntr) then
+      write (lastwords, *) 'ERROR: number of transitions in ', &
+        'pol_diag.dat is wrong!', npol, pol%ntr
+      call die(lastwords)
+    end if
+    read (iunit)
+    read (iunit)
+  end if
+  allocate (tmpv(pol%nn*r_grp%npes))
   ! for loop over all the eigenvectors (X_s)
-  do icol = 1, pol%ntr 
-     if (r_grp%master) then
-        ! write(6, *) " icol = ", icol
-        tmpv = Zzero
-        read(iunit) (tmpv(ii), ii=1,pol%ntr)
-     endif
-     call MPI_SCATTER( tmpv, pol%nn, MPI_DOUBLE_SCALAR, &
-          pol%Zv(1,icol), pol%nn, MPI_DOUBLE_SCALAR, r_grp%masterid, &
-          r_grp%comm, info )
-  enddo
-  deallocate(tmpv)
+  do icol = 1, pol%ntr
+    if (r_grp%master) then
+      ! write(6, *) " icol = ", icol
+      tmpv = Zzero
+      read (iunit) (tmpv(ii), ii=1, pol%ntr)
+    end if
+    call MPI_SCATTER(tmpv, pol%nn, MPI_DOUBLE_SCALAR, &
+                     pol%Zv(1, icol), pol%nn, MPI_DOUBLE_SCALAR, r_grp%masterid, &
+                     r_grp%comm, info)
+  end do
+  deallocate (tmpv)
 
 end subroutine Zget_pol_isdf

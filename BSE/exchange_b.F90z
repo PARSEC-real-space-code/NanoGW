@@ -20,7 +20,7 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine Zexchange_b(kpt,kernel_vc,bsepol,triplet,mixing,noxchange,nspin)
+subroutine Zexchange_b(kpt, kernel_vc, bsepol, triplet, mixing, noxchange, nspin)
 
   use typedefs
   use mpi_module
@@ -31,355 +31,355 @@ subroutine Zexchange_b(kpt,kernel_vc,bsepol,triplet,mixing,noxchange,nspin)
 
   ! arguments
   ! k-points and electron wave-functions
-  type (kptinfo), intent(in) :: kpt
+  type(kptinfo), intent(in) :: kpt
   ! exchange kernel
-  type (kernelinfo), intent(in) :: kernel_vc
+  type(kernelinfo), intent(in) :: kernel_vc
   ! BSE polarizability
-  type (polinfo), intent(inout) :: bsepol
+  type(polinfo), intent(inout) :: bsepol
   ! number of spin channels
   integer, intent(in) :: nspin
   logical, intent(in) :: &
-       triplet, &  ! true for triplet excitations (no exchange)
-       mixing, &   ! true if Tamm-Dancof approximation is not used
-       noxchange   ! true if exchange kernel is included
+    triplet, &  ! true for triplet excitations (no exchange)
+    mixing, &   ! true if Tamm-Dancof approximation is not used
+    noxchange   ! true if exchange kernel is included
 
   ! local variables
   integer :: nmat, ncol, iv, ic, ivp, icp, ik, ikp, ivc, ivcp, ivcp_l, &
-       isp_r, isp_c, ispb_r, ispb_c, irow, icol, icolx, irowx, jcol, &
-       iv_b, ic_b, ivp_b, icp_b, ik_b, info, ipe
+             isp_r, isp_c, ispb_r, ispb_c, irow, icol, icolx, irowx, jcol, &
+             iv_b, ic_b, ivp_b, icp_b, ik_b, info, ipe
   real(dp) :: occ_vcp, occ_vc, fac
-  SCALAR, allocatable :: tmp_vcvc(:,:)
+  SCALAR, allocatable :: tmp_vcvc(:, :)
 
   !-------------------------------------------------------------------
   ! Define paramaters and allocate data.
-  nmat = bsepol%nn * r_grp%npes
+  nmat = bsepol%nn*r_grp%npes
   ncol = bsepol%nn
-  fac = two / real(nspin,dp) / real(kpt%nk,dp)
+  fac = two/real(nspin, dp)/real(kpt%nk, dp)
 
-  allocate(tmp_vcvc(kernel_vc%nrow,kernel_vc%nn),stat=info)
-  call alccheck('tmp_vcvc','exchange_b',kernel_vc%nrow*kernel_vc%nn,info)
+  allocate (tmp_vcvc(kernel_vc%nrow, kernel_vc%nn), stat=info)
+  call alccheck('tmp_vcvc', 'exchange_b', kernel_vc%nrow*kernel_vc%nn, info)
 
   !-------------------------------------------------------------------
   ! Each processor broadcasts the Coulomb kernel it has and let the
   ! other PEs select which matrix elements they need.
   !
   do ipe = 0, r_grp%npes - 1
-     tmp_vcvc = Zzero
-     if (ipe == r_grp%inode) tmp_vcvc = kernel_vc%Zm
+    tmp_vcvc = Zzero
+    if (ipe == r_grp%inode) tmp_vcvc = kernel_vc%Zm
 #ifdef MPI
-     call MPI_BCAST(tmp_vcvc, kernel_vc%nrow*kernel_vc%nn, &
-          MPI_DOUBLE_SCALAR,ipe,r_grp%comm,info)
+    call MPI_BCAST(tmp_vcvc, kernel_vc%nrow*kernel_vc%nn, &
+                   MPI_DOUBLE_SCALAR, ipe, r_grp%comm, info)
 #endif
-     !
-     ! Spin triplet has no exchange.
-     !
-     if ((.not. triplet) .and. (.not. noxchange)) then
+    !
+    ! Spin triplet has no exchange.
+    !
+    if ((.not. triplet) .and. (.not. noxchange)) then
+      !-------------------------------------------------------------------
+      ! Work first with K^AA part.
+      !
+      do ivcp_l = 1, kernel_vc%nn
+        ivcp = ivcp_l + ipe*kernel_vc%nn
+        if (ivcp > kernel_vc%ncol) exit
+        ivp = kernel_vc%col(1, ivcp)
+        icp = kernel_vc%col(2, ivcp)
+        ikp = kernel_vc%col(3, ivcp)
+        isp_c = 1
+        if (ivcp > kernel_vc%ncol_up) isp_c = 2
+        do icol = 1, bsepol%ntr
+          jcol = icol - r_grp%inode*ncol
+          if (jcol > ncol .or. jcol < 1) cycle
+          ivp_b = bsepol%tr(1, icol)
+          icp_b = bsepol%tr(2, icol)
+          ik_b = bsepol%tr(3, icol)
+          if (icp_b /= icp .or. ivp_b /= ivp .or. ik_b /= ikp) cycle
+          icolx = jcol                    ! ixp = 1
+          ispb_c = 1
+          if (icol > bsepol%n_up) ispb_c = 2
+          if (isp_c /= ispb_c) cycle
+          occ_vcp = sqrt(kpt%wfn(isp_c, ikp)%occ1(ivp) - kpt%wfn(isp_c, ikp)%occ1(icp))
+          do ivc = 1, kernel_vc%nrow
+            iv = kernel_vc%row(1, ivc)
+            ic = kernel_vc%row(2, ivc)
+            ik = kernel_vc%row(3, ivc)
+            isp_r = 1
+            if (ivc > kernel_vc%nrow_up) isp_r = 2
+            do irow = 1, bsepol%ntr
+              iv_b = bsepol%tr(1, irow)
+              ic_b = bsepol%tr(2, irow)
+              ik_b = bsepol%tr(3, irow)
+              if (ic_b /= ic .or. iv_b /= iv .or. ik_b /= ik) cycle
+              ispb_r = 1
+              if (irow > bsepol%n_up) ispb_r = 2
+              if (isp_r /= ispb_r) cycle
+              occ_vc = sqrt(kpt%wfn(isp_r, ik)%occ1(iv) - kpt%wfn(isp_r, ik)%occ1(ic))
+              irowx = irow              ! ix = 1
+              bsepol%Zv(irowx, icolx) = bsepol%Zv(irowx, icolx) + &
+                                        fac*tmp_vcvc(ivc, ivcp_l)*occ_vcp*occ_vc
+            end do
+          end do
+        end do
+      end do
+      !-------------------------------------------------------------------
+      ! K^BB part.
+      !
+      do ivcp_l = 1, kernel_vc%nn
+        ivcp = ivcp_l + ipe*kernel_vc%nn
+        if (ivcp > kernel_vc%ncol) exit
+        ivp = kernel_vc%col(1, ivcp)
+        icp = kernel_vc%col(2, ivcp)
+        ikp = kernel_vc%col(3, ivcp)
+        isp_c = 1
+        if (ivcp > kernel_vc%ncol_up) isp_c = 2
+        do icol = 1, bsepol%ntr
+          jcol = icol - r_grp%inode*ncol
+          if (jcol > ncol .or. jcol < 1) cycle
+          ivp_b = bsepol%tr(1, icol)
+          icp_b = bsepol%tr(2, icol)
+          ik_b = bsepol%tr(3, icol)
+          if (icp_b /= icp .or. ivp_b /= ivp .or. ik_b /= ikp) cycle
+          icolx = jcol + ncol             ! ixp = 2
+          ispb_c = 1
+          if (icol > bsepol%n_up) ispb_c = 2
+          if (isp_c /= ispb_c) cycle
+          occ_vcp = sqrt(kpt%wfn(isp_c, ikp)%occ1(ivp) - kpt%wfn(isp_c, ikp)%occ1(icp))
+          do ivc = 1, kernel_vc%nrow
+            iv = kernel_vc%row(1, ivc)
+            ic = kernel_vc%row(2, ivc)
+            ik = kernel_vc%row(3, ivc)
+            isp_r = 1
+            if (ivc > kernel_vc%nrow_up) isp_r = 2
+            do irow = 1, bsepol%ntr
+              iv_b = bsepol%tr(1, irow)
+              ic_b = bsepol%tr(2, irow)
+              ik_b = bsepol%tr(3, irow)
+              if (ic_b /= ic .or. iv_b /= iv .or. ik_b /= ik) cycle
+              ispb_r = 1
+              if (irow > bsepol%n_up) ispb_r = 2
+              if (isp_r /= ispb_r) cycle
+              occ_vc = sqrt(kpt%wfn(isp_r, ik)%occ1(iv) - kpt%wfn(isp_r, ik)%occ1(ic))
+              irowx = irow + nmat       ! ix = 2
+              bsepol%Zv(irowx, icolx) = bsepol%Zv(irowx, icolx) - &
+                                        fac*tmp_vcvc(ivc, ivcp_l)*occ_vcp*occ_vc
+            end do
+          end do
+        end do
+      end do
+      if (mixing) then
         !-------------------------------------------------------------------
-        ! Work first with K^AA part.
+        ! K^AB part.
         !
         do ivcp_l = 1, kernel_vc%nn
-           ivcp = ivcp_l + ipe*kernel_vc%nn
-           if (ivcp > kernel_vc%ncol) exit
-           ivp = kernel_vc%col(1,ivcp)
-           icp = kernel_vc%col(2,ivcp)
-           ikp = kernel_vc%col(3,ivcp)
-           isp_c = 1
-           if (ivcp > kernel_vc%ncol_up) isp_c = 2
-           do icol = 1, bsepol%ntr
-              jcol = icol - r_grp%inode * ncol
-              if (jcol > ncol .or. jcol < 1) cycle
-              ivp_b = bsepol%tr(1,icol)
-              icp_b = bsepol%tr(2,icol)
-              ik_b = bsepol%tr(3,icol)
-              if ( icp_b /= icp .or. ivp_b /= ivp .or. ik_b /= ikp ) cycle
-              icolx = jcol                    ! ixp = 1
-              ispb_c = 1
-              if (icol > bsepol%n_up) ispb_c = 2
-              if (isp_c /= ispb_c) cycle
-              occ_vcp = sqrt(kpt%wfn(isp_c,ikp)%occ1(ivp) - kpt%wfn(isp_c,ikp)%occ1(icp))
-              do ivc = 1, kernel_vc%nrow
-                 iv = kernel_vc%row(1,ivc)
-                 ic = kernel_vc%row(2,ivc)
-                 ik = kernel_vc%row(3,ivc)
-                 isp_r = 1
-                 if (ivc > kernel_vc%nrow_up) isp_r = 2
-                 do irow = 1, bsepol%ntr
-                    iv_b = bsepol%tr(1,irow)
-                    ic_b = bsepol%tr(2,irow)
-                    ik_b = bsepol%tr(3,irow)
-                    if ( ic_b /= ic .or. iv_b /= iv .or. ik_b /= ik ) cycle
-                    ispb_r = 1
-                    if (irow > bsepol%n_up) ispb_r = 2
-                    if (isp_r /= ispb_r) cycle
-                    occ_vc = sqrt(kpt%wfn(isp_r,ik)%occ1(iv) - kpt%wfn(isp_r,ik)%occ1(ic))
-                    irowx = irow              ! ix = 1
-                    bsepol%Zv(irowx,icolx) = bsepol%Zv(irowx,icolx) + &
-                         fac*tmp_vcvc(ivc,ivcp_l)*occ_vcp*occ_vc
-                 enddo
-              enddo
-           enddo
-        enddo
+          ivcp = ivcp_l + ipe*kernel_vc%nn
+          if (ivcp > kernel_vc%ncol) exit
+          ivp = kernel_vc%col(1, ivcp)
+          icp = kernel_vc%col(2, ivcp)
+          ikp = kernel_vc%col(3, ivcp)
+          isp_c = 1
+          if (ivcp > kernel_vc%ncol_up) isp_c = 2
+          do icol = 1, bsepol%ntr
+            jcol = icol - r_grp%inode*ncol
+            if (jcol > ncol .or. jcol < 1) cycle
+            ivp_b = bsepol%tr(1, icol)
+            icp_b = bsepol%tr(2, icol)
+            ik_b = bsepol%tr(3, icol)
+            if (icp_b /= icp .or. ivp_b /= ivp .or. ik_b /= ikp) cycle
+            icolx = jcol + ncol                ! ixp = 2
+            ispb_c = 1
+            if (icol > bsepol%n_up) ispb_c = 2
+            if (isp_c /= ispb_c) cycle
+            occ_vcp = sqrt(kpt%wfn(isp_c, ikp)%occ1(ivp) - kpt%wfn(isp_c, ikp)%occ1(icp))
+            do ivc = 1, kernel_vc%nrow
+              iv = kernel_vc%row(1, ivc)
+              ic = kernel_vc%row(2, ivc)
+              ik = kernel_vc%row(3, ivc)
+              isp_r = 1
+              if (ivc > kernel_vc%nrow_up) isp_r = 2
+              do irow = 1, bsepol%ntr
+                iv_b = bsepol%tr(1, irow)
+                ic_b = bsepol%tr(2, irow)
+                ik_b = bsepol%tr(3, irow)
+                if (ic_b /= ic .or. iv_b /= iv .or. ik_b /= ik) cycle
+                ispb_r = 1
+                if (irow > bsepol%n_up) ispb_r = 2
+                if (isp_r /= ispb_r) cycle
+                occ_vc = sqrt(kpt%wfn(isp_r, ik)%occ1(iv) - kpt%wfn(isp_r, ik)%occ1(ic))
+                irowx = irow                 ! ix = 1
+                bsepol%Zv(irowx, icolx) = bsepol%Zv(irowx, icolx) + &
+                                          fac*tmp_vcvc(ivc, ivcp_l)*occ_vcp*occ_vc
+              end do
+            end do
+          end do
+        end do
         !-------------------------------------------------------------------
-        ! K^BB part.
+        ! K^BA part.
         !
         do ivcp_l = 1, kernel_vc%nn
-           ivcp = ivcp_l + ipe*kernel_vc%nn
-           if (ivcp > kernel_vc%ncol) exit
-           ivp = kernel_vc%col(1,ivcp)
-           icp = kernel_vc%col(2,ivcp)
-           ikp = kernel_vc%col(3,ivcp)
-           isp_c = 1
-           if (ivcp > kernel_vc%ncol_up) isp_c = 2
-           do icol = 1, bsepol%ntr
-              jcol = icol - r_grp%inode * ncol
-              if (jcol > ncol .or. jcol < 1) cycle
-              ivp_b = bsepol%tr(1,icol)
-              icp_b = bsepol%tr(2,icol)
-              ik_b = bsepol%tr(3,icol)
-              if ( icp_b /= icp .or. ivp_b /= ivp .or. ik_b /= ikp ) cycle
-              icolx = jcol + ncol             ! ixp = 2
-              ispb_c = 1
-              if (icol > bsepol%n_up) ispb_c = 2
-              if (isp_c /= ispb_c) cycle
-              occ_vcp = sqrt(kpt%wfn(isp_c,ikp)%occ1(ivp) - kpt%wfn(isp_c,ikp)%occ1(icp))
-              do ivc = 1, kernel_vc%nrow
-                 iv = kernel_vc%row(1,ivc)
-                 ic = kernel_vc%row(2,ivc)
-                 ik = kernel_vc%row(3,ivc)
-                 isp_r = 1
-                 if (ivc > kernel_vc%nrow_up) isp_r = 2
-                 do irow = 1, bsepol%ntr
-                    iv_b = bsepol%tr(1,irow)
-                    ic_b = bsepol%tr(2,irow)
-                    ik_b = bsepol%tr(3,irow)
-                    if ( ic_b /= ic .or. iv_b /= iv .or. ik_b /= ik ) cycle
-                    ispb_r = 1
-                    if (irow > bsepol%n_up) ispb_r = 2
-                    if (isp_r /= ispb_r) cycle
-                    occ_vc = sqrt(kpt%wfn(isp_r,ik)%occ1(iv) - kpt%wfn(isp_r,ik)%occ1(ic))
-                    irowx = irow + nmat       ! ix = 2
-                    bsepol%Zv(irowx,icolx) = bsepol%Zv(irowx,icolx) - &
-                         fac*tmp_vcvc(ivc,ivcp_l)*occ_vcp*occ_vc
-                 enddo
-              enddo
-           enddo
-        enddo
-        if (mixing) then
-           !-------------------------------------------------------------------
-           ! K^AB part.
-           !
-           do ivcp_l = 1, kernel_vc%nn
-              ivcp = ivcp_l + ipe*kernel_vc%nn
-              if (ivcp > kernel_vc%ncol) exit
-              ivp = kernel_vc%col(1,ivcp)
-              icp = kernel_vc%col(2,ivcp)
-              ikp = kernel_vc%col(3,ivcp)
-              isp_c = 1
-              if (ivcp > kernel_vc%ncol_up) isp_c = 2
-              do icol = 1, bsepol%ntr
-                 jcol = icol - r_grp%inode * ncol
-                 if (jcol > ncol .or. jcol < 1) cycle
-                 ivp_b = bsepol%tr(1,icol)
-                 icp_b = bsepol%tr(2,icol)
-                 ik_b = bsepol%tr(3,icol)
-                 if ( icp_b /= icp .or. ivp_b /= ivp .or. ik_b /= ikp ) cycle
-                 icolx = jcol + ncol                ! ixp = 2
-                 ispb_c = 1
-                 if (icol > bsepol%n_up) ispb_c = 2
-                 if (isp_c /= ispb_c) cycle
-                 occ_vcp = sqrt(kpt%wfn(isp_c,ikp)%occ1(ivp) - kpt%wfn(isp_c,ikp)%occ1(icp))
-                 do ivc = 1, kernel_vc%nrow
-                    iv = kernel_vc%row(1,ivc)
-                    ic = kernel_vc%row(2,ivc)
-                    ik = kernel_vc%row(3,ivc)
-                    isp_r = 1
-                    if (ivc > kernel_vc%nrow_up) isp_r = 2
-                    do irow = 1, bsepol%ntr
-                       iv_b = bsepol%tr(1,irow)
-                       ic_b = bsepol%tr(2,irow)
-                       ik_b = bsepol%tr(3,irow)
-                       if ( ic_b /= ic .or. iv_b /= iv .or. ik_b /= ik ) cycle
-                       ispb_r = 1
-                       if (irow > bsepol%n_up) ispb_r = 2
-                       if (isp_r /= ispb_r) cycle
-                       occ_vc = sqrt(kpt%wfn(isp_r,ik)%occ1(iv) - kpt%wfn(isp_r,ik)%occ1(ic))
-                       irowx = irow                 ! ix = 1
-                       bsepol%Zv(irowx,icolx) = bsepol%Zv(irowx,icolx) + &
-                            fac*tmp_vcvc(ivc,ivcp_l)*occ_vcp*occ_vc
-                    enddo
-                 enddo
-              enddo
-           enddo
-           !-------------------------------------------------------------------
-           ! K^BA part.
-           !
-           do ivcp_l = 1, kernel_vc%nn
-              ivcp = ivcp_l + ipe*kernel_vc%nn
-              if (ivcp > kernel_vc%ncol) exit
-              ivp = kernel_vc%col(1,ivcp)
-              icp = kernel_vc%col(2,ivcp)
-              ikp = kernel_vc%col(3,ivcp)
-              isp_c = 1
-              if (ivcp > kernel_vc%ncol_up) isp_c = 2
-              do icol = 1, bsepol%ntr
-                 jcol = icol - r_grp%inode * ncol
-                 if (jcol > ncol .or. jcol < 1) cycle
-                 ivp_b = bsepol%tr(1,icol)
-                 icp_b = bsepol%tr(2,icol)
-                 ik_b = bsepol%tr(3,icol)
-                 if ( icp_b /= icp .or. ivp_b /= ivp .or. ik_b /= ikp ) cycle
-                 icolx = jcol                       ! ixp = 1
-                 ispb_c = 1
-                 if (icol > bsepol%n_up) ispb_c = 2
-                 if (isp_c /= ispb_c) cycle
-                 occ_vcp = sqrt(kpt%wfn(isp_c,ikp)%occ1(ivp) - kpt%wfn(isp_c,ikp)%occ1(icp))
-                 do ivc = 1, kernel_vc%nrow
-                    iv = kernel_vc%row(1,ivc)
-                    ic = kernel_vc%row(2,ivc)
-                    ik = kernel_vc%row(3,ivc)
-                    isp_r = 1
-                    if (ivc > kernel_vc%nrow_up) isp_r = 2
-                    do irow = 1, bsepol%ntr
-                       iv_b = bsepol%tr(1,irow)
-                       ic_b = bsepol%tr(2,irow)
-                       ik_b = bsepol%tr(3,irow)
-                       if ( ic_b /= ic .or. iv_b /= iv .or. ik_b /= ik ) cycle
-                       ispb_r = 1
-                       if (irow > bsepol%n_up) ispb_r = 2
-                       if (isp_r /= ispb_r) cycle
-                       occ_vc = sqrt(kpt%wfn(isp_r,ik)%occ1(iv) - kpt%wfn(isp_r,ik)%occ1(ic))
-                       irowx = irow + nmat          ! ix = 2
-                       bsepol%Zv(irowx,icolx) = bsepol%Zv(irowx,icolx) - &
-                            fac*tmp_vcvc(ivc,ivcp_l)*occ_vcp*occ_vc
-                    enddo
-                 enddo
-              enddo
-           enddo
-        endif
+          ivcp = ivcp_l + ipe*kernel_vc%nn
+          if (ivcp > kernel_vc%ncol) exit
+          ivp = kernel_vc%col(1, ivcp)
+          icp = kernel_vc%col(2, ivcp)
+          ikp = kernel_vc%col(3, ivcp)
+          isp_c = 1
+          if (ivcp > kernel_vc%ncol_up) isp_c = 2
+          do icol = 1, bsepol%ntr
+            jcol = icol - r_grp%inode*ncol
+            if (jcol > ncol .or. jcol < 1) cycle
+            ivp_b = bsepol%tr(1, icol)
+            icp_b = bsepol%tr(2, icol)
+            ik_b = bsepol%tr(3, icol)
+            if (icp_b /= icp .or. ivp_b /= ivp .or. ik_b /= ikp) cycle
+            icolx = jcol                       ! ixp = 1
+            ispb_c = 1
+            if (icol > bsepol%n_up) ispb_c = 2
+            if (isp_c /= ispb_c) cycle
+            occ_vcp = sqrt(kpt%wfn(isp_c, ikp)%occ1(ivp) - kpt%wfn(isp_c, ikp)%occ1(icp))
+            do ivc = 1, kernel_vc%nrow
+              iv = kernel_vc%row(1, ivc)
+              ic = kernel_vc%row(2, ivc)
+              ik = kernel_vc%row(3, ivc)
+              isp_r = 1
+              if (ivc > kernel_vc%nrow_up) isp_r = 2
+              do irow = 1, bsepol%ntr
+                iv_b = bsepol%tr(1, irow)
+                ic_b = bsepol%tr(2, irow)
+                ik_b = bsepol%tr(3, irow)
+                if (ic_b /= ic .or. iv_b /= iv .or. ik_b /= ik) cycle
+                ispb_r = 1
+                if (irow > bsepol%n_up) ispb_r = 2
+                if (isp_r /= ispb_r) cycle
+                occ_vc = sqrt(kpt%wfn(isp_r, ik)%occ1(iv) - kpt%wfn(isp_r, ik)%occ1(ic))
+                irowx = irow + nmat          ! ix = 2
+                bsepol%Zv(irowx, icolx) = bsepol%Zv(irowx, icolx) - &
+                                          fac*tmp_vcvc(ivc, ivcp_l)*occ_vcp*occ_vc
+              end do
+            end do
+          end do
+        end do
+      end if
 
-     else
-        if (r_grp%master) write(6,'(a,/,a,a,/,a,/)') &
-             repeat('*',65), ' WARNING!!!! ', &
-             'Exchange kernel not included in BSE ', repeat('*',65)
-     endif ! .not. noxchange && .not. triplet
+    else
+      if (r_grp%master) write (6, '(a,/,a,a,/,a,/)') &
+        repeat('*', 65), ' WARNING!!!! ', &
+        'Exchange kernel not included in BSE ', repeat('*', 65)
+    end if ! .not. noxchange && .not. triplet
 
-     !-------------------------------------------------------------------
-     ! Since the bare direct kernel at K^12 and K^21 (mixing part) is also
-     ! contained in kernel_vc, we add it in the hamiltonian now. Notice that
-     ! the bare direct kernel is spin diagonal.
-     !
-     if (mixing) then
-        !
-        ! Do K^AB first.
-        !
-        do ivcp_l = 1, kernel_vc%nn
-           ivcp = ivcp_l + ipe*kernel_vc%nn
-           if (ivcp > kernel_vc%ncol) exit
-           ivp = kernel_vc%col(1,ivcp)
-           icp = kernel_vc%col(2,ivcp)
-           ikp = kernel_vc%col(3,ivcp)
-           isp_c = 1
-           if (ivcp > kernel_vc%ncol_up) isp_c = 2
-           do icol = 1, bsepol%ntr
-              jcol = icol - r_grp%inode * ncol
-              if (jcol > ncol .or. jcol < 1) cycle
-              ivp_b = bsepol%tr(1,icol)
-              icp_b = bsepol%tr(2,icol)
-              ik_b = bsepol%tr(3,icol)
-              if ( icp_b /= icp ) cycle
-              icolx = jcol + ncol                ! ixp = 2
-              ispb_c = 1
-              if (icol > bsepol%n_up) ispb_c = 2
-              if (isp_c /= ispb_c) cycle
-              occ_vcp = sqrt(kpt%wfn(isp_c,ikp)%occ1(ivp) - kpt%wfn(isp_c,ikp)%occ1(icp))
-              do ivc = 1, kernel_vc%nrow
-                 iv = kernel_vc%row(1,ivc)
-                 ic = kernel_vc%row(2,ivc)
-                 ik = kernel_vc%row(3,ivc)
-                 isp_r = 1
-                 if (ivc > kernel_vc%nrow_up) isp_r = 2
-                 do irow = 1, bsepol%ntr
-                    iv_b = bsepol%tr(1,irow)
-                    ic_b = bsepol%tr(2,irow)
-                    ik_b = bsepol%tr(3,irow)
-                    ispb_r = 1
-                    if (irow > bsepol%n_up) ispb_r = 2
+    !-------------------------------------------------------------------
+    ! Since the bare direct kernel at K^12 and K^21 (mixing part) is also
+    ! contained in kernel_vc, we add it in the hamiltonian now. Notice that
+    ! the bare direct kernel is spin diagonal.
+    !
+    if (mixing) then
+      !
+      ! Do K^AB first.
+      !
+      do ivcp_l = 1, kernel_vc%nn
+        ivcp = ivcp_l + ipe*kernel_vc%nn
+        if (ivcp > kernel_vc%ncol) exit
+        ivp = kernel_vc%col(1, ivcp)
+        icp = kernel_vc%col(2, ivcp)
+        ikp = kernel_vc%col(3, ivcp)
+        isp_c = 1
+        if (ivcp > kernel_vc%ncol_up) isp_c = 2
+        do icol = 1, bsepol%ntr
+          jcol = icol - r_grp%inode*ncol
+          if (jcol > ncol .or. jcol < 1) cycle
+          ivp_b = bsepol%tr(1, icol)
+          icp_b = bsepol%tr(2, icol)
+          ik_b = bsepol%tr(3, icol)
+          if (icp_b /= icp) cycle
+          icolx = jcol + ncol                ! ixp = 2
+          ispb_c = 1
+          if (icol > bsepol%n_up) ispb_c = 2
+          if (isp_c /= ispb_c) cycle
+          occ_vcp = sqrt(kpt%wfn(isp_c, ikp)%occ1(ivp) - kpt%wfn(isp_c, ikp)%occ1(icp))
+          do ivc = 1, kernel_vc%nrow
+            iv = kernel_vc%row(1, ivc)
+            ic = kernel_vc%row(2, ivc)
+            ik = kernel_vc%row(3, ivc)
+            isp_r = 1
+            if (ivc > kernel_vc%nrow_up) isp_r = 2
+            do irow = 1, bsepol%ntr
+              iv_b = bsepol%tr(1, irow)
+              ic_b = bsepol%tr(2, irow)
+              ik_b = bsepol%tr(3, irow)
+              ispb_r = 1
+              if (irow > bsepol%n_up) ispb_r = 2
 !ccm Should revise the matching of indices
-                    if ( isp_r /= ispb_r ) cycle
-                    if ( isp_r /= isp_c ) cycle
-                    if ( iv_b /= ivp ) cycle
-                    if ( ik_b /= ikp ) cycle
-                    if ( ic_b /= ic ) cycle
-                    if ( ivp_b /= iv ) cycle
-                    if ( ik_b /= ik ) cycle
-                    occ_vc = sqrt(kpt%wfn(isp_r,ik)%occ1(iv) - kpt%wfn(isp_r,ik)%occ1(ic))
-                    irowx = irow                 ! ix = 1
-                    bsepol%Zv(irowx,icolx) = bsepol%Zv(irowx,icolx) - &
-                         tmp_vcvc(ivc,ivcp_l)*occ_vcp*occ_vc
-                 enddo
-              enddo
-           enddo
-        enddo
-        !
-        ! K^BA.
-        !
-        do ivcp_l = 1, kernel_vc%nn
-           ivcp = ivcp_l + ipe*kernel_vc%nn
-           if (ivcp > kernel_vc%ncol) exit
-           ivp = kernel_vc%col(1,ivcp)
-           icp = kernel_vc%col(2,ivcp)
-           ikp = kernel_vc%col(3,ivcp)
-           isp_c = 1
-           if (ivcp > kernel_vc%ncol_up) isp_c = 2
-           do icol = 1, bsepol%ntr
-              jcol = icol - r_grp%inode * ncol
-              if (jcol > ncol .or. jcol < 1) cycle
-              ivp_b = bsepol%tr(1,icol)
-              icp_b = bsepol%tr(2,icol)
-              ik_b = bsepol%tr(3,icol)
-              if ( icp_b /= icp ) cycle
-              icolx = jcol                       ! ixp = 1
-              ispb_c = 1
-              if (icol > bsepol%n_up) ispb_c = 2
-              if (isp_c /= ispb_c) cycle
-              occ_vcp = sqrt(kpt%wfn(isp_c,ikp)%occ1(ivp) - kpt%wfn(isp_c,ikp)%occ1(icp))
-              do ivc = 1, kernel_vc%nrow
-                 iv = kernel_vc%row(1,ivc)
-                 ic = kernel_vc%row(2,ivc)
-                 ik = kernel_vc%row(3,ivc)
-                 isp_r = 1
-                 if (ivc > kernel_vc%nrow_up) isp_r = 2
-                 do irow = 1, bsepol%ntr
-                    iv_b = bsepol%tr(1,irow)
-                    ic_b = bsepol%tr(2,irow)
-                    ik_b = bsepol%tr(3,irow)
-                    ispb_r = 1
+              if (isp_r /= ispb_r) cycle
+              if (isp_r /= isp_c) cycle
+              if (iv_b /= ivp) cycle
+              if (ik_b /= ikp) cycle
+              if (ic_b /= ic) cycle
+              if (ivp_b /= iv) cycle
+              if (ik_b /= ik) cycle
+              occ_vc = sqrt(kpt%wfn(isp_r, ik)%occ1(iv) - kpt%wfn(isp_r, ik)%occ1(ic))
+              irowx = irow                 ! ix = 1
+              bsepol%Zv(irowx, icolx) = bsepol%Zv(irowx, icolx) - &
+                                        tmp_vcvc(ivc, ivcp_l)*occ_vcp*occ_vc
+            end do
+          end do
+        end do
+      end do
+      !
+      ! K^BA.
+      !
+      do ivcp_l = 1, kernel_vc%nn
+        ivcp = ivcp_l + ipe*kernel_vc%nn
+        if (ivcp > kernel_vc%ncol) exit
+        ivp = kernel_vc%col(1, ivcp)
+        icp = kernel_vc%col(2, ivcp)
+        ikp = kernel_vc%col(3, ivcp)
+        isp_c = 1
+        if (ivcp > kernel_vc%ncol_up) isp_c = 2
+        do icol = 1, bsepol%ntr
+          jcol = icol - r_grp%inode*ncol
+          if (jcol > ncol .or. jcol < 1) cycle
+          ivp_b = bsepol%tr(1, icol)
+          icp_b = bsepol%tr(2, icol)
+          ik_b = bsepol%tr(3, icol)
+          if (icp_b /= icp) cycle
+          icolx = jcol                       ! ixp = 1
+          ispb_c = 1
+          if (icol > bsepol%n_up) ispb_c = 2
+          if (isp_c /= ispb_c) cycle
+          occ_vcp = sqrt(kpt%wfn(isp_c, ikp)%occ1(ivp) - kpt%wfn(isp_c, ikp)%occ1(icp))
+          do ivc = 1, kernel_vc%nrow
+            iv = kernel_vc%row(1, ivc)
+            ic = kernel_vc%row(2, ivc)
+            ik = kernel_vc%row(3, ivc)
+            isp_r = 1
+            if (ivc > kernel_vc%nrow_up) isp_r = 2
+            do irow = 1, bsepol%ntr
+              iv_b = bsepol%tr(1, irow)
+              ic_b = bsepol%tr(2, irow)
+              ik_b = bsepol%tr(3, irow)
+              ispb_r = 1
 !ccm Should revise the matching of indices
-                    if (irow > bsepol%n_up) ispb_r = 2
-                    if (isp_r /= ispb_r) cycle
-                    if ( isp_r /= isp_c ) cycle
-                    if ( iv_b /= ivp ) cycle
-                    if ( ik_b /= ikp ) cycle
-                    if ( ivp_b /= iv ) cycle
-                    if ( ic_b /= ic ) cycle
-                    if ( ik_b /= ik ) cycle
-                    occ_vc = sqrt(kpt%wfn(isp_r,ik)%occ1(iv) - kpt%wfn(isp_r,ik)%occ1(ic))
-                    irowx = irow + nmat          ! ix = 2
-                    bsepol%Zv(irowx,icolx) = bsepol%Zv(irowx,icolx) + &
-                         tmp_vcvc(ivc,ivcp_l)*occ_vcp*occ_vc
-                 enddo
-              enddo
-           enddo
-        enddo
-     endif ! mixing
+              if (irow > bsepol%n_up) ispb_r = 2
+              if (isp_r /= ispb_r) cycle
+              if (isp_r /= isp_c) cycle
+              if (iv_b /= ivp) cycle
+              if (ik_b /= ikp) cycle
+              if (ivp_b /= iv) cycle
+              if (ic_b /= ic) cycle
+              if (ik_b /= ik) cycle
+              occ_vc = sqrt(kpt%wfn(isp_r, ik)%occ1(iv) - kpt%wfn(isp_r, ik)%occ1(ic))
+              irowx = irow + nmat          ! ix = 2
+              bsepol%Zv(irowx, icolx) = bsepol%Zv(irowx, icolx) + &
+                                        tmp_vcvc(ivc, ivcp_l)*occ_vcp*occ_vc
+            end do
+          end do
+        end do
+      end do
+    end if ! mixing
 
 #ifdef MPI
-     call MPI_BARRIER(r_grp%comm,info)
+    call MPI_BARRIER(r_grp%comm, info)
 #endif
 
-  enddo
+  end do
 
-  deallocate(tmp_vcvc)
+  deallocate (tmp_vcvc)
 
 end subroutine Zexchange_b
 !===================================================================

@@ -13,7 +13,7 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine Zget_pol_isdf(pol,iunit,nrep,nq,irp,iq,nn)
+subroutine Zget_pol_isdf(pol, iunit, nrep, nq, irp, iq, nn)
 
   use typedefs
   use mpi_module
@@ -24,21 +24,20 @@ subroutine Zget_pol_isdf(pol,iunit,nrep,nq,irp,iq,nn)
 
   ! arguments
   ! polarizability structure
-  type (polinfo), intent(inout) :: pol
+  type(polinfo), intent(inout) :: pol
   integer, intent(in) :: &
-       iunit, &       ! number of file pol_diag.dat
-       nrep, &        ! number of representations
-       nq, &          ! number of q-vectors
-       irp, &         ! index of current representation
-       iq, &          ! index of current q-vector
-       nn             ! number of eigenpairs per processor (local variable)
-
+    iunit, &       ! number of file pol_diag.dat
+    nrep, &        ! number of representations
+    nq, &          ! number of q-vectors
+    irp, &         ! index of current representation
+    iq, &          ! index of current q-vector
+    nn             ! number of eigenpairs per processor (local variable)
 
   ! local variables
-  character (len=800) :: lastwords
+  character(len=800) :: lastwords
   ! counters and temporary arrays
   integer :: ii, jj, npol, icol, jrp, jq, ipe, pcol, &
-    remain, ncount, istart, nblock, ntr_block
+             remain, ncount, istart, nblock, ntr_block
   integer, allocatable :: sendcounts(:), displs(:)
   SCALAR, allocatable :: tmpv(:)
 #ifdef MPI
@@ -47,74 +46,74 @@ subroutine Zget_pol_isdf(pol,iunit,nrep,nq,irp,iq,nn)
 #endif
 
   ntr_block = 6000/r_grp%npes
-  allocate(sendcounts(r_grp%npes))
-  allocate(displs(r_grp%npes))
+  allocate (sendcounts(r_grp%npes))
+  allocate (displs(r_grp%npes))
   pol%nn = nn
-  allocate(pol%Zv(pol%nn,pol%ntr))
+  allocate (pol%Zv(pol%nn, pol%ntr))
   pol%lv = .true.
   pol%Zv = Zzero
   if (r_grp%master) then
-     do ii = 1, nrep * nq
-        read(iunit) jrp, jq, npol
-        write(6,'(a,i3,a,2i3,i8)') ' Seek representation ', irp, &
-             ' in pol_diag.dat. ', jrp, jq, npol
-        if (jrp == irp .and. jq == iq) goto 60
-        do jj = 1, npol + 2
-           read(iunit)
-        enddo
-        if (jrp == nrep .and. jq == nq) then
-           rewind(iunit)
-           read(iunit)
-           read(iunit)
-        endif
-     enddo
-     write(lastwords,*) 'ERROR: representation ', irp, ' q-vector ', &
-          iq, 'not found in pol_diag.dat!'
-     call die(lastwords)
-60   continue
-     if (npol /= pol%ntr) then
-        write(lastwords,*) 'ERROR: number of transitions in ', &
-             'pol_diag.dat is wrong!', npol, pol%ntr
-        call die(lastwords)
-     endif
-     read(iunit)
-     read(iunit)
-  endif
-  allocate(tmpv(pol%nn*r_grp%npes))
+    do ii = 1, nrep*nq
+      read (iunit) jrp, jq, npol
+      write (6, '(a,i3,a,2i3,i8)') ' Seek representation ', irp, &
+        ' in pol_diag.dat. ', jrp, jq, npol
+      if (jrp == irp .and. jq == iq) goto 60
+      do jj = 1, npol + 2
+        read (iunit)
+      end do
+      if (jrp == nrep .and. jq == nq) then
+        rewind (iunit)
+        read (iunit)
+        read (iunit)
+      end if
+    end do
+    write (lastwords, *) 'ERROR: representation ', irp, ' q-vector ', &
+      iq, 'not found in pol_diag.dat!'
+    call die(lastwords)
+60  continue
+    if (npol /= pol%ntr) then
+      write (lastwords, *) 'ERROR: number of transitions in ', &
+        'pol_diag.dat is wrong!', npol, pol%ntr
+      call die(lastwords)
+    end if
+    read (iunit)
+    read (iunit)
+  end if
+  allocate (tmpv(pol%nn*r_grp%npes))
   nblock = pol%nn/ntr_block
   remain = mod(pol%nn, ntr_block)
   if (r_grp%master) then
-     write(6, *) " Processing ", pol%ntr, " column"
-     write(6, *) " nblock ", nblock
-     write(6, *) " ntr_block ", ntr_block
-  endif
+    write (6, *) " Processing ", pol%ntr, " column"
+    write (6, *) " nblock ", nblock
+    write (6, *) " ntr_block ", ntr_block
+  end if
   ! for loop over all the eigenvectors (X_s)
-  do icol = 1, pol%ntr 
-     if (r_grp%master) then
-        write(6, *) " Working on icol = ", icol
-        tmpv = Zzero
-        read(iunit) (tmpv(ii), ii=1,pol%ntr) ! pol%ntr is larger than pol%nn
-     endif
-     istart = 0
-     do ii = 1, nblock+1
-       if ( ii <= nblock ) then
-         ncount = ntr_block
-       else
-         ncount = remain
-       endif
-       if ( ncount == 0 ) continue
-       do jj = 1, r_grp%npes
-         sendcounts(jj) = ncount
-         displs(jj) = istart+(jj-1)*pol%nn
-       enddo
-       !call MPI_SCATTERV( tmpv, sendcounts, displs, MPI_DOUBLE_SCALAR, &
-       !   pol%Zv(istart+1,icol), ncount, MPI_DOUBLE_SCALAR, r_grp%masterid, &
-       !   r_grp%comm, info )
-       istart = istart + ncount 
-     enddo ! ii
-  enddo
-  deallocate(tmpv)
-  deallocate(sendcounts)
-  deallocate(displs)
+  do icol = 1, pol%ntr
+    if (r_grp%master) then
+      write (6, *) " Working on icol = ", icol
+      tmpv = Zzero
+      read (iunit) (tmpv(ii), ii=1, pol%ntr) ! pol%ntr is larger than pol%nn
+    end if
+    istart = 0
+    do ii = 1, nblock + 1
+      if (ii <= nblock) then
+        ncount = ntr_block
+      else
+        ncount = remain
+      end if
+      if (ncount == 0) continue
+      do jj = 1, r_grp%npes
+        sendcounts(jj) = ncount
+        displs(jj) = istart + (jj - 1)*pol%nn
+      end do
+      !call MPI_SCATTERV( tmpv, sendcounts, displs, MPI_DOUBLE_SCALAR, &
+      !   pol%Zv(istart+1,icol), ncount, MPI_DOUBLE_SCALAR, r_grp%masterid, &
+      !   r_grp%comm, info )
+      istart = istart + ncount
+    end do ! ii
+  end do
+  deallocate (tmpv)
+  deallocate (sendcounts)
+  deallocate (displs)
 
 end subroutine Zget_pol_isdf

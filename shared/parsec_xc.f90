@@ -6,7 +6,7 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine parsec_xc(nspin,x_id,c_id)
+subroutine parsec_xc(nspin, x_id, c_id)
 
   use myconstants
   use xc_functionals
@@ -20,41 +20,41 @@ subroutine parsec_xc(nspin,x_id,c_id)
   integer, intent(out) :: x_id, c_id
 
   ! local variables
-  character (len=80) :: keyword
+  character(len=80) :: keyword
 
   call esdf_init('parsec.in')
 
   if (nspin == 1) then
-     keyword = esdf_reduce(esdf_string ('correlation_type', 'ca'))
+    keyword = esdf_reduce(esdf_string('correlation_type', 'ca'))
   else
-     keyword = esdf_reduce(esdf_string ('correlation_type', 'pl'))
-  endif
+    keyword = esdf_reduce(esdf_string('correlation_type', 'pl'))
+  end if
 
   select case (trim(keyword))
   case ('xa')
-     x_id = XC_LDA_X
-     c_id = XC_LDA_C_XALPHA
+    x_id = XC_LDA_X
+    c_id = XC_LDA_C_XALPHA
   case ('wi')
-     x_id = XC_LDA_X
-     c_id = XC_LDA_C_WIGNER
+    x_id = XC_LDA_X
+    c_id = XC_LDA_C_WIGNER
   case ('hl')
-     x_id = XC_LDA_X
-     c_id = XC_LDA_C_HL
-  case ('ca','pz','lda')
-     x_id = XC_LDA_X
-     c_id = XC_LDA_C_PZ
-  case ('pl','pw92','pwlda')
-     x_id = XC_LDA_X
-     c_id = XC_LDA_C_PW
-  case ('pb','pbe')
-     x_id = XC_GGA_X_PBE
-     c_id = XC_GGA_C_PBE
+    x_id = XC_LDA_X
+    c_id = XC_LDA_C_HL
+  case ('ca', 'pz', 'lda')
+    x_id = XC_LDA_X
+    c_id = XC_LDA_C_PZ
+  case ('pl', 'pw92', 'pwlda')
+    x_id = XC_LDA_X
+    c_id = XC_LDA_C_PW
+  case ('pb', 'pbe')
+    x_id = XC_GGA_X_PBE
+    c_id = XC_GGA_C_PBE
   case ('blyp')
-     x_id = XC_GGA_X_B88
-     c_id = XC_GGA_C_LYP
+    x_id = XC_GGA_X_B88
+    c_id = XC_GGA_C_LYP
   case default
-     write(6,*) 'ERROR: unknown correlation type:', trim(keyword)
-     call die('STOP.')
+    write (6, *) 'ERROR: unknown correlation type:', trim(keyword)
+    call die('STOP.')
   end select
 
   call esdf_close

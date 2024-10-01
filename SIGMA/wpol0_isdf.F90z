@@ -1,7 +1,7 @@
 #include "../shared/mycomplex.h"
 !===================================================================
 !
-! Calculate wpol0(r), the static limit of the proper 
+! Calculate wpol0(r), the static limit of the proper
 ! screened interaction W_pol, as defined by:
 !
 !    W_pol(r,r';E) = W(r,r';E) - e^2/|r - r'| ,
@@ -35,7 +35,7 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine Zwpol0_isdf(gvec,kpt,qpt,pol,k_p,nolda,nrep,nspin,iq0,nr_buff,isdf_in)
+subroutine Zwpol0_isdf(gvec, kpt, qpt, pol, k_p, nolda, nrep, nspin, iq0, nr_buff, isdf_in)
 
   use HDF5
   use typedefs
@@ -47,52 +47,52 @@ subroutine Zwpol0_isdf(gvec,kpt,qpt,pol,k_p,nolda,nrep,nspin,iq0,nr_buff,isdf_in
 
   ! arguments
   ! real-space grid
-  type (gspace), intent(inout) :: gvec
+  type(gspace), intent(inout) :: gvec
   ! k-points (from DFT) and q-vectors
-  type (kptinfo), intent(in) :: kpt
-  type (qptinfo), intent(in) :: qpt
+  type(kptinfo), intent(in) :: kpt
+  type(qptinfo), intent(in) :: qpt
   ! TDDFT polarizability
-  type (polinfo), intent(inout) :: pol(nrep)
+  type(polinfo), intent(inout) :: pol(nrep)
   ! TDDFT kernel
-  type (kernelinfo), intent(in) :: k_p(nrep)
+  type(kernelinfo), intent(in) :: k_p(nrep)
   ! true if LDA kernel is ignored
   logical, intent(in) :: nolda
   integer, intent(in) :: &
-       nrep, &        ! number of representations
-       nspin, &       ! number of spin channels
-       iq0, &         ! index of current q-vector
-       nr_buff        ! length of output buffer (defines at how many
-                      ! points the static limit is calculated)
-  type (ISDF), intent(in) :: isdf_in
+    nrep, &        ! number of representations
+    nspin, &       ! number of spin channels
+    iq0, &         ! index of current q-vector
+    nr_buff        ! length of output buffer (defines at how many
+  ! points the static limit is calculated)
+  type(ISDF), intent(in) :: isdf_in
 
   ! local variables
-  character (len=13) :: filnam
+  character(len=13) :: filnam
   logical :: alloc_fail
   integer :: ii, ig, info, npol, mpol, &
-       ipe, istart, irp, jrp, rpt(3), nzeta, &
-       ipol, jj, isp, i1, i2, ikp1, ikp2, &
-       ioffset, rank, h5err, iend, tmpdim
+             ipe, istart, irp, jrp, rpt(3), nzeta, &
+             ipol, jj, isp, i1, i2, ikp1, ikp2, &
+             ioffset, rank, h5err, iend, tmpdim
   SCALAR :: xsum
   SCALAR, dimension(:), allocatable :: vr, Avzeta
-  SCALAR, dimension(:,:), allocatable :: Amtrx, vzeta, Tmtrx, tmpTmtrx, Cmtrx_loc
+  SCALAR, dimension(:, :), allocatable :: Amtrx, vzeta, Tmtrx, tmpTmtrx, Cmtrx_loc
 #ifdef CPLX
-  real(dp), dimension(:,:), allocatable :: vzeta_realimag
+  real(dp), dimension(:, :), allocatable :: vzeta_realimag
 #endif
   integer, parameter :: &
-       pol_unit = 52, &          ! unit for pol_diag.dat file
-       out_unit = 34, &          ! unit for wpol0.dat
-       out2_unit = 35            ! unit for wpol0_rho.dat
+    pol_unit = 52, &          ! unit for pol_diag.dat file
+    out_unit = 34, &          ! unit for wpol0.dat
+    out2_unit = 35            ! unit for wpol0_rho.dat
   !
   ! tmporary hdf5 file "zeta_tmp_iproc.h5", where iproc is the index of a processor
   ! the following variables is used for temporarily storing zeta and Vcoul_zeta
   !
   character(len=40) :: h5filename ! File name
-  character(len=7)  :: iproc_string 
+  character(len=7)  :: iproc_string
   character(len=2)  :: isp_string, irp_string, jrp_string
   character(len=40) :: dset_vzeta = "VcZeta"
   integer(HID_T) :: file_id, &  ! file identifier
-    dset_vczeta_id(nspin, gvec%syms%ntrans), & ! dataset identifier
-    dspace_vczeta, subdspace             ! dataspace identifier
+                    dset_vczeta_id(nspin, gvec%syms%ntrans), & ! dataset identifier
+                    dspace_vczeta, subdspace             ! dataspace identifier
 #ifdef CPLX
   integer(hsize_t) :: data_dims(3), subdim(2), shift(3), stride(3), block(3)
 #else
@@ -107,7 +107,7 @@ subroutine Zwpol0_isdf(gvec,kpt,qpt,pol,k_p,nolda,nrep,nspin,iq0,nr_buff,isdf_in
   !-------------------------------------------------------------------
   ! W. Gao: current implementation assum r_grp%num == 1 and w_grp%num == 1, which means
   !         w_grp%npes == r_grp%npes
-  ! also assume:  
+  ! also assume:
   !              kpt%nkpt = 1 no k-point dependence
   !-------------------------------------------------------------------
   ! set up hdf5 interface
@@ -117,7 +117,7 @@ subroutine Zwpol0_isdf(gvec,kpt,qpt,pol,k_p,nolda,nrep,nspin,iq0,nr_buff,isdf_in
   !
   ! open h5 file here
   !
-  write(iproc_string, '(I7.7)') peinf%inode
+  write (iproc_string, '(I7.7)') peinf%inode
   h5filename = "zeta_tmp_"//iproc_string//".h5"
   call h5fopen_f(h5filename, H5F_ACC_RDONLY_F, file_id, h5err) ! read_only file
   !-------------------------------------------------------------------
@@ -125,14 +125,14 @@ subroutine Zwpol0_isdf(gvec,kpt,qpt,pol,k_p,nolda,nrep,nspin,iq0,nr_buff,isdf_in
   ! calculate Polarizability operator.
   !
   if (r_grp%master) then
-     write(6,*) " nr_buff = ", nr_buff
-     write(6,*) ' Open pol_diag.dat. '
-     ! write(6,*) nr_pe,' grid points per PE. '
-     open(pol_unit,file='pol_diag.dat',form='unformatted')
-     rewind(pol_unit)
-     read(pol_unit)
-     read(pol_unit)
-  endif
+    write (6, *) " nr_buff = ", nr_buff
+    write (6, *) ' Open pol_diag.dat. '
+    ! write(6,*) nr_pe,' grid points per PE. '
+    open (pol_unit, file='pol_diag.dat', form='unformatted')
+    rewind (pol_unit)
+    read (pol_unit)
+    read (pol_unit)
+  end if
   !
   ! Calculate Polarizability operator:
   ! W = conjg(X) * (E_tdlda ) * X
@@ -145,245 +145,245 @@ subroutine Zwpol0_isdf(gvec,kpt,qpt,pol,k_p,nolda,nrep,nspin,iq0,nr_buff,isdf_in
   !  index:   c,v       s
   !   N   :   pol%nn    pol%nn*r_grp%npes
   !
-  nzeta= nspin * isdf_in%n_intp_r
-  ALLOCATE(vr(nr_buff))
+  nzeta = nspin*isdf_in%n_intp_r
+  allocate (vr(nr_buff))
   vr = Zzero
   do jrp = 1, nrep/r_grp%num
-     irp = r_grp%g_rep(jrp)
-     if ( pol(irp)%ntr == 0 ) cycle
-     if ( peinf%master ) then
-       write(6,*) " jrp = ", jrp, ", irp = ", irp
-       write(6,*) " call get_pol_isdf() "
-     endif
-     call Zget_pol_isdf(pol(irp),pol_unit,nrep,qpt%nk,irp,iq0,k_p(irp)%nn)
-     if ( peinf%master ) then
-       write(6,*) " done get_pol_isdf() "
-       write(6,*) " scale pol%Zv(1:nn,ii)*1/sqrt(eig(ii)) "
-     endif
-     do ipol = 1, pol(irp)%ntr
-       xsum = Zone/sqrt(pol(irp)%eig(ipol))
-       call Zscal(pol(irp)%nn, xsum, pol(irp)%Zv(1,ipol), 1)
-     enddo
-     npol = pol(irp)%nn * r_grp%npes
-     mpol = pol(irp)%nn
-     write(6,*) "mpol ", mpol
-     ALLOCATE(Tmtrx(nzeta, mpol))
-     ALLOCATE(tmpTmtrx(nzeta, mpol))
-     ALLOCATE(Cmtrx_loc(nzeta, mpol))
-     Tmtrx = Zzero
-     Cmtrx_loc = Zzero
-     ! tmpTmtrx is initialized with zero in a ipe loop
-     ! 
-     ! construct Cmtrx_loc
-     !
-     if ( peinf%master ) then
-       write(6,*) " construct Cmtrx_loc "
-     endif
-     do ii = 1, mpol
-       jj   = mpol*r_grp%inode + ii
-       !if ( r_grp%master ) then
-       !  write(6,*) " ii ", ii , " jj ", jj
-       !endif
-       if ( jj > pol(irp)%ntr) exit
-       if ( jj > pol(irp)%n_up ) then
-         isp = 2
-       else
-         isp = 1
-       endif
-       i1   = pol(irp)%tr(1,jj)
-       i2   = pol(irp)%tr(2,jj)
-       ikp1 = pol(irp)%tr(3,jj)
-       ikp2 = pol(irp)%tr(4,jj)
-       if (isp .eq. 1) then
-         Cmtrx_loc(1:isdf_in%n_intp_r, ii) = &
-          isdf_in%Psi_intp(1:isdf_in%n_intp_r, i1, isp, ikp1) * &
+    irp = r_grp%g_rep(jrp)
+    if (pol(irp)%ntr == 0) cycle
+    if (peinf%master) then
+      write (6, *) " jrp = ", jrp, ", irp = ", irp
+      write (6, *) " call get_pol_isdf() "
+    end if
+    call Zget_pol_isdf(pol(irp), pol_unit, nrep, qpt%nk, irp, iq0, k_p(irp)%nn)
+    if (peinf%master) then
+      write (6, *) " done get_pol_isdf() "
+      write (6, *) " scale pol%Zv(1:nn,ii)*1/sqrt(eig(ii)) "
+    end if
+    do ipol = 1, pol(irp)%ntr
+      xsum = Zone/sqrt(pol(irp)%eig(ipol))
+      call Zscal(pol(irp)%nn, xsum, pol(irp)%Zv(1, ipol), 1)
+    end do
+    npol = pol(irp)%nn*r_grp%npes
+    mpol = pol(irp)%nn
+    write (6, *) "mpol ", mpol
+    allocate (Tmtrx(nzeta, mpol))
+    allocate (tmpTmtrx(nzeta, mpol))
+    allocate (Cmtrx_loc(nzeta, mpol))
+    Tmtrx = Zzero
+    Cmtrx_loc = Zzero
+    ! tmpTmtrx is initialized with zero in a ipe loop
+    !
+    ! construct Cmtrx_loc
+    !
+    if (peinf%master) then
+      write (6, *) " construct Cmtrx_loc "
+    end if
+    do ii = 1, mpol
+      jj = mpol*r_grp%inode + ii
+      !if ( r_grp%master ) then
+      !  write(6,*) " ii ", ii , " jj ", jj
+      !endif
+      if (jj > pol(irp)%ntr) exit
+      if (jj > pol(irp)%n_up) then
+        isp = 2
+      else
+        isp = 1
+      end if
+      i1 = pol(irp)%tr(1, jj)
+      i2 = pol(irp)%tr(2, jj)
+      ikp1 = pol(irp)%tr(3, jj)
+      ikp2 = pol(irp)%tr(4, jj)
+      if (isp == 1) then
+        Cmtrx_loc(1:isdf_in%n_intp_r, ii) = &
+          isdf_in%Psi_intp(1:isdf_in%n_intp_r, i1, isp, ikp1)* &
           isdf_in%Psi_intp(1:isdf_in%n_intp_r, i2, isp, ikp2)
-       else ! isp == 2
-         ioffset = isdf_in%n_intp_r
-         Cmtrx_loc(1+ioffset:isdf_in%n_intp_r+ioffset, ii) = &
-          isdf_in%Psi_intp(1:isdf_in%n_intp_r, i1, isp, ikp1) * &
+      else ! isp == 2
+        ioffset = isdf_in%n_intp_r
+        Cmtrx_loc(1 + ioffset:isdf_in%n_intp_r + ioffset, ii) = &
+          isdf_in%Psi_intp(1:isdf_in%n_intp_r, i1, isp, ikp1)* &
           isdf_in%Psi_intp(1:isdf_in%n_intp_r, i2, isp, ikp2)
-       endif
-     enddo ! ii loop
-     !
-     ! Compute Tmtrx
-     !
+      end if
+    end do ! ii loop
+    !
+    ! Compute Tmtrx
+    !
 #ifdef DEBUG
-     if ( r_grp%inode == r_grp%npes-1 ) then
-     !if ( peinf%master ) then
-       write(6,*) " Done with Cmtrx_loc "
-       write(6,*) " Cmtrx_loc = "
-       call printmatrix(Cmtrx_loc(1,1), nzeta, mpol, 6)
-       write(6,*) " Compute Tmtrx "
-     endif
+    if (r_grp%inode == r_grp%npes - 1) then
+      !if ( peinf%master ) then
+      write (6, *) " Done with Cmtrx_loc "
+      write (6, *) " Cmtrx_loc = "
+      call printmatrix(Cmtrx_loc(1, 1), nzeta, mpol, 6)
+      write (6, *) " Compute Tmtrx "
+    end if
 #endif
-     do ipe = 0, r_grp%npes-1
-       istart = ipe*mpol + 1
-       iend   = ipe*mpol + mpol
-       tmpTmtrx = Zzero
-       ! some procs may not have any transitions, in this
-       ! case, just set Tmtrx = zero
-       if (istart > pol(irp)%ntr) cycle 
-       if (iend > pol(irp)%ntr) then
-         tmpdim = pol(irp)%ntr - istart + 1
-       else
-         tmpdim = mpol
-       endif
-       call Zgemm('n','n', nzeta, tmpdim, mpol, &
-         Zone, Cmtrx_loc(1,1), nzeta, &
-         pol(irp)%Zv(1,istart), mpol, Zzero, &
-         tmpTmtrx(1,1), nzeta)
-       call MPI_REDUCE(tmpTmtrx(1,1), Tmtrx(1,1), nzeta*tmpdim, &
-         MPI_DOUBLE_SCALAR, MPI_SUM, ipe, r_grp%comm, info)
-     enddo ! ipe loop
+    do ipe = 0, r_grp%npes - 1
+      istart = ipe*mpol + 1
+      iend = ipe*mpol + mpol
+      tmpTmtrx = Zzero
+      ! some procs may not have any transitions, in this
+      ! case, just set Tmtrx = zero
+      if (istart > pol(irp)%ntr) cycle
+      if (iend > pol(irp)%ntr) then
+        tmpdim = pol(irp)%ntr - istart + 1
+      else
+        tmpdim = mpol
+      end if
+      call Zgemm('n', 'n', nzeta, tmpdim, mpol, &
+                 Zone, Cmtrx_loc(1, 1), nzeta, &
+                 pol(irp)%Zv(1, istart), mpol, Zzero, &
+                 tmpTmtrx(1, 1), nzeta)
+      call MPI_REDUCE(tmpTmtrx(1, 1), Tmtrx(1, 1), nzeta*tmpdim, &
+                      MPI_DOUBLE_SCALAR, MPI_SUM, ipe, r_grp%comm, info)
+    end do ! ipe loop
 #ifdef DEBUG
-     if ( r_grp%inode == r_grp%npes-1 ) then
-     !if ( peinf%master ) then
-       write(6,*) " Done with Tmtrx "
-       write(6,*) " Tmtrx(1:3,1:3) "
-       call printmatrix ( Tmtrx(1,1), nzeta, mpol, 6 )
-       write(6,*) " Calculate Amtrx "
-     endif
+    if (r_grp%inode == r_grp%npes - 1) then
+      !if ( peinf%master ) then
+      write (6, *) " Done with Tmtrx "
+      write (6, *) " Tmtrx(1:3,1:3) "
+      call printmatrix(Tmtrx(1, 1), nzeta, mpol, 6)
+      write (6, *) " Calculate Amtrx "
+    end if
 #endif
-     DEALLOCATE(Cmtrx_loc)
-     DEALLOCATE(tmpTmtrx)
-     !
-     ALLOCATE(Amtrx(nzeta, nzeta))
-     ALLOCATE(vzeta(w_grp%mydim, nzeta))
-     ALLOCATE(Avzeta(nzeta))
-     ! 
-     ! Compute Amtrx
-     !
+    deallocate (Cmtrx_loc)
+    deallocate (tmpTmtrx)
+    !
+    allocate (Amtrx(nzeta, nzeta))
+    allocate (vzeta(w_grp%mydim, nzeta))
+    allocate (Avzeta(nzeta))
+    !
+    ! Compute Amtrx
+    !
 #ifdef CPLX
-     call Zgemm('n','c', nzeta, nzeta, mpol, &
+    call Zgemm('n', 'c', nzeta, nzeta, mpol, &
 #else
-     call Zgemm('n','t', nzeta, nzeta, mpol, &
+               call Zgemm('n', 't', nzeta, nzeta, mpol, &
 #endif
-       Zone, Tmtrx(1,1), nzeta, &
-       Tmtrx(1,1), nzeta, Zzero, &
-       Amtrx(1,1), nzeta)
-     DEALLOCATE(Tmtrx)
+                          Zone, Tmtrx(1, 1), nzeta, &
+                          Tmtrx(1, 1), nzeta, Zzero, &
+                          Amtrx(1, 1), nzeta)
+    deallocate (Tmtrx)
 
-     do ipe = 0, r_grp%npes-1
-       call MPI_BARRIER(r_grp%comm, info)
+    do ipe = 0, r_grp%npes - 1
+      call MPI_BARRIER(r_grp%comm, info)
 #ifdef DEBUG
-       if (r_grp%inode .eq. ipe) then
-          write(6,*) " ipe ", ipe, " Amtrx = "
-          call printmatrix (Amtrx(1,1), nzeta, nzeta, 6)
-       endif
+      if (r_grp%inode == ipe) then
+        write (6, *) " ipe ", ipe, " Amtrx = "
+        call printmatrix(Amtrx(1, 1), nzeta, nzeta, 6)
+      end if
 #endif
-     enddo
-     call MPI_ALLREDUCE(MPI_IN_PLACE, Amtrx, nzeta*nzeta,&
-       MPI_DOUBLE_SCALAR, MPI_SUM, r_grp%comm, info)
-     if (peinf%master) write(6,*) "read vzeta from file ", h5filename 
-     data_dims(1) = w_grp%mydim
-     data_dims(2) = isdf_in%n_intp_r
-     !
-     ! read vzeta ( = \int V(r,r')zeta(r')dr ) from hdf5 file
-     !
-     ! open dataset
-     !
-     write(irp_string,'(i2.2)') irp
-     do isp = 1, nspin
-       write(isp_string,'(i2.2)') isp
-       dset_vzeta = 'vczeta_isp'//isp_string//"_irp"//irp_string
-       if (peinf%master) &
-         write(6,*) "read dataset: ", dset_vzeta
-       !
-       ! obtain dataset id
-       call h5dopen_f(file_id, dset_vzeta, dset_vczeta_id(isp,irp), h5err)
-       !
-       ! get dataspace
-       call h5dget_space_f( dset_vczeta_id(isp,irp), dspace_vczeta, h5err)
-       ! 
-       ! read data
-       ioffset = (isp-1)*isdf_in%n_intp_r
+    end do
+    call MPI_ALLREDUCE(MPI_IN_PLACE, Amtrx, nzeta*nzeta, &
+                       MPI_DOUBLE_SCALAR, MPI_SUM, r_grp%comm, info)
+    if (peinf%master) write (6, *) "read vzeta from file ", h5filename
+    data_dims(1) = w_grp%mydim
+    data_dims(2) = isdf_in%n_intp_r
+    !
+    ! read vzeta ( = \int V(r,r')zeta(r')dr ) from hdf5 file
+    !
+    ! open dataset
+    !
+    write (irp_string, '(i2.2)') irp
+    do isp = 1, nspin
+      write (isp_string, '(i2.2)') isp
+      dset_vzeta = 'vczeta_isp'//isp_string//"_irp"//irp_string
+      if (peinf%master) &
+        write (6, *) "read dataset: ", dset_vzeta
+      !
+      ! obtain dataset id
+      call h5dopen_f(file_id, dset_vzeta, dset_vczeta_id(isp, irp), h5err)
+      !
+      ! get dataspace
+      call h5dget_space_f(dset_vczeta_id(isp, irp), dspace_vczeta, h5err)
+      !
+      ! read data
+      ioffset = (isp - 1)*isdf_in%n_intp_r
 #ifdef CPLX
-       allocate(vzeta_realimag(w_grp%mydim, isdf_in%n_intp_r))
-       data_dims(3) = 2
-       subdim(1:2) = data_dims(1:2)
-       rank = 2
-       call h5screate_simple_f(rank, subdim, subdspace, h5err)
-       stride = (/1,1,1/)
-       block  = (/1,1,1/)
-       shift  = (/0,0,0/)
-       ! read the real part of vzeta
-       call h5sselect_hyperslab_f ( dspace_vczeta, H5S_SELECT_SET_F, &
-         shift, subdim, h5err, stride, block )
-       call h5dread_f( dset_vczeta_id(isp,irp), H5T_NATIVE_DOUBLE, &
-         vzeta_realimag(1:data_dims(1), 1:data_dims(2)), &
-         data_dims, h5err, subdspace, dspace_vczeta )
-       vzeta(1:data_dims(1), 1+ioffset:data_dims(2)+ioffset) = &
-         cmplx(1.d0,0.d0) * vzeta_realimag(1:data_dims(1), 1:data_dims(2))
-       shift  = (/0,0,1/)
-       ! read the imaginary part of vzeta
-       call h5sselect_hyperslab_f ( dspace_vczeta, H5S_SELECT_SET_F, &
-         shift, subdim, h5err, stride, block )
-       call h5dread_f( dset_vczeta_id(isp,irp), H5T_NATIVE_DOUBLE, &
-         vzeta_realimag(1:data_dims(1), 1:data_dims(2)), &
-         data_dims, h5err, subdspace, dspace_vczeta )
-       vzeta(1:data_dims(1), 1+ioffset:data_dims(2)+ioffset) = &
-         cmplx(0.d0,1.d0) * vzeta_realimag(1:data_dims(1), 1:data_dims(2))
-       ! close subdspace
-       call h5sclose_f(subdspace, h5err)
-       deallocate(vzeta_realimag)
+      allocate (vzeta_realimag(w_grp%mydim, isdf_in%n_intp_r))
+      data_dims(3) = 2
+      subdim(1:2) = data_dims(1:2)
+      rank = 2
+      call h5screate_simple_f(rank, subdim, subdspace, h5err)
+      stride = (/1, 1, 1/)
+      block = (/1, 1, 1/)
+      shift = (/0, 0, 0/)
+      ! read the real part of vzeta
+      call h5sselect_hyperslab_f(dspace_vczeta, H5S_SELECT_SET_F, &
+                                 shift, subdim, h5err, stride, block)
+      call h5dread_f(dset_vczeta_id(isp, irp), H5T_NATIVE_DOUBLE, &
+                     vzeta_realimag(1:data_dims(1), 1:data_dims(2)), &
+                     data_dims, h5err, subdspace, dspace_vczeta)
+      vzeta(1:data_dims(1), 1 + ioffset:data_dims(2) + ioffset) = &
+        cmplx(1.d0, 0.d0)*vzeta_realimag(1:data_dims(1), 1:data_dims(2))
+      shift = (/0, 0, 1/)
+      ! read the imaginary part of vzeta
+      call h5sselect_hyperslab_f(dspace_vczeta, H5S_SELECT_SET_F, &
+                                 shift, subdim, h5err, stride, block)
+      call h5dread_f(dset_vczeta_id(isp, irp), H5T_NATIVE_DOUBLE, &
+                     vzeta_realimag(1:data_dims(1), 1:data_dims(2)), &
+                     data_dims, h5err, subdspace, dspace_vczeta)
+      vzeta(1:data_dims(1), 1 + ioffset:data_dims(2) + ioffset) = &
+        cmplx(0.d0, 1.d0)*vzeta_realimag(1:data_dims(1), 1:data_dims(2))
+      ! close subdspace
+      call h5sclose_f(subdspace, h5err)
+      deallocate (vzeta_realimag)
 #else
-       call h5dread_f( dset_vczeta_id(isp,irp), H5T_NATIVE_DOUBLE, &
-         vzeta(1:data_dims(1), 1+ioffset:data_dims(2)+ioffset), data_dims(1:2), h5err )
+      call h5dread_f(dset_vczeta_id(isp, irp), H5T_NATIVE_DOUBLE, &
+                     vzeta(1:data_dims(1), 1 + ioffset:data_dims(2) + ioffset), data_dims(1:2), h5err)
 #endif
-       !
-       ! close dataspace
-       call h5sclose_f(dspace_vczeta, h5err)
-       !
-       ! close dataset
-       call h5dclose_f(dset_vczeta_id(isp, irp), h5err)
-     enddo
+      !
+      ! close dataspace
+      call h5sclose_f(dspace_vczeta, h5err)
+      !
+      ! close dataset
+      call h5dclose_f(dset_vczeta_id(isp, irp), h5err)
+    end do
 
-     ! calculate W(r) = \sum_{u,v} vzeta_u(r) A_{u,v} vzeta_v(r)
-     !
+    ! calculate W(r) = \sum_{u,v} vzeta_u(r) A_{u,v} vzeta_v(r)
+    !
 #ifdef DEBUG
-     if ( peinf%master ) then
-       write(6,*) " calculate W(r) "
-     endif
-     if (peinf%master) write(6,*) "Total ig (w_grp%mydim) = ", w_grp%mydim
+    if (peinf%master) then
+      write (6, *) " calculate W(r) "
+    end if
+    if (peinf%master) write (6, *) "Total ig (w_grp%mydim) = ", w_grp%mydim
 #endif
-     do ig = 1, w_grp%mydim
-       if (ig+w_grp%offset > nr_buff) exit
+    do ig = 1, w_grp%mydim
+      if (ig + w_grp%offset > nr_buff) exit
 #ifdef DEBUG
-       if (peinf%master .and. mod(ig,100)== 0) &
-         write(6,*) "working on W(ig), ig = ", ig
+      if (peinf%master .and. mod(ig, 100) == 0) &
+        write (6, *) "working on W(ig), ig = ", ig
 #endif
-       ! First calculate \sum_u vzeta_u(r) A_{u,v}
-       call Zgemv('n', nzeta, nzeta, &
-         Zone, Amtrx(1,1), nzeta, &
-         vzeta(ig,1:nzeta), 1, &
-         Zzero, Avzeta(1), 1)
-       vr(w_grp%offset+ig) = vr(w_grp%offset+ig) + & 
-         Zdot_c(nzeta, vzeta(ig,1:nzeta), 1, &
-         Avzeta(1:nzeta), 1)
+      ! First calculate \sum_u vzeta_u(r) A_{u,v}
+      call Zgemv('n', nzeta, nzeta, &
+                 Zone, Amtrx(1, 1), nzeta, &
+                 vzeta(ig, 1:nzeta), 1, &
+                 Zzero, Avzeta(1), 1)
+      vr(w_grp%offset + ig) = vr(w_grp%offset + ig) + &
+                              Zdot_c(nzeta, vzeta(ig, 1:nzeta), 1, &
+                                     Avzeta(1:nzeta), 1)
 #ifdef DEBUG
-       if ( ig == 1 .and. w_grp%offset == 0 ) then
-         write(6,*) " vzeta   Avzeta "
-         do ii = 1, nzeta 
-           write(6,*) vzeta(1,ii), Avzeta(ii)
-         enddo
-       endif
+      if (ig == 1 .and. w_grp%offset == 0) then
+        write (6, *) " vzeta   Avzeta "
+        do ii = 1, nzeta
+          write (6, *) vzeta(1, ii), Avzeta(ii)
+        end do
+      end if
 #endif
-     enddo
-     DEALLOCATE(Amtrx)
-     DEALLOCATE(vzeta)
-     DEALLOCATE(Avzeta)
-     !
-     if (pol(irp)%lv) then
-        DEALLOCATE(pol(irp)%Zv)
-        pol(irp)%lv = .false.
-     endif
-     call MPI_BARRIER(r_grp%comm, info)
-     if (peinf%master) then
-        write(6,*) " done jrp = ", jrp
-        write(6,*) vr(1:5)
-     endif
-  enddo ! jrp loop
+    end do
+    deallocate (Amtrx)
+    deallocate (vzeta)
+    deallocate (Avzeta)
+    !
+    if (pol(irp)%lv) then
+      deallocate (pol(irp)%Zv)
+      pol(irp)%lv = .false.
+    end if
+    call MPI_BARRIER(r_grp%comm, info)
+    if (peinf%master) then
+      write (6, *) " done jrp = ", jrp
+      write (6, *) vr(1:5)
+    end if
+  end do ! jrp loop
 
   ! close hdf5 file
   call h5fclose_f(file_id, h5err)
@@ -392,47 +392,47 @@ subroutine Zwpol0_isdf(gvec,kpt,qpt,pol,k_p,nolda,nrep,nspin,iq0,nr_buff,isdf_in
   call h5close_f(h5err)
 
   ! Delete the file
-  write(6,*) "Remove file "//trim(h5filename)
-  call execute_command_line("rm " // trim(h5filename))
+  write (6, *) "Remove file "//trim(h5filename)
+  call execute_command_line("rm "//trim(h5filename))
 
   if (r_grp%master) then
-    close(pol_unit)
-  endif
+    close (pol_unit)
+  end if
   call MPI_ALLREDUCE(MPI_IN_PLACE, vr, nr_buff, &
-     MPI_DOUBLE_SCALAR, MPI_SUM, peinf%comm, info)
+                     MPI_DOUBLE_SCALAR, MPI_SUM, peinf%comm, info)
   !
   if (peinf%master) then
-     write(6,*) " output W(r) to wpol0.dat and wpol0_rho.dat "
-     vr = -two*vr/real(nspin,dp)/real(kpt%nk,dp)/ gvec%hcub / gvec%hcub
-     open(out_unit,file='wpol0.dat',form='formatted')
-     write(out_unit,*) gvec%syms%ntrans*nr_buff,gvec%nr,nspin
-     open(out2_unit,file='wpol0_rho.dat',form='formatted')
-     do ig = 1, nr_buff
-        do irp = 1, gvec%syms%ntrans
-           call unfold(gvec%r(1,ig),gvec%syms%trans(1,1,irp),gvec%shift,rpt)
+    write (6, *) " output W(r) to wpol0.dat and wpol0_rho.dat "
+    vr = -two*vr/real(nspin, dp)/real(kpt%nk, dp)/gvec%hcub/gvec%hcub
+    open (out_unit, file='wpol0.dat', form='formatted')
+    write (out_unit, *) gvec%syms%ntrans*nr_buff, gvec%nr, nspin
+    open (out2_unit, file='wpol0_rho.dat', form='formatted')
+    do ig = 1, nr_buff
+      do irp = 1, gvec%syms%ntrans
+        call unfold(gvec%r(1, ig), gvec%syms%trans(1, 1, irp), gvec%shift, rpt)
 #ifdef CPLX
-           write(out_unit,'(3i5,6g15.6)') (rpt(ii),ii=1,3), &
-                real(vr(ig),dp), aimag(vr(ig)), &
-                0.d0, 0.d0, 0.d0, 0.d0 ! assume fr(ig,:) are zero
+        write (out_unit, '(3i5,6g15.6)') (rpt(ii), ii=1, 3), &
+          real(vr(ig), dp), aimag(vr(ig)), &
+          0.d0, 0.d0, 0.d0, 0.d0 ! assume fr(ig,:) are zero
 #else
-           write(out_unit,'(3i5,3g15.6)') (rpt(ii),ii=1,3),vr(ig), &
-                0.d0, 0.d0
+        write (out_unit, '(3i5,3g15.6)') (rpt(ii), ii=1, 3), vr(ig), &
+          0.d0, 0.d0
 #endif
-        enddo
-        xsum = Zone*( kpt%rho(ig,1) + kpt%rho(ig,nspin) )*real(nspin,dp)/two
+      end do
+      xsum = Zone*(kpt%rho(ig, 1) + kpt%rho(ig, nspin))*real(nspin, dp)/two
 #ifdef CPLX
-        write(out2_unit,'(7g15.6)') real(xsum,dp), real(vr(ig),dp), aimag(vr(ig)), &
-             0.d0, 0.d0, 0.d0, 0.d0
+      write (out2_unit, '(7g15.6)') real(xsum, dp), real(vr(ig), dp), aimag(vr(ig)), &
+        0.d0, 0.d0, 0.d0, 0.d0
 #else
-        write(out2_unit,'(4g15.6)') xsum, vr(ig), 0.d0, 0.d0
+      write (out2_unit, '(4g15.6)') xsum, vr(ig), 0.d0, 0.d0
 #endif
-     enddo
-     write(out_unit,*) gvec%step
-     write(out_unit,*) gvec%shift
-     close(out_unit)
-     close(out2_unit)
-  endif
-  DEALLOCATE(vr)
+    end do
+    write (out_unit, *) gvec%step
+    write (out_unit, *) gvec%shift
+    close (out_unit)
+    close (out2_unit)
+  end if
+  deallocate (vr)
 
 end subroutine Zwpol0_isdf
 !===================================================================

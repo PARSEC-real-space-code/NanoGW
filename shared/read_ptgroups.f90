@@ -23,21 +23,21 @@ subroutine read_ptgroups(syms)
   implicit none
 
   ! arguments
-  type (symmetries), intent(inout) :: syms
+  type(symmetries), intent(inout) :: syms
 
   ! local variables
   integer :: ii
 
   call esdf_init('rgwbs.in')
 
-  if (esdf_block ('point_group_tables',syms%ngr )) then
-     allocate(syms%grfilename(syms%ngr))
-     do ii = 1, syms%ngr
-        read(block_data(ii),*) syms%grfilename(ii)
-     enddo
+  if (esdf_block('point_group_tables', syms%ngr)) then
+    allocate (syms%grfilename(syms%ngr))
+    do ii = 1, syms%ngr
+      read (block_data(ii), *) syms%grfilename(ii)
+    end do
   else
-     syms%ngr = 0
-  endif
+    syms%ngr = 0
+  end if
 
   call esdf_close
 

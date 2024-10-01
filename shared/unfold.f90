@@ -7,14 +7,14 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine unfold(gw,trans,shift,gr)
+subroutine unfold(gw, trans, shift, gr)
 
   use myconstants
   implicit none
 
   ! arguments
   integer, dimension(3), intent(in) :: gw
-  real(dp), intent(in) :: trans(3,3), shift(3)
+  real(dp), intent(in) :: trans(3, 3), shift(3)
   integer, dimension(3), intent(out) :: gr
 
   ! local variables
@@ -22,9 +22,9 @@ subroutine unfold(gw,trans,shift,gr)
   real(dp) :: xx
 
   do ii = 1, 3
-     xx = trans(ii,ii) * gw(ii) + trans(ii,ii) * shift(ii) - shift(ii)
-     gr(ii) = nint(xx)
-  enddo
+    xx = trans(ii, ii)*gw(ii) + trans(ii, ii)*shift(ii) - shift(ii)
+    gr(ii) = nint(xx)
+  end do
 
 end subroutine unfold
 !===============================================================

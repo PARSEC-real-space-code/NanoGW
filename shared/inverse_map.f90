@@ -11,7 +11,7 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine inverse_map(mm,invm,nn,map)
+subroutine inverse_map(mm, invm, nn, map)
 
   implicit none
 
@@ -26,8 +26,8 @@ subroutine inverse_map(mm,invm,nn,map)
 
   tmpmap = map
   do ii = 1, nn
-     map(ii) = invm( tmpmap(ii) )
-  enddo
+    map(ii) = invm(tmpmap(ii))
+  end do
 
 end subroutine inverse_map
 !===================================================================

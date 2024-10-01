@@ -4,15 +4,15 @@
 ! Write eigenvectors,eigenvalues to file pol_diag.dat : master PE
 ! receives data from all other PEs and writes to disk, one full
 ! eigenvector per line.
-! 
+!
 ! At output, pol%Zv is deallocated and pol%lv is set to false. No
 ! other variables are modified.
-! 
+!
 ! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine Zwrite_pol(pol,nrep,nq,irp,iq,nstate)
+subroutine Zwrite_pol(pol, nrep, nq, irp, iq, nstate)
 
   use typedefs
   use mpi_module
@@ -22,23 +22,23 @@ subroutine Zwrite_pol(pol,nrep,nq,irp,iq,nstate)
 #endif
   ! arguments
   ! polarizability for this representation and q-vector
-  type (polinfo), intent(inout) :: pol
+  type(polinfo), intent(inout) :: pol
   integer, intent(in) :: &
-       nrep, &      ! number of representations
-       nq,  &       ! number of q-vectors
-       irp,  &      ! index of current representation
-       iq,  &       ! index of current q-vector
-       nstate       ! total number of electronic orbitals
+    nrep, &      ! number of representations
+    nq, &       ! number of q-vectors
+    irp, &      ! index of current representation
+    iq, &       ! index of current q-vector
+    nstate       ! total number of electronic orbitals
 
   ! local variables
   integer, parameter :: iunit = 50  ! number of input/output unit
   ! date tag
-  character (len=26) :: datelabel
+  character(len=26) :: datelabel
   ! error message
-  character (len=800) :: lastwords
+  character(len=800) :: lastwords
   ! counters and temporary variables
   integer :: ii, jj, ipe, ncol, info, nline
-  SCALAR, allocatable ::  tdummy(:,:)
+  SCALAR, allocatable ::  tdummy(:, :)
 #ifdef MPI
   integer :: jpe
   integer :: status(MPI_STATUS_SIZE)
@@ -49,97 +49,97 @@ subroutine Zwrite_pol(pol,nrep,nq,irp,iq,nstate)
   ! some data at the end.
   !
   if (peinf%master) then
-     open(iunit,file='pol_diag.dat',form='unformatted',iostat=info)
-     if (info /= 0) then
-        call die('Could not open output file pol_diag.dat')
-     endif
-     read(iunit,end=15)
-     read(iunit,end=15)
-     nline = 2
-     do
-        read(iunit,end=20) jj, ii, ncol
-        if (jj == irp .and. ii == iq) then
-           write(lastwords,*) ' Representation ',irp,' q-vector ',iq, &
-                ' already present in pol_diag.dat'
-           call die(lastwords)
-        endif
-        do jj = 1, ncol + 2
-           read(iunit)
-        enddo
-        nline = nline + 3 + ncol
-     enddo
-15   continue
-     rewind(iunit)
-     call get_date(datelabel)
-     write(iunit) datelabel
+    open (iunit, file='pol_diag.dat', form='unformatted', iostat=info)
+    if (info /= 0) then
+      call die('Could not open output file pol_diag.dat')
+    end if
+    read (iunit, end=15)
+    read (iunit, end=15)
+    nline = 2
+    do
+      read (iunit, end=20) jj, ii, ncol
+      if (jj == irp .and. ii == iq) then
+        write (lastwords, *) ' Representation ', irp, ' q-vector ', iq, &
+          ' already present in pol_diag.dat'
+        call die(lastwords)
+      end if
+      do jj = 1, ncol + 2
+        read (iunit)
+      end do
+      nline = nline + 3 + ncol
+    end do
+15  continue
+    rewind (iunit)
+    call get_date(datelabel)
+    write (iunit) datelabel
 #ifdef CPLX
-     ii = 2
+    ii = 2
 #else
-     ii = 1
+    ii = 1
 #endif
-     write(iunit) nstate, nrep, nq, ii
-     nline = 2
-20   continue
-     rewind(iunit)
-     do jj = 1, nline
-        read(iunit)
-     enddo
-     write(iunit) irp, iq, pol%ntr, pol%ntr, pol%n_up
-     write(iunit) (pol%tr(:,jj),jj=1,pol%ntr)
-  endif
+    write (iunit) nstate, nrep, nq, ii
+    nline = 2
+20  continue
+    rewind (iunit)
+    do jj = 1, nline
+      read (iunit)
+    end do
+    write (iunit) irp, iq, pol%ntr, pol%ntr, pol%n_up
+    write (iunit) (pol%tr(:, jj), jj=1, pol%ntr)
+  end if
   !-------------------------------------------------------------------
   ! If master does not have this representation, the group master must
   ! transfer data to master PE.
   !
-  ipe = r_grp%map(r_grp%masterid+1,r_grp%rep_g(irp)+1)
+  ipe = r_grp%map(r_grp%masterid + 1, r_grp%rep_g(irp) + 1)
   if (ipe /= peinf%masterid) then
 #ifdef MPI
-     if (r_grp%master .and. r_grp%mygr == r_grp%rep_g(irp)) &
-          call MPI_SEND(pol%nn,1, &
-          MPI_INTEGER,peinf%masterid,ipe,peinf%comm,info)
-     if (peinf%master .and. r_grp%mygr /= r_grp%rep_g(irp)) &
-          call MPI_RECV(pol%nn,1, &
-          MPI_INTEGER,ipe,ipe,peinf%comm,status,info)
-     if (r_grp%master .and. r_grp%mygr == r_grp%rep_g(irp)) then
-        call MPI_SEND(pol%eig,pol%ntr, &
-          MPI_DOUBLE_PRECISION,peinf%masterid,ipe+1,peinf%comm,info)
-        call MPI_SEND(pol%ostr,pol%ntr*3, &
-          MPI_DOUBLE_PRECISION,peinf%masterid,ipe+2,peinf%comm,info)
-     endif
-     if (peinf%master .and. r_grp%mygr /= r_grp%rep_g(irp)) then
-        call MPI_RECV(pol%eig,pol%ntr, &
-          MPI_DOUBLE_PRECISION,ipe,ipe+1,peinf%comm,status,info)
-        call MPI_RECV(pol%ostr,pol%ntr*3, &
-          MPI_DOUBLE_PRECISION,ipe,ipe+2,peinf%comm,status,info)
-     endif
+    if (r_grp%master .and. r_grp%mygr == r_grp%rep_g(irp)) &
+      call MPI_SEND(pol%nn, 1, &
+                    MPI_INTEGER, peinf%masterid, ipe, peinf%comm, info)
+    if (peinf%master .and. r_grp%mygr /= r_grp%rep_g(irp)) &
+      call MPI_RECV(pol%nn, 1, &
+                    MPI_INTEGER, ipe, ipe, peinf%comm, status, info)
+    if (r_grp%master .and. r_grp%mygr == r_grp%rep_g(irp)) then
+      call MPI_SEND(pol%eig, pol%ntr, &
+                    MPI_DOUBLE_PRECISION, peinf%masterid, ipe + 1, peinf%comm, info)
+      call MPI_SEND(pol%ostr, pol%ntr*3, &
+                    MPI_DOUBLE_PRECISION, peinf%masterid, ipe + 2, peinf%comm, info)
+    end if
+    if (peinf%master .and. r_grp%mygr /= r_grp%rep_g(irp)) then
+      call MPI_RECV(pol%eig, pol%ntr, &
+                    MPI_DOUBLE_PRECISION, ipe, ipe + 1, peinf%comm, status, info)
+      call MPI_RECV(pol%ostr, pol%ntr*3, &
+                    MPI_DOUBLE_PRECISION, ipe, ipe + 2, peinf%comm, status, info)
+    end if
 #endif
-  endif
+  end if
 
   if (peinf%master) then
-     allocate(tdummy(pol%nn*r_grp%npes,pol%nn))
-     write(iunit) (pol%eig(jj),jj=1,pol%ntr)
-  endif
+    allocate (tdummy(pol%nn*r_grp%npes, pol%nn))
+    write (iunit) (pol%eig(jj), jj=1, pol%ntr)
+  end if
 #ifdef DEBUG
-  if (r_grp%master) write(6,*) ' EIGENVALUES ', &
-       minval(pol%eig), maxval(pol%eig), sum(pol%eig), associated(pol%Zv)
+  if (r_grp%master) write (6, *) ' EIGENVALUES ', &
+    minval(pol%eig), maxval(pol%eig), sum(pol%eig), associated(pol%Zv)
 #endif
 
   ncol = pol%nn
   do ipe = 0, r_grp%npes - 1
-     if (pol%ntr < ncol + ipe*pol%nn) ncol = pol%ntr - ipe*pol%nn
-     if (peinf%master .and. r_grp%rep_g(irp) == r_grp%mygr) tdummy = pol%Zv
+    if (pol%ntr < ncol + ipe*pol%nn) ncol = pol%ntr - ipe*pol%nn
+    if (peinf%master .and. r_grp%rep_g(irp) == r_grp%mygr) tdummy = pol%Zv
 #ifdef MPI
-     jpe = r_grp%map(ipe+1,r_grp%rep_g(irp)+1)
-     if (peinf%inode == jpe .and. (.not. peinf%master)) &
-          call MPI_SEND(pol%Zv,pol%nn*r_grp%npes*pol%nn, &
-          MPI_DOUBLE_SCALAR,peinf%masterid,jpe,peinf%comm,info)
-     if (peinf%inode /= jpe .and. peinf%master) &
-          call MPI_RECV(tdummy,pol%nn*r_grp%npes*pol%nn, &
-          MPI_DOUBLE_SCALAR,jpe,jpe,peinf%comm,status,info)
+    jpe = r_grp%map(ipe + 1, r_grp%rep_g(irp) + 1)
+    if (peinf%inode == jpe .and. (.not. peinf%master)) &
+      call MPI_SEND(pol%Zv, pol%nn*r_grp%npes*pol%nn, &
+                    MPI_DOUBLE_SCALAR, peinf%masterid, jpe, peinf%comm, info)
+    if (peinf%inode /= jpe .and. peinf%master) &
+      call MPI_RECV(tdummy, pol%nn*r_grp%npes*pol%nn, &
+                    MPI_DOUBLE_SCALAR, jpe, jpe, peinf%comm, status, info)
 #endif
-     if (peinf%master) then
-        do jj = 1, ncol
-           write(iunit) (tdummy(ii,jj),ii=1,pol%ntr)
+    if (peinf%master) then
+      do jj = 1, ncol
+        write (iunit) (tdummy(ii, jj), ii=1, pol%ntr)
 !#ifdef DEBUG
 !           do ii = 1, pol%ntr
 !              write(8000,'(2i2,2i5,8i4,2e18.6)') iq, irp, ii,jj, &
@@ -151,24 +151,24 @@ subroutine Zwrite_pol(pol,nrep,nq,irp,iq,nstate)
 !#endif
 !           enddo
 !#endif
-        enddo
-     endif
+      end do
+    end if
 #ifdef MPI
-     call MPI_BARRIER(peinf%comm,info)
+    call MPI_BARRIER(peinf%comm, info)
 #endif
-  enddo
+  end do
   if (peinf%master) then
-     close(iunit)
-     deallocate(tdummy)
-  endif
+    close (iunit)
+    deallocate (tdummy)
+  end if
 
   if (r_grp%rep_g(irp) == r_grp%mygr) then
-     pol%lv = .false.
-     deallocate(pol%Zv)
-  endif
+    pol%lv = .false.
+    deallocate (pol%Zv)
+  end if
 
 #ifdef MPI
-  call MPI_BARRIER(peinf%comm,info)
+  call MPI_BARRIER(peinf%comm, info)
 #endif
 
   return

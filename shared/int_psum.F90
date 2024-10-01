@@ -8,7 +8,7 @@
 !
 !-------------------------------------------------------------------
 
-subroutine int_psum(ndim,npes,comm,buffer)
+subroutine int_psum(ndim, npes, comm, buffer)
   use myconstants
   implicit none
 #ifdef MPI
@@ -32,18 +32,18 @@ subroutine int_psum(ndim,npes,comm,buffer)
   ioff = 1
   mdim = MAXSIZE_MPI
   if (ndim > MAXSIZE_MPI) then
-     nblock = ndim / MAXSIZE_MPI
-     do iblock = 1, nblock
-        call MPI_ALLREDUCE(buffer(ioff),work,mdim, &
-             MPI_INTEGER,MPI_SUM,comm,info)
-        call Zcopy(mdim,work,1,buffer(ioff),1)
-        ioff = ioff + mdim
-     enddo
-  endif
+    nblock = ndim/MAXSIZE_MPI
+    do iblock = 1, nblock
+      call MPI_ALLREDUCE(buffer(ioff), work, mdim, &
+                         MPI_INTEGER, MPI_SUM, comm, info)
+      call Zcopy(mdim, work, 1, buffer(ioff), 1)
+      ioff = ioff + mdim
+    end do
+  end if
   mdim = ndim - ioff + 1
-  call MPI_ALLREDUCE(buffer(ioff),work,mdim, &
-       MPI_INTEGER,MPI_SUM,comm,info)
-  call Zcopy(mdim,work,1,buffer(ioff),1)
+  call MPI_ALLREDUCE(buffer(ioff), work, mdim, &
+                     MPI_INTEGER, MPI_SUM, comm, info)
+  call Zcopy(mdim, work, 1, buffer(ioff), 1)
 #endif
 
 end subroutine int_psum

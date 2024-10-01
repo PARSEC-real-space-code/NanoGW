@@ -3,13 +3,13 @@
 !
 ! High-level wrapper subroutine that calls magmablasf_*gemm
 ! or Lapack *gemm to perform matrix multiplications
-! If the problem size is larger than "nsize_thr", then use 
+! If the problem size is larger than "nsize_thr", then use
 ! magmablasf_*gemm; otherwise, use Lapack *gemm
-! 
+!
 ! =========================================================
 
-subroutine Zgemm_hl( transA, transB, M, N, K, alpha, &
-   A, LDA, B, LDB, beta, C, LDC, opt_linear_algebra )
+subroutine Zgemm_hl(transA, transB, M, N, K, alpha, &
+                    A, LDA, B, LDB, beta, C, LDC, opt_linear_algebra)
 #ifdef HIPMAGMA
   use iso_c_binding
   use magma
@@ -35,10 +35,10 @@ subroutine Zgemm_hl( transA, transB, M, N, K, alpha, &
   integer :: mydev, num_dev = 1, devices(max_dev_per_node)
   !if(peinf%inode .eq. 0) write(6,*) A(1,1)
   !print *, "opt_linear_algebra", opt_linear_algebra
-  if ( opt_linear_algebra .eq. 2 ) then
-    if (M*N*K .gt. nsize_thr) then 
-    !if (.True.) then
-! According to tests, GPU becomes faster than CPU when 
+  if (opt_linear_algebra == 2) then
+    if (M*N*K > nsize_thr) then
+      !if (.True.) then
+! According to tests, GPU becomes faster than CPU when
 ! M*N*K is greater than a certain
 ! number "nsize_threshold"
       call timacc(91, 1, tsec)
@@ -48,11 +48,11 @@ subroutine Zgemm_hl( transA, transB, M, N, K, alpha, &
       num_dev = magmaf_num_gpus()
       if (peinf%master) print *, "num_dev ", num_dev
       !call magmaf_getdevices(devices, max_dev_per_node, num_dev) ! not work
-      mydev =  mod(peinf%inode, num_dev) 
+      mydev = mod(peinf%inode, num_dev)
       call magmaf_setdevice(mydev)
       !print *, " inode = ", peinf%inode, " mygpu = ", mydev
-      if(peinf%inode .eq. 0) write(6,*) "break point 1 ", A(1,1)
-      call magmaf_queue_create( mydev, queue )
+      if (peinf%inode == 0) write (6, *) "break point 1 ", A(1, 1)
+      call magmaf_queue_create(mydev, queue)
       select case (transA(1))
       case ('t', 'T', 'c', 'C')
         LDDA = K; kDA = M
@@ -69,34 +69,34 @@ subroutine Zgemm_hl( transA, transB, M, N, K, alpha, &
       case default
         LDDB = K; kDB = N
       end select
-      if(peinf%inode .eq. 0) write(6,*) "break point 2 ", A(1,1)
+      if (peinf%inode == 0) write (6, *) "break point 2 ", A(1, 1)
       ! Allocate memory on GPU and perform matrix multiplication
       ! dA has shape (M, K) when transA = 'n', or (K, M) when transA = 't' or 'c'
-      info = magmaf_Zmalloc( dA, LDDA*kDA ) ; if (info .ne. 0) print *, "cant allocate dA"
+      info = magmaf_Zmalloc(dA, LDDA*kDA); if (info /= 0) print *, "cant allocate dA"
       ! dB has shape (K, N) when transB = 'n', or (N, K) when transB = 't' or 'c'
-      info = magmaf_Zmalloc( dB, LDDB*kDB ) ; if (info .ne. 0) print *, "cant allocate dB"
+      info = magmaf_Zmalloc(dB, LDDB*kDB); if (info /= 0) print *, "cant allocate dB"
       ! dC has shape (M, N)
-      info = magmaf_Zmalloc( dC, M*N ); if (info .ne. 0) print *, "cant allocate dC"
-      if(peinf%inode .eq. 0) write(6,*) "break point 3 ", A(1,1)
-      call magmaf_Zsetmatrix( LDDA, kDA, A, LDA, dA, LDDA, queue ) 
-      call magmaf_Zsetmatrix( LDDB, kDB, B, LDB, dB, LDDB, queue ) 
-      call magmaf_Zsetmatrix( M, N, C, LDC, dC, M, queue ) 
-      if(peinf%inode .eq. 0) write(6,*) "break point 4 ", A(1,1)
-      call magmablasf_Zgemm( transA(1), transB(1), M, N, K, alpha, &
-        dA, LDDA, dB, LDDB, beta, dC, M, queue )
-      if(peinf%inode .eq. 0) write(6,*) "break point 5 "
+      info = magmaf_Zmalloc(dC, M*N); if (info /= 0) print *, "cant allocate dC"
+      if (peinf%inode == 0) write (6, *) "break point 3 ", A(1, 1)
+      call magmaf_Zsetmatrix(LDDA, kDA, A, LDA, dA, LDDA, queue)
+      call magmaf_Zsetmatrix(LDDB, kDB, B, LDB, dB, LDDB, queue)
+      call magmaf_Zsetmatrix(M, N, C, LDC, dC, M, queue)
+      if (peinf%inode == 0) write (6, *) "break point 4 ", A(1, 1)
+      call magmablasf_Zgemm(transA(1), transB(1), M, N, K, alpha, &
+                            dA, LDDA, dB, LDDB, beta, dC, M, queue)
+      if (peinf%inode == 0) write (6, *) "break point 5 "
       ! Get the result (matrix C) from GPU to CPU
       !allocate (tmp_C(M,N))
-      call magmaf_Zgetmatrix( M, N, dC, M, C, LDC, queue )
-      if(peinf%inode .eq. 0) write(6,*) "break point 6 "
+      call magmaf_Zgetmatrix(M, N, dC, M, C, LDC, queue)
+      if (peinf%inode == 0) write (6, *) "break point 6 "
       ! Done, free GPU memory
-      info = magmaf_free( dA ); if (info .ne. 0) print *, "cant free dA on GPU"
-      info = magmaf_free( dB ); if (info .ne. 0) print *, "cant free dB on GPU"
-      info = magmaf_free( dC ); if (info .ne. 0) print *, "cant free dC on GPU"
+      info = magmaf_free(dA); if (info /= 0) print *, "cant free dA on GPU"
+      info = magmaf_free(dB); if (info /= 0) print *, "cant free dB on GPU"
+      info = magmaf_free(dC); if (info /= 0) print *, "cant free dC on GPU"
 
-      call magmaf_queue_destroy( queue )
+      call magmaf_queue_destroy(queue)
       call magmaf_finalize()
-      if(peinf%inode .eq. 0) write(6,*) "break point 8 "
+      if (peinf%inode == 0) write (6, *) "break point 8 "
       !call Zgemm( transA, transB, M, N, K, alpha, &
       !  A, LDA, B, LDB, beta, C, LDC )
       !residue = 0.d0
@@ -107,21 +107,21 @@ subroutine Zgemm_hl( transA, transB, M, N, K, alpha, &
       !deallocate (tmp_C)
       call timacc(91, 2, tsec)
       if (peinf%master) print *, "finish magmaf"
-    else  
+    else
       call timacc(92, 1, tsec)
       ! call lapack routine *gemm
-      call Zgemm( transA(1), transB(1), M, N, K, alpha, &
-        A, LDA, B, LDB, beta, C, LDC )
+      call Zgemm(transA(1), transB(1), M, N, K, alpha, &
+                 A, LDA, B, LDB, beta, C, LDC)
       call timacc(92, 2, tsec)
-    endif 
+    end if
     return
-  endif
+  end if
 #endif
-  if (opt_linear_algebra .eq. 1) then
+  if (opt_linear_algebra == 1) then
     ! call lapack routine *gemm
-    call Zgemm( transA(1), transB(1), M, N, K, alpha, &
-      A, LDA, B, LDB, beta, C, LDC )
+    call Zgemm(transA(1), transB(1), M, N, K, alpha, &
+               A, LDA, B, LDB, beta, C, LDC)
     !if (peinf%inode .eq. 0) write(6, '(a,i3,e11.4,3i6,2e11.4,2i6,2e11.4)') "inode ", peinf%inode, C(1,1), M, N, K, alpha, beta, LDA, LDB, A(1,1), B(1,1)
-  endif
+  end if
 
 end subroutine Zgemm_hl

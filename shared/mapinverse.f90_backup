@@ -11,7 +11,7 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine mapinverse(m,n1,map1,n2,map2,map1to2)
+subroutine mapinverse(m, n1, map1, n2, map2, map1to2)
 
   use mpi_module
   implicit none
@@ -19,12 +19,12 @@ subroutine mapinverse(m,n1,map1,n2,map2,map1to2)
 
   ! arguments
   integer, intent(in) :: m, n1, n2
-  integer, intent(in) :: map1(m,n1), map2(m,n2)
+  integer, intent(in) :: map1(m, n1), map2(m, n2)
   integer, intent(inout) :: map1to2(n1)
 
   ! local variables
   integer :: i1, i2, mm, mapdiff, n_start, n_end, &
-    err, incr, res
+             err, incr, res
   logical :: found
 
   ! Weiwei Comment: the old code becomes extremely slow
@@ -50,27 +50,27 @@ subroutine mapinverse(m,n1,map1,n2,map2,map1to2)
   !--new code start here--
   map1to2 = 0
   incr = n1/peinf%npes
-  res  = mod(n1, peinf%npes)
-  if (peinf%inode .lt. res) then
-      n_start = peinf%inode*(incr+1)+1
-      n_end   = peinf%inode*(incr+1)+incr+1
+  res = mod(n1, peinf%npes)
+  if (peinf%inode < res) then
+    n_start = peinf%inode*(incr + 1) + 1
+    n_end = peinf%inode*(incr + 1) + incr + 1
   else
-      n_start = res*(incr+1)+(peinf%inode-res)*incr + 1
-      n_end   = res*(incr+1)+(peinf%inode-res)*incr + incr
-  endif
+    n_start = res*(incr + 1) + (peinf%inode - res)*incr + 1
+    n_end = res*(incr + 1) + (peinf%inode - res)*incr + incr
+  end if
   print *, "inode ", peinf%inode, n_start, n_end
   do i1 = n_start, n_end
-    do i2 = 1,n2
-      mapdiff = sum(abs( map2(1:m, i2) - map1(1:m, i1)))
-      if (mapdiff .eq. 0) then
-        map1to2(i1)=i2
+    do i2 = 1, n2
+      mapdiff = sum(abs(map2(1:m, i2) - map1(1:m, i1)))
+      if (mapdiff == 0) then
+        map1to2(i1) = i2
         exit
-      endif
-    enddo 
-  enddo
+      end if
+    end do
+  end do
   call MPI_BARRIER(peinf%comm, err)
-  call mpi_allreduce( MPI_IN_PLACE, map1to2, n1, MPI_INTEGER, MPI_SUM, &
-    peinf%comm, err )
+  call mpi_allreduce(MPI_IN_PLACE, map1to2, n1, MPI_INTEGER, MPI_SUM, &
+                     peinf%comm, err)
 ! call int_psum( n1, peinf%npes, peinf%comm, map1to2 )
   !--new code end here--
 

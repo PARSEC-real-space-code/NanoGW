@@ -7,20 +7,20 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-function zdot_u(ndim,xx,incx,yy,incy) result(dot_prod)
+function zdot_u(ndim, xx, incx, yy, incy) result(dot_prod)
 
   use myconstants
   implicit none
 
   integer, intent(in) :: ndim, incx, incy
-  complex(dpc), intent(in) :: xx(ndim*incx-incx+1), yy(ndim*incy-incy+1)
+  complex(dpc), intent(in) :: xx(ndim*incx - incx + 1), yy(ndim*incy - incy + 1)
   complex(dpc) :: dot_prod
   integer :: ii
 
   dot_prod = zzero
   do ii = 1, ndim
-     dot_prod = dot_prod + xx((ii-1)*incx + 1) * yy((ii-1)*incy + 1)
-  enddo
+    dot_prod = dot_prod + xx((ii - 1)*incx + 1)*yy((ii - 1)*incy + 1)
+  end do
 
 end function zdot_u
 !===================================================================
@@ -29,20 +29,20 @@ end function zdot_u
 ! seems to crash with the original BLAS function.
 !
 !-------------------------------------------------------------------
-function zdot_c(ndim,xx,incx,yy,incy) result(dot_prod)
+function zdot_c(ndim, xx, incx, yy, incy) result(dot_prod)
 
   use myconstants
   implicit none
 
   integer, intent(in) :: ndim, incx, incy
-  complex(dpc), intent(in) :: xx(ndim*incx-incx+1), yy(ndim*incy-incy+1)
+  complex(dpc), intent(in) :: xx(ndim*incx - incx + 1), yy(ndim*incy - incy + 1)
   complex(dpc) :: dot_prod
   integer :: ii
 
   dot_prod = zzero
   do ii = 1, ndim
-     dot_prod = dot_prod + conjg( xx((ii-1)*incx + 1) ) * yy((ii-1)*incy + 1)
-  enddo
+    dot_prod = dot_prod + conjg(xx((ii - 1)*incx + 1))*yy((ii - 1)*incy + 1)
+  end do
 
 end function zdot_c
 !===================================================================

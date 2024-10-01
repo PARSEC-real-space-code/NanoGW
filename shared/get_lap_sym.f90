@@ -7,7 +7,7 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine get_lap_sym(gvec,given_func,laplf) 
+subroutine get_lap_sym(gvec, given_func, laplf)
 
   use myconstants
   use typedefs
@@ -17,19 +17,19 @@ subroutine get_lap_sym(gvec,given_func,laplf)
 
   ! arguments
   ! grid
-  type (gspace), intent(inout) :: gvec
+  type(gspace), intent(inout) :: gvec
   ! input function
-  real(dp), dimension (gvec%nr), intent(in) :: given_func
+  real(dp), dimension(gvec%nr), intent(in) :: given_func
   ! output function, lapl = -Laplacian(given_func)
-  real(dp), dimension (gvec%nr), intent(out) :: laplf
+  real(dp), dimension(gvec%nr), intent(out) :: laplf
 
   !-------------------------------------------------------------------
 
   if (fd%norder < 0) then
-     call dget_lap_FFT(gvec,given_func,laplf,1)
+    call dget_lap_FFT(gvec, given_func, laplf, 1)
   else
-     call dget_lap_fd(gvec%syms,given_func,laplf,1)
-  endif
+    call dget_lap_fd(gvec%syms, given_func, laplf, 1)
+  end if
 
 end subroutine get_lap_sym
 !===============================================================

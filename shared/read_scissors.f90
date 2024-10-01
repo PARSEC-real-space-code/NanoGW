@@ -22,7 +22,7 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine read_scissors(verbose,isp,nstate,e_old,e_new)
+subroutine read_scissors(verbose, isp, nstate, e_old, e_new)
 
   use myconstants
   use esdf
@@ -43,30 +43,30 @@ subroutine read_scissors(verbose,isp,nstate,e_old,e_new)
   integer :: ii, jj, jsp, imin, imax, nscissors, ierr
   real(dp) :: eref, const, slope
 
-  call dcopy(nstate,e_old,1,e_new,1)
+  call dcopy(nstate, e_old, 1, e_new, 1)
 
   call esdf_init('rgwbs.in')
-  if (esdf_block('scissors',nscissors)) then
-     if (verbose) write(6,'(/,a,/)') repeat('*',65)
-     do jj = 1, nscissors
-        read(block_data(jj),*,iostat=ierr) jsp, imin, imax, const, eref, slope
-        if (ierr /= 0) call die('ERROR in reading scissors operator')
-        if (isp /= jsp) cycle
-        if (verbose) then
-           write(6,*) 'Warning. Applying scissors operator for spin ',isp
-           write(6,*) ' levels ',imin,' to ',imax
-           write(6,'(a,g20.10,a)') ' constant shift = ',const,' eV'
-           write(6,'(a,g20.10,a)') ' Reference energy ',eref,' eV'
-           write(6,'(a,g20.10)') ' slope = ',slope
-        endif
-        do ii = 1, nstate
-           if (ii <= imax .and. ii >= imin) &
-              e_new(ii) = e_old(ii) + &
-              (e_old(ii) - eref/ryd) * slope + const/ryd
-        enddo
-     enddo
-     if (verbose) write(6,'(/,a,/)') repeat('*',65)
-  endif
+  if (esdf_block('scissors', nscissors)) then
+    if (verbose) write (6, '(/,a,/)') repeat('*', 65)
+    do jj = 1, nscissors
+      read (block_data(jj), *, iostat=ierr) jsp, imin, imax, const, eref, slope
+      if (ierr /= 0) call die('ERROR in reading scissors operator')
+      if (isp /= jsp) cycle
+      if (verbose) then
+        write (6, *) 'Warning. Applying scissors operator for spin ', isp
+        write (6, *) ' levels ', imin, ' to ', imax
+        write (6, '(a,g20.10,a)') ' constant shift = ', const, ' eV'
+        write (6, '(a,g20.10,a)') ' Reference energy ', eref, ' eV'
+        write (6, '(a,g20.10)') ' slope = ', slope
+      end if
+      do ii = 1, nstate
+        if (ii <= imax .and. ii >= imin) &
+          e_new(ii) = e_old(ii) + &
+                      (e_old(ii) - eref/ryd)*slope + const/ryd
+      end do
+    end do
+    if (verbose) write (6, '(/,a,/)') repeat('*', 65)
+  end if
 
   call esdf_close
 

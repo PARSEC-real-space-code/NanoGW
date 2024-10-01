@@ -10,7 +10,7 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine spline_evaluate(ntable,xtable,ftable,xx,fx,df)
+subroutine spline_evaluate(ntable, xtable, ftable, xx, fx, df)
 
   use myconstants
   implicit none
@@ -30,22 +30,22 @@ subroutine spline_evaluate(ntable,xtable,ftable,xx,fx,df)
 
   ! local variables
   real(dp) :: xm, xp
-  complex(dpc) :: yp1, ypn, ym, yp, y2(ntable-2)
+  complex(dpc) :: yp1, ypn, ym, yp, y2(ntable - 2)
   ! delta_x increment used to calculate the numerical derivative
   real(dp), parameter :: DELTAX = 1.d-2
 
   yp1 = (ftable(2) - ftable(1))/(xtable(2) - xtable(1))
-  ypn = (ftable(ntable) - ftable(ntable-1))/(xtable(ntable) - xtable(ntable-1))
+  ypn = (ftable(ntable) - ftable(ntable - 1))/(xtable(ntable) - xtable(ntable - 1))
 
-  call spline(xtable(2),ftable(2),ntable-2,yp1,ypn,y2)
-  call splint(xtable(2),ftable(2),y2,ntable-2,xx,fx)
+  call spline(xtable(2), ftable(2), ntable - 2, yp1, ypn, y2)
+  call splint(xtable(2), ftable(2), y2, ntable - 2, xx, fx)
 
   xm = xx - DELTAX
-  call splint(xtable(2),ftable(2),y2,ntable-2,xm,ym)
+  call splint(xtable(2), ftable(2), y2, ntable - 2, xm, ym)
   xp = xx + DELTAX
-  call splint(xtable(2),ftable(2),y2,ntable-2,xp,yp)
+  call splint(xtable(2), ftable(2), y2, ntable - 2, xp, yp)
 
-  df = ( real(yp - ym,dp) )/ DELTAX * half
+  df = (real(yp - ym, dp))/DELTAX*half
 
   return
 end subroutine spline_evaluate

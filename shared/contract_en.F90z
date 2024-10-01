@@ -31,7 +31,7 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine Zcontract_en(nn,nen,eni,esign,ecut,ecut2,occfac,eig,pot_r,pot_l,sum0)
+subroutine Zcontract_en(nn, nen, eni, esign, ecut, ecut2, occfac, eig, pot_r, pot_l, sum0)
   use myconstants
   implicit none
 
@@ -40,7 +40,7 @@ subroutine Zcontract_en(nn,nen,eni,esign,ecut,ecut2,occfac,eig,pot_r,pot_l,sum0)
   real(dp), intent(in) :: eni(nen), esign, ecut2, ecut, occfac
   real(dp), intent(in) :: eig(nn)
   SCALAR, intent(in) :: pot_r(nn), pot_l(nn)
-  SCALAR, intent(inout) :: sum0(2,nen)
+  SCALAR, intent(inout) :: sum0(2, nen)
 
   ! local variables
   integer :: jj, ien
@@ -48,27 +48,27 @@ subroutine Zcontract_en(nn,nen,eni,esign,ecut,ecut2,occfac,eig,pot_r,pot_l,sum0)
 
   if (nn <= 0) return
 
-  ecutsgn = Zone * ecut * esign
-  zoccfac = Zone * occfac
-  call dscal(nn,esign,eig,1)
-  call Zcopy(nn,pot_l,1,pot_prod,1)
+  ecutsgn = Zone*ecut*esign
+  zoccfac = Zone*occfac
+  call dscal(nn, esign, eig, 1)
+  call Zcopy(nn, pot_l, 1, pot_prod, 1)
   pot_prod = MYCONJG(pot_prod)
-  call Zmultiply_vec(nn,pot_r,pot_prod)
+  call Zmultiply_vec(nn, pot_r, pot_prod)
   ! pot_prod = zoccfac*pot_l(1:nn)*pot_r(1:nn)
-  call Zscal(nn,zoccfac,pot_prod,1)
+  call Zscal(nn, zoccfac, pot_prod, 1)
   do jj = 1, nn
-     edenr = Zone*( eni + eig(jj) )
-     edenr = edenr**2 + ecut2
-     do ien = 1, nen
-        edeni(ien) = ecutsgn/edenr(ien)
-        edenr(ien) = (eni(ien) + eig(jj))/edenr(ien)
-     enddo
-     ! sum0(1,1:nen) = sum0(1,1:nen) + pot_prod(jj)*edenr(1:nen)
-     ! sum0(2,1:nen) = sum0(2,1:nen) + pot_prod(jj)*edenr(1:nen)
-     call Zaxpy(nen,pot_prod(jj),edenr,1,sum0(1,1),2)
-     call Zaxpy(nen,pot_prod(jj),edeni,1,sum0(2,1),2)
-  enddo
-  call dscal(nn,esign,eig,1)
+    edenr = Zone*(eni + eig(jj))
+    edenr = edenr**2 + ecut2
+    do ien = 1, nen
+      edeni(ien) = ecutsgn/edenr(ien)
+      edenr(ien) = (eni(ien) + eig(jj))/edenr(ien)
+    end do
+    ! sum0(1,1:nen) = sum0(1,1:nen) + pot_prod(jj)*edenr(1:nen)
+    ! sum0(2,1:nen) = sum0(2,1:nen) + pot_prod(jj)*edenr(1:nen)
+    call Zaxpy(nen, pot_prod(jj), edenr, 1, sum0(1, 1), 2)
+    call Zaxpy(nen, pot_prod(jj), edeni, 1, sum0(2, 1), 2)
+  end do
+  call dscal(nn, esign, eig, 1)
 
 end subroutine Zcontract_en
 !===================================================================

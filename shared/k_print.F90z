@@ -8,7 +8,7 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine Zk_print(inode,m1,m2,m3,m4,k1,k2,k3,k4,rsp,csp,matel)
+subroutine Zk_print(inode, m1, m2, m3, m4, k1, k2, k3, k4, rsp, csp, matel)
 
   use myconstants
   implicit none
@@ -19,11 +19,11 @@ subroutine Zk_print(inode,m1,m2,m3,m4,k1,k2,k3,k4,rsp,csp,matel)
   integer :: nn
 
   nn = ntape + inode
-  write(nn,'(4i6,6i3,2g20.10)') m1, m2, m3, m4, k1, k2, k3, k4, rsp, csp, &
+  write (nn, '(4i6,6i3,2g20.10)') m1, m2, m3, m4, k1, k2, k3, k4, rsp, csp, &
 #ifdef CPLX
-       real(matel,dp), aimag(matel)
+    real(matel, dp), aimag(matel)
 #else
-       matel
+  matel
 #endif
 
 end subroutine Zk_print

@@ -18,72 +18,71 @@ module mpi_module
   ! MPI structure
   !
   type peinfo
-     ! total number of groups, global
-     integer :: num
-     ! order of this group, local, 0 <= mygr < num
-     integer :: mygr
-     ! number of processors per group, global
-     ! ( npes * num = total number of processors)
-     integer :: npes
-     ! true for the master processors of this group, local
-     ! (each group has one and only one master)
-     logical :: master
-     ! rank of the master processor of this group, global, usually 0
-     integer :: masterid
-     ! rank of this processor in the group, local
-     integer :: inode
-     ! handle of this group, global
-     integer :: handle
-     ! communicator within this group, global
-     integer :: comm
+    ! total number of groups, global
+    integer :: num
+    ! order of this group, local, 0 <= mygr < num
+    integer :: mygr
+    ! number of processors per group, global
+    ! ( npes * num = total number of processors)
+    integer :: npes
+    ! true for the master processors of this group, local
+    ! (each group has one and only one master)
+    logical :: master
+    ! rank of the master processor of this group, global, usually 0
+    integer :: masterid
+    ! rank of this processor in the group, local
+    integer :: inode
+    ! handle of this group, global
+    integer :: handle
+    ! communicator within this group, global
+    integer :: comm
 
-     ! nr : number of points in real space
-     integer :: nr
-     ! local size of hamiltonian (equal to number of grid points
-     ! held by each processor)
-     integer :: mydim
-     ! dimension of distributed grid arrays; in order to account
-     ! for points outside the domain, choose ldn > max(mydim)
-     integer :: ldn
-     ! grid offset, each processor stores grid points (offset+1) to
-     ! (offset+mydim)
-     integer :: offset
+    ! nr : number of points in real space
+    integer :: nr
+    ! local size of hamiltonian (equal to number of grid points
+    ! held by each processor)
+    integer :: mydim
+    ! dimension of distributed grid arrays; in order to account
+    ! for points outside the domain, choose ldn > max(mydim)
+    integer :: ldn
+    ! grid offset, each processor stores grid points (offset+1) to
+    ! (offset+mydim)
+    integer :: offset
 
-     ! ncv : total number of (c,v) pairs
-     integer :: ncv
-     ! local number of (c,v) pairs
-     integer :: myncv
-     integer :: ldncv
-     integer, dimension(:), pointer :: ncv_start
-     integer, dimension(:), pointer :: ncv_end
+    ! ncv : total number of (c,v) pairs
+    integer :: ncv
+    ! local number of (c,v) pairs
+    integer :: myncv
+    integer :: ldncv
+    integer, dimension(:), pointer :: ncv_start
+    integer, dimension(:), pointer :: ncv_end
 
-     ! n_intp_r : total number of interpolation points in the irreducible zone
-     integer :: n_intp_r
-     ! local number of interpolation points in the irreducible zone
-     integer :: myn_intp_r
-     integer :: ldn_intp_r
-     integer, dimension(:), pointer :: n_intp_start 
-     integer, dimension(:), pointer :: n_intp_end
+    ! n_intp_r : total number of interpolation points in the irreducible zone
+    integer :: n_intp_r
+    ! local number of interpolation points in the irreducible zone
+    integer :: myn_intp_r
+    integer :: ldn_intp_r
+    integer, dimension(:), pointer :: n_intp_start
+    integer, dimension(:), pointer :: n_intp_end
 
-     ! plan of the groups: all processors belonging to j-th group
-     ! have peinf%inode = map(inode+1,j+1)
-     integer, dimension(:,:), pointer :: map
-     ! list of representations assigned to this group
-     integer, dimension(:), pointer :: g_rep
-     ! to which group each representation belongs
-     integer, dimension(:), pointer :: rep_g
+    ! plan of the groups: all processors belonging to j-th group
+    ! have peinf%inode = map(inode+1,j+1)
+    integer, dimension(:, :), pointer :: map
+    ! list of representations assigned to this group
+    integer, dimension(:), pointer :: g_rep
+    ! to which group each representation belongs
+    integer, dimension(:), pointer :: rep_g
 
-     ! rank of processors in the group of masters
-     integer :: m_inode
-     ! communicator in the group of masters
-     integer :: m_comm
+    ! rank of processors in the group of masters
+    integer :: m_inode
+    ! communicator in the group of masters
+    integer :: m_comm
   end type peinfo
 
-  type (peinfo) :: &
-       peinf, &  ! global MPI communications.
-       r_grp, &  ! MPI communications within a representation group.
-       w_grp     ! MPI communications within a wavefunction group.
-
+  type(peinfo) :: &
+    peinf, &  ! global MPI communications.
+    r_grp, &  ! MPI communications within a representation group.
+    w_grp     ! MPI communications within a wavefunction group.
 
 contains
   !===================================================================
@@ -103,12 +102,12 @@ contains
     integer, intent(in) :: nrep
 
     ! local variables
-    character (len=6) :: filnam
+    character(len=6) :: filnam
     integer :: ii, jj, irp, mykey
     integer, allocatable :: master_group(:)
 #ifdef MPI
     integer :: group_handle, m_handle, group_comm, info
-    integer, allocatable :: itmp(:,:)
+    integer, allocatable :: itmp(:, :)
 #endif
 
     !-------------------------------------------------------------------
@@ -118,40 +117,40 @@ contains
     if (r_grp%num > peinf%npes) r_grp%num = peinf%npes
 
     do ii = r_grp%num, 1, -1
-       if (mod(peinf%npes,ii) == 0 .and. &
-            mod(r_grp%num,ii) == 0) exit
-    enddo
+      if (mod(peinf%npes, ii) == 0 .and. &
+          mod(r_grp%num, ii) == 0) exit
+    end do
     r_grp%num = ii
-    if (mod(nrep,r_grp%num) /= 0) r_grp%num = 1
-    r_grp%npes = peinf%npes / r_grp%num
+    if (mod(nrep, r_grp%num) /= 0) r_grp%num = 1
+    r_grp%npes = peinf%npes/r_grp%num
 
     r_grp%mygr = peinf%inode/r_grp%npes
-    mykey = mod(peinf%inode,r_grp%npes)
-    allocate(r_grp%map(r_grp%npes,r_grp%num))
+    mykey = mod(peinf%inode, r_grp%npes)
+    allocate (r_grp%map(r_grp%npes, r_grp%num))
     r_grp%map = 0
-    r_grp%map(mykey + 1,r_grp%mygr + 1) = peinf%inode
+    r_grp%map(mykey + 1, r_grp%mygr + 1) = peinf%inode
 #ifdef MPI
-    allocate(itmp(r_grp%npes,r_grp%num))
-    call MPI_ALLREDUCE(r_grp%map,itmp,r_grp%npes*r_grp%num, &
-         MPI_INTEGER,MPI_SUM,peinf%comm,info)
+    allocate (itmp(r_grp%npes, r_grp%num))
+    call MPI_ALLREDUCE(r_grp%map, itmp, r_grp%npes*r_grp%num, &
+                       MPI_INTEGER, MPI_SUM, peinf%comm, info)
     r_grp%map = itmp
-    deallocate(itmp)
+    deallocate (itmp)
 
-    allocate(master_group(0:r_grp%npes-1))
+    allocate (master_group(0:r_grp%npes - 1))
     do jj = 0, r_grp%num - 1
-       do ii = 0, r_grp%npes - 1
-          master_group(ii) = r_grp%map(ii + 1,jj + 1)
-       enddo
-       call MPI_GROUP_INCL(peinf%handle,r_grp%npes, &
-            master_group,group_handle,info)
-       call MPI_COMM_CREATE(peinf%comm,group_handle,group_comm,info)
-       if (jj == r_grp%mygr) then
-          r_grp%handle = group_handle
-          r_grp%comm = group_comm
-          call MPI_GROUP_RANK(r_grp%handle,r_grp%inode,info)
-       endif
-    enddo
-    deallocate(master_group)
+      do ii = 0, r_grp%npes - 1
+        master_group(ii) = r_grp%map(ii + 1, jj + 1)
+      end do
+      call MPI_GROUP_INCL(peinf%handle, r_grp%npes, &
+                          master_group, group_handle, info)
+      call MPI_COMM_CREATE(peinf%comm, group_handle, group_comm, info)
+      if (jj == r_grp%mygr) then
+        r_grp%handle = group_handle
+        r_grp%comm = group_comm
+        call MPI_GROUP_RANK(r_grp%handle, r_grp%inode, info)
+      end if
+    end do
+    deallocate (master_group)
 #else
     r_grp%inode = 0
     r_grp%comm = 0
@@ -164,61 +163,61 @@ contains
     r_grp%masterid = 0
 
     if (r_grp%inode == r_grp%masterid) then
-       r_grp%master = .true.
+      r_grp%master = .true.
     else
-       r_grp%master = .false.
-    endif
-    allocate(master_group(0:r_grp%num-1))
+      r_grp%master = .false.
+    end if
+    allocate (master_group(0:r_grp%num - 1))
     do ii = 0, r_grp%num - 1
-       master_group(ii) = ii*r_grp%npes + r_grp%masterid
-    enddo
+      master_group(ii) = ii*r_grp%npes + r_grp%masterid
+    end do
 #ifdef MPI
-    call MPI_GROUP_INCL(peinf%handle ,r_grp%num,master_group ,m_handle,info)
-    call MPI_COMM_CREATE(peinf%comm,m_handle,r_grp%m_comm,info)
-    if (r_grp%master) call MPI_GROUP_RANK(m_handle,r_grp%m_inode,info)
+    call MPI_GROUP_INCL(peinf%handle, r_grp%num, master_group, m_handle, info)
+    call MPI_COMM_CREATE(peinf%comm, m_handle, r_grp%m_comm, info)
+    if (r_grp%master) call MPI_GROUP_RANK(m_handle, r_grp%m_inode, info)
 #else
     r_grp%m_inode = 0
     r_grp%m_comm = 0
 #endif
-    deallocate(master_group)
+    deallocate (master_group)
 
     !-------------------------------------------------------------------
     ! Distribute irreducible representations round-robin among groups.
     !
-    allocate(r_grp%g_rep(nrep/r_grp%num))
-    allocate(r_grp%rep_g(nrep))
+    allocate (r_grp%g_rep(nrep/r_grp%num))
+    allocate (r_grp%rep_g(nrep))
     ii = 0
     jj = 1
     do irp = 1, nrep
-       r_grp%rep_g(irp) = ii
-       if (ii == r_grp%mygr) r_grp%g_rep(jj) = irp
-       ii = ii + 1
-       if (mod(ii,r_grp%num) == 0) then
-          ii = 0
-          jj = jj + 1
-       endif
-    enddo
+      r_grp%rep_g(irp) = ii
+      if (ii == r_grp%mygr) r_grp%g_rep(jj) = irp
+      ii = ii + 1
+      if (mod(ii, r_grp%num) == 0) then
+        ii = 0
+        jj = jj + 1
+      end if
+    end do
 
     !-------------------------------------------------------------------
     ! Print info.
     !
     if (r_grp%master) then
-       if (.not. peinf%master) then
-          write(filnam,'(a5,i1)') 'out_0', r_grp%m_inode
-          open(6,file=filnam,form='formatted')
-       endif
-       write(6,'(/,a,/,a,/)') ' MPI data :', ' ----------'
-       write(6,*) ' Group partition information: '
-       write(6,*) ' Distributing ', peinf%npes, &
-            ' processors among ', r_grp%num, ' groups.'
-       write(6,*) ' Each group contains ', r_grp%npes , ' processors.'
-       write(6,*) ' I am processor rank ', r_grp%inode , &
-            ' in group ', r_grp%mygr
-       write(6,*) ' I am master in my group, with master rank ' , &
-            r_grp%m_inode
-       write(6,'(a,/,10i5)') '  My group has representations: ', r_grp%g_rep
-       call flush(6)
-    endif
+      if (.not. peinf%master) then
+        write (filnam, '(a5,i1)') 'out_0', r_grp%m_inode
+        open (6, file=filnam, form='formatted')
+      end if
+      write (6, '(/,a,/,a,/)') ' MPI data :', ' ----------'
+      write (6, *) ' Group partition information: '
+      write (6, *) ' Distributing ', peinf%npes, &
+        ' processors among ', r_grp%num, ' groups.'
+      write (6, *) ' Each group contains ', r_grp%npes, ' processors.'
+      write (6, *) ' I am processor rank ', r_grp%inode, &
+        ' in group ', r_grp%mygr
+      write (6, *) ' I am master in my group, with master rank ', &
+        r_grp%m_inode
+      write (6, '(a,/,10i5)') '  My group has representations: ', r_grp%g_rep
+      call flush (6)
+    end if
 
     return
 
@@ -240,7 +239,7 @@ contains
     integer :: ii, mykey
 #ifdef MPI
     integer :: jj, group_handle, group_comm, info
-    integer, allocatable :: master_group(:), itmp(:,:)
+    integer, allocatable :: master_group(:), itmp(:, :)
 #endif
 
     !-------------------------------------------------------------------
@@ -249,39 +248,39 @@ contains
     if (w_grp%npes < 1 .or. w_grp%npes > r_grp%npes) w_grp%npes = r_grp%npes
 
     do ii = w_grp%npes, 1, -1
-       if (mod(r_grp%npes,ii) == 0 .and. &
-            mod(w_grp%npes,ii) == 0) exit
-    enddo
+      if (mod(r_grp%npes, ii) == 0 .and. &
+          mod(w_grp%npes, ii) == 0) exit
+    end do
     w_grp%npes = ii
-    w_grp%num = r_grp%npes / w_grp%npes
+    w_grp%num = r_grp%npes/w_grp%npes
 
     w_grp%mygr = r_grp%inode/w_grp%npes
-    mykey = mod(r_grp%inode,w_grp%npes)
-    allocate(w_grp%map(w_grp%npes,w_grp%num))
+    mykey = mod(r_grp%inode, w_grp%npes)
+    allocate (w_grp%map(w_grp%npes, w_grp%num))
     w_grp%map = 0
-    w_grp%map(mykey + 1,w_grp%mygr + 1) = r_grp%inode
+    w_grp%map(mykey + 1, w_grp%mygr + 1) = r_grp%inode
 #ifdef MPI
-    allocate(itmp(w_grp%npes,w_grp%num))
-    call MPI_ALLREDUCE(w_grp%map,itmp,w_grp%npes*w_grp%num, &
-         MPI_INTEGER,MPI_SUM,r_grp%comm,info)
+    allocate (itmp(w_grp%npes, w_grp%num))
+    call MPI_ALLREDUCE(w_grp%map, itmp, w_grp%npes*w_grp%num, &
+                       MPI_INTEGER, MPI_SUM, r_grp%comm, info)
     w_grp%map = itmp
-    deallocate(itmp)
+    deallocate (itmp)
 
-    allocate(master_group(0:w_grp%npes-1))
+    allocate (master_group(0:w_grp%npes - 1))
     do jj = 0, w_grp%num - 1
-       do ii = 0, w_grp%npes - 1
-          master_group(ii) = w_grp%map(ii + 1,jj + 1)
-       enddo
-       call MPI_GROUP_INCL(r_grp%handle,w_grp%npes, &
-            master_group,group_handle,info)
-       call MPI_COMM_CREATE(r_grp%comm,group_handle,group_comm,info)
-       if (jj == w_grp%mygr) then
-          w_grp%handle = group_handle
-          w_grp%comm = group_comm
-          call MPI_GROUP_RANK(w_grp%handle,w_grp%inode,info)
-       endif
-    enddo
-    deallocate(master_group)
+      do ii = 0, w_grp%npes - 1
+        master_group(ii) = w_grp%map(ii + 1, jj + 1)
+      end do
+      call MPI_GROUP_INCL(r_grp%handle, w_grp%npes, &
+                          master_group, group_handle, info)
+      call MPI_COMM_CREATE(r_grp%comm, group_handle, group_comm, info)
+      if (jj == w_grp%mygr) then
+        w_grp%handle = group_handle
+        w_grp%comm = group_comm
+        call MPI_GROUP_RANK(w_grp%handle, w_grp%inode, info)
+      end if
+    end do
+    deallocate (master_group)
 #else
     w_grp%inode = 0
     w_grp%num = 1
@@ -295,25 +294,25 @@ contains
     w_grp%masterid = 0
 
     if (w_grp%inode == w_grp%masterid) then
-       w_grp%master = .true.
+      w_grp%master = .true.
     else
-       w_grp%master = .false.
-    endif
+      w_grp%master = .false.
+    end if
 
     !-------------------------------------------------------------------
     ! Group master print info.
     !
     if (r_grp%master) then
-       write(6,'(/,a)') '  Wavefunction partition information: '
-       write(6,*) ' Distributing ', r_grp%npes, &
-            ' processors among ', w_grp%num, ' groups.'
-       write(6,*) ' Each group contains ', w_grp%npes , ' processors.'
-       write(6,*) ' I am processor rank ', w_grp%inode , &
-            ' in group ', w_grp%mygr
-       write(6,'(a,i4,/)') '  I am master in my group, with master rank ' , &
-            w_grp%inode
-       call flush(6)
-    endif
+      write (6, '(/,a)') '  Wavefunction partition information: '
+      write (6, *) ' Distributing ', r_grp%npes, &
+        ' processors among ', w_grp%num, ' groups.'
+      write (6, *) ' Each group contains ', w_grp%npes, ' processors.'
+      write (6, *) ' I am processor rank ', w_grp%inode, &
+        ' in group ', w_grp%mygr
+      write (6, '(a,i4,/)') '  I am master in my group, with master rank ', &
+        w_grp%inode
+      call flush (6)
+    end if
 
     return
 
@@ -338,7 +337,7 @@ contains
   !                (adjusted so that f_loc does not have padded rows)
   !
   !-------------------------------------------------------------------
-  subroutine Zgather(ndim,f_distr,f_loc)
+  subroutine Zgather(ndim, f_distr, f_loc)
 
     use myconstants
     implicit none
@@ -351,7 +350,7 @@ contains
     integer, intent(in) :: ndim
     ! input (distributed) buffer, local
     ! notice that w_grp%ldn * w_grp%npes >= w_grp%nr
-    SCALAR, intent(in) :: f_distr(ndim*w_grp%ldn,w_grp%npes)
+    SCALAR, intent(in) :: f_distr(ndim*w_grp%ldn, w_grp%npes)
     ! output (gathered) buffer, local
     SCALAR, intent(out) :: f_loc(ndim*w_grp%nr)
 
@@ -360,47 +359,47 @@ contains
     ! communication variables
     integer :: ipe, jpe, info, tag
     ! values of w_grp%offset and w_grp%ncount on all PEs
-    integer, dimension(0:w_grp%npes-1) :: offset, ncount
+    integer, dimension(0:w_grp%npes - 1) :: offset, ncount
     ! dummy buffer
-    integer, dimension(0:w_grp%npes-1) :: idum
+    integer, dimension(0:w_grp%npes - 1) :: idum
     ! mpi_recv status buffer
     integer :: status(MPI_STATUS_SIZE)
 #endif
 
     if (w_grp%npes > 1) then
 #ifdef MPI
-       idum = 0
-       idum(w_grp%inode) = ndim * w_grp%offset + 1
-       call MPI_ALLREDUCE(idum,offset,w_grp%npes,MPI_INTEGER,MPI_SUM, &
-            w_grp%comm,info)
-       idum = 0
-       idum(w_grp%inode) = ndim * w_grp%mydim
-       call MPI_ALLREDUCE(idum,ncount,w_grp%npes,MPI_INTEGER,MPI_SUM, &
-            w_grp%comm,info)
+      idum = 0
+      idum(w_grp%inode) = ndim*w_grp%offset + 1
+      call MPI_ALLREDUCE(idum, offset, w_grp%npes, MPI_INTEGER, MPI_SUM, &
+                         w_grp%comm, info)
+      idum = 0
+      idum(w_grp%inode) = ndim*w_grp%mydim
+      call MPI_ALLREDUCE(idum, ncount, w_grp%npes, MPI_INTEGER, MPI_SUM, &
+                         w_grp%comm, info)
 
-       do jpe = 0, w_grp%npes - 1
-          do ipe = 0, w_grp%npes - 1
-             !tag = ipe + w_grp%npes*jpe 
-             ! The tag will be out of bound for large systems
-             tag = jpe
-             if (jpe == ipe) then
-                if (ipe == w_grp%inode) call Zcopy(ncount(jpe), &
-                     f_distr(1,ipe+1),1,f_loc(offset(jpe)),1)
-             else
-                if (jpe == w_grp%inode) &
-                     call MPI_SEND(f_distr(1,ipe+1),ncount(jpe), &
-                     MPI_DOUBLE_SCALAR,ipe,tag,w_grp%comm,info)
-                if (ipe == w_grp%inode) &
-                     call MPI_RECV(f_loc(offset(jpe)),ncount(jpe), &
-                     MPI_DOUBLE_SCALAR,jpe,tag,w_grp%comm,status,info)
-             endif
-          enddo
-          call MPI_BARRIER(w_grp%comm,info)
-       enddo
+      do jpe = 0, w_grp%npes - 1
+        do ipe = 0, w_grp%npes - 1
+          !tag = ipe + w_grp%npes*jpe
+          ! The tag will be out of bound for large systems
+          tag = jpe
+          if (jpe == ipe) then
+            if (ipe == w_grp%inode) call Zcopy(ncount(jpe), &
+                                               f_distr(1, ipe + 1), 1, f_loc(offset(jpe)), 1)
+          else
+            if (jpe == w_grp%inode) &
+              call MPI_SEND(f_distr(1, ipe + 1), ncount(jpe), &
+                            MPI_DOUBLE_SCALAR, ipe, tag, w_grp%comm, info)
+            if (ipe == w_grp%inode) &
+              call MPI_RECV(f_loc(offset(jpe)), ncount(jpe), &
+                            MPI_DOUBLE_SCALAR, jpe, tag, w_grp%comm, status, info)
+          end if
+        end do
+        call MPI_BARRIER(w_grp%comm, info)
+      end do
 #endif
     else
-       call Zcopy(ndim*w_grp%nr,f_distr,1,f_loc,1)
-    endif
+      call Zcopy(ndim*w_grp%nr, f_distr, 1, f_loc, 1)
+    end if
 
   end subroutine Zgather
   !===================================================================
@@ -411,7 +410,7 @@ contains
   ! as in "gather". This is equivalent to MPI_SCATTERV operation.
   !
   !-------------------------------------------------------------------
-  subroutine Zscatter(ndim,f_distr,f_loc)
+  subroutine Zscatter(ndim, f_distr, f_loc)
 
     use myconstants
     implicit none
@@ -423,7 +422,7 @@ contains
     ! number of left-side rows
     integer, intent(in) :: ndim
     ! input buffer, local
-    SCALAR, intent(out) :: f_distr(ndim*w_grp%ldn,w_grp%npes)
+    SCALAR, intent(out) :: f_distr(ndim*w_grp%ldn, w_grp%npes)
     ! output (distributed) buffer, local
     SCALAR, intent(in) :: f_loc(ndim*w_grp%nr)
 
@@ -432,47 +431,47 @@ contains
     ! communication variables
     integer :: ipe, jpe, info, tag
     ! values of w_grp%offset and w_grp%ncount on all PEs
-    integer, dimension(0:w_grp%npes-1) :: offset, ncount
+    integer, dimension(0:w_grp%npes - 1) :: offset, ncount
     ! dummy buffer
-    integer, dimension(0:w_grp%npes-1) :: idum
+    integer, dimension(0:w_grp%npes - 1) :: idum
     ! mpi_recv status buffer
     integer :: status(MPI_STATUS_SIZE)
 #endif
 
     if (w_grp%npes > 1) then
 #ifdef MPI
-       f_distr = Zzero
-       idum = 0
-       idum(w_grp%inode) = ndim * w_grp%offset + 1
-       call MPI_ALLREDUCE(idum,offset,w_grp%npes,MPI_INTEGER,MPI_SUM, &
-            w_grp%comm,info)
-       idum = 0
-       idum(w_grp%inode) = ndim * w_grp%mydim
-       call MPI_ALLREDUCE(idum,ncount,w_grp%npes,MPI_INTEGER,MPI_SUM, &
-            w_grp%comm,info)
+      f_distr = Zzero
+      idum = 0
+      idum(w_grp%inode) = ndim*w_grp%offset + 1
+      call MPI_ALLREDUCE(idum, offset, w_grp%npes, MPI_INTEGER, MPI_SUM, &
+                         w_grp%comm, info)
+      idum = 0
+      idum(w_grp%inode) = ndim*w_grp%mydim
+      call MPI_ALLREDUCE(idum, ncount, w_grp%npes, MPI_INTEGER, MPI_SUM, &
+                         w_grp%comm, info)
 
-       do jpe = 0, w_grp%npes - 1
-          do ipe = 0, w_grp%npes - 1
-             !tag = ipe + w_grp%npes*jpe
-             tag = jpe
-             if (jpe == ipe) then
-                if (ipe == w_grp%inode) call Zcopy(ncount(jpe), &
-                     f_loc(offset(jpe)),1,f_distr(1,ipe+1),1)
-             else
-                if (jpe == w_grp%inode) &
-                     call MPI_SEND(f_loc(offset(ipe)),ncount(ipe), &
-                     MPI_DOUBLE_SCALAR,ipe,tag,w_grp%comm,info)
-                if (ipe == w_grp%inode) &
-                     call MPI_RECV(f_distr(1,jpe+1),ncount(ipe), &
-                     MPI_DOUBLE_SCALAR,jpe,tag,w_grp%comm,status,info)
-             endif
-          enddo
-          call MPI_BARRIER(w_grp%comm,info)
-       enddo
+      do jpe = 0, w_grp%npes - 1
+        do ipe = 0, w_grp%npes - 1
+          !tag = ipe + w_grp%npes*jpe
+          tag = jpe
+          if (jpe == ipe) then
+            if (ipe == w_grp%inode) call Zcopy(ncount(jpe), &
+                                               f_loc(offset(jpe)), 1, f_distr(1, ipe + 1), 1)
+          else
+            if (jpe == w_grp%inode) &
+              call MPI_SEND(f_loc(offset(ipe)), ncount(ipe), &
+                            MPI_DOUBLE_SCALAR, ipe, tag, w_grp%comm, info)
+            if (ipe == w_grp%inode) &
+              call MPI_RECV(f_distr(1, jpe + 1), ncount(ipe), &
+                            MPI_DOUBLE_SCALAR, jpe, tag, w_grp%comm, status, info)
+          end if
+        end do
+        call MPI_BARRIER(w_grp%comm, info)
+      end do
 #endif
     else
-       call Zcopy(ndim*w_grp%nr,f_loc,1,f_distr,1)
-    endif
+      call Zcopy(ndim*w_grp%nr, f_loc, 1, f_distr, 1)
+    end if
 
   end subroutine Zscatter
 #ifdef CPLX

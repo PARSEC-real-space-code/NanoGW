@@ -167,28 +167,28 @@ module esdf
 
   ! Kind parameters
 
-  integer, private, parameter :: i4b = kind (1), &
-       dp  = kind (1.0d0), sp  = kind (1.0)
+  integer, private, parameter :: i4b = kind(1), &
+                                 dp = kind(1.0d0), sp = kind(1.0)
 
   ! Set the length of the lines
 
-  integer (i4b), public, parameter  :: llength = 80
-  integer (i4b), private, parameter :: nphys = 59
+  integer(i4b), public, parameter  :: llength = 80
+  integer(i4b), private, parameter :: nphys = 59
 
-  integer (i4b), private :: nrecords, nwarns
+  integer(i4b), private :: nrecords, nwarns
 
-  character (len=llength), private, allocatable :: &
-       llist(:),warns(:), tlist(:,:)
+  character(len=llength), private, allocatable :: &
+    llist(:), warns(:), tlist(:, :)
 
   ! The public block data array
 
-  character (len=llength), public, allocatable :: block_data(:)
+  character(len=llength), public, allocatable :: block_data(:)
 
   ! Set the physical units database
 
-  character (len=10), private :: &
-       phy_d(nphys), phy_n(nphys) ! D - dimension n - name
-  real (dp), private :: phy_u(nphys) ! U - unit
+  character(len=10), private :: &
+    phy_d(nphys), phy_n(nphys) ! D - dimension n - name
+  real(dp), private :: phy_u(nphys) ! U - unit
 
   ! We allow case variations in the units. This could be dangerous
   ! (mev --> mev !!) in real life, but not in this restricted field.
@@ -196,367 +196,364 @@ module esdf
   ! m - mass l - length t - time e - energy f - force p - pressure c - charge
   ! d - dipole mom - mom inert ef - efield
 
-  data phy_d(1)       / 'm' /
-  data phy_n(1)       / 'kg' /
-  data phy_u(1)       / 1.0_dp /
-  data phy_d(2)       / 'm' /
-  data phy_n(2)       / 'g' /
-  data phy_u(2)       / 1.0e-3_dp /
-  data phy_d(3)       / 'm' /
-  data phy_n(3)       / 'amu' /
-  data phy_u(3)       / 1.66054e-27_dp /
-  data phy_d(4)       / 'l' /
-  data phy_n(4)       / 'm' /
-  data phy_u(4)       / 1.0_dp /
-  data phy_d(5)       / 'l' /
-  data phy_n(5)       / 'nm' /
-  data phy_u(5)       / 1.0e-9_dp /
-  data phy_d(6)       / 'l' /
-  data phy_n(6)       / 'ang' /
-  data phy_u(6)       / 1.0e-10_dp /
-  data phy_d(7)       / 'l' /
-  data phy_n(7)       / 'bohr' /
-  data phy_u(7)       / 0.529177e-10_dp /
-  data phy_d(8)       / 't' /
-  data phy_n(8)       / 's' /
-  data phy_u(8)       / 1.0_dp /
-  data phy_d(9)       / 't' /
-  data phy_n(9)       / 'ns' /
-  data phy_u(9)       / 1.0e-9_dp /
-  data phy_d(10)      / 't' /
-  data phy_n(10)      / 'ps' /
-  data phy_u(10)      / 1.0e-12_dp /
-  data phy_d(11)      / 't' /
-  data phy_n(11)      / 'fs' /
-  data phy_u(11)      / 1.0e-15_dp /
-  data phy_d(12)      / 'e' /
-  data phy_n(12)      / 'j' /
-  data phy_u(12)      / 1.0_dp /
-  data phy_d(13)      / 'e' /
-  data phy_n(13)      / 'erg' /
-  data phy_u(13)      / 1.0e-7_dp /
-  data phy_d(14)      / 'e' /
-  data phy_n(14)      / 'ev' /
-  data phy_u(14)      / 1.60219e-19_dp /
-  data phy_d(15)      / 'e' /
-  data phy_n(15)      / 'mev' /
-  data phy_u(15)      / 1.60219e-22_dp /
-  data phy_d(16)      / 'e' /
-  data phy_n(16)      / 'ry' /
-  data phy_u(16)      / 2.17991e-18_dp /
-  data phy_d(17)      / 'e' /
-  data phy_n(17)      / 'mry' /
-  data phy_u(17)      / 2.17991e-21_dp /
-  data phy_d(18)      / 'e' /
-  data phy_n(18)      / 'hartree' /
-  data phy_u(18)      / 4.35982e-18_dp /
-  data phy_d(19)      / 'e' /
-  data phy_n(19)      / 'kcal/mol' /
-  data phy_u(19)      / 6.94780e-21_dp /
-  data phy_d(20)      / 'e' /
-  data phy_n(20)      / 'mhartree' /
-  data phy_u(20)      / 4.35982e-21_dp /
-  data phy_d(21)      / 'e' /
-  data phy_n(21)      / 'kj/mol' /
-  data phy_u(21)      / 1.6606e-21_dp /
-  data phy_d(22)      / 'e' /
-  data phy_n(22)      / 'hz' /
-  data phy_u(22)      / 6.6262e-34_dp /
-  data phy_d(23)      / 'e' /
-  data phy_n(23)      / 'thz' /
-  data phy_u(23)      / 6.6262e-22_dp /
-  data phy_d(24)      / 'e' /
-  data phy_n(24)      / 'cm-1' /
-  data phy_u(24)      / 1.986e-23_dp /
-  data phy_d(25)      / 'e' /
-  data phy_n(25)      / 'cm^-1' /
-  data phy_u(25)      / 1.986e-23_dp /
-  data phy_d(26)      / 'e' /
-  data phy_n(26)      / 'cm**-1' /
-  data phy_u(26)      / 1.986e-23_dp /
-  data phy_d(27)      / 'f' /
-  data phy_n(27)      / 'N' /
-  data phy_u(27)      / 1.0_dp /
-  data phy_d(28)      / 'f' /
-  data phy_n(28)      / 'ev/ang' /
-  data phy_u(28)      / 1.60219e-9_dp /
-  data phy_d(29)      / 'f' /
-  data phy_n(29)      / 'ry/bohr' /
-  data phy_u(29)      / 4.11943e-8_dp /
-  data phy_d(30)      / 'l' /
-  data phy_n(30)      / 'cm' /
-  data phy_u(30)      / 1.0e-2_dp /
-  data phy_d(31)      / 'p' /
-  data phy_n(31)      / 'pa' /
-  data phy_u(31)      / 1.0_dp /
-  data phy_d(32)      / 'p' /
-  data phy_n(32)      / 'mpa' /
-  data phy_u(32)      / 1.0e6_dp /
-  data phy_d(33)      / 'p' /
-  data phy_n(33)      / 'gpa' /
-  data phy_u(33)      / 1.0e9_dp /
-  data phy_d(34)      / 'p' /
-  data phy_n(34)      / 'atm' /
-  data phy_u(34)      / 1.01325e5_dp /
-  data phy_d(35)      / 'p' /
-  data phy_n(35)      / 'bar' /
-  data phy_u(35)      / 1.0e5_dp /
-  data phy_d(36)      / 'p' /
-  data phy_n(36)      / 'mbar' /
-  data phy_u(36)      / 1.0e11_dp /
-  data phy_d(37)      / 'p' /
-  data phy_n(37)      / 'ry/bohr**3' /
-  data phy_u(37)      / 1.47108e13_dp /
-  data phy_d(38)      / 'p' /
-  data phy_n(38)      / 'ev/ang**3' /
-  data phy_u(38)      / 1.60219e11_dp /
-  data phy_d(39)      / 'c' /
-  data phy_n(39)      / 'c' /
-  data phy_u(39)      / 1.0_dp /
-  data phy_d(40)      / 'c' /
-  data phy_n(40)      / 'e' /
-  data phy_u(40)      / 1.602177e-19_dp /
-  data phy_d(41)      / 'd' /
-  data phy_n(41)      / 'C*m' /
-  data phy_u(41)      / 1.0_dp /
-  data phy_d(42)      / 'd' /
-  data phy_n(42)      / 'D' /
-  data phy_u(42)      / 3.33564e-30_dp /
-  data phy_d(43)      / 'd' /
-  data phy_n(43)      / 'debye' /
-  data phy_u(43)      / 3.33564e-30_dp /
-  data phy_d(44)      / 'd' /
-  data phy_n(44)      / 'e*bohr' /
-  data phy_u(44)      / 8.47835e-30_dp /
-  data phy_d(45)      / 'd' /
-  data phy_n(45)      / 'e*ang' /
-  data phy_u(45)      / 1.602177e-29_dp /
-  data phy_d(46)      / 'mom' /
-  data phy_n(46)      / 'kg*m**2' /
-  data phy_u(46)      / 1.0_dp /
-  data phy_d(47)      / 'mom' /
-  data phy_n(47)      / 'ry*fs**2' /
-  data phy_u(47)      / 2.1799e-48_dp /
-  data phy_d(48)      / 'ef' /
-  data phy_n(48)      / 'v/m' /
-  data phy_u(48)      / 1.0_dp /
-  data phy_d(49)      / 'ef' /
-  data phy_n(49)      / 'v/nm' /
-  data phy_u(49)      / 1.0e9_dp /
-  data phy_d(50)      / 'ef' /
-  data phy_n(50)      / 'v/ang' /
-  data phy_u(50)      / 1.0e10_dp /
-  data phy_d(51)      / 'ef' /
-  data phy_n(51)      / 'v/bohr' /
-  data phy_u(51)      / 1.8897268e10_dp /
-  data phy_d(52)      / 'ef' /
-  data phy_n(52)      / 'ry/bohr/e' /
-  data phy_u(52)      / 2.5711273e11_dp /
-  data phy_d(53)      / 'ef' /
-  data phy_n(53)      / 'har/bohr/e' /
-  data phy_u(53)      / 5.1422546e11_dp /
-  data phy_d(54)      / 'e' /
-  data phy_n(54)      / 'k' /
-  data phy_u(54)      / 1.38066e-23_dp /
+  data phy_d(1)/'m'/
+  data phy_n(1)/'kg'/
+  data phy_u(1)/1.0_dp/
+  data phy_d(2)/'m'/
+  data phy_n(2)/'g'/
+  data phy_u(2)/1.0e-3_dp/
+  data phy_d(3)/'m'/
+  data phy_n(3)/'amu'/
+  data phy_u(3)/1.66054e-27_dp/
+  data phy_d(4)/'l'/
+  data phy_n(4)/'m'/
+  data phy_u(4)/1.0_dp/
+  data phy_d(5)/'l'/
+  data phy_n(5)/'nm'/
+  data phy_u(5)/1.0e-9_dp/
+  data phy_d(6)/'l'/
+  data phy_n(6)/'ang'/
+  data phy_u(6)/1.0e-10_dp/
+  data phy_d(7)/'l'/
+  data phy_n(7)/'bohr'/
+  data phy_u(7)/0.529177e-10_dp/
+  data phy_d(8)/'t'/
+  data phy_n(8)/'s'/
+  data phy_u(8)/1.0_dp/
+  data phy_d(9)/'t'/
+  data phy_n(9)/'ns'/
+  data phy_u(9)/1.0e-9_dp/
+  data phy_d(10)/'t'/
+  data phy_n(10)/'ps'/
+  data phy_u(10)/1.0e-12_dp/
+  data phy_d(11)/'t'/
+  data phy_n(11)/'fs'/
+  data phy_u(11)/1.0e-15_dp/
+  data phy_d(12)/'e'/
+  data phy_n(12)/'j'/
+  data phy_u(12)/1.0_dp/
+  data phy_d(13)/'e'/
+  data phy_n(13)/'erg'/
+  data phy_u(13)/1.0e-7_dp/
+  data phy_d(14)/'e'/
+  data phy_n(14)/'ev'/
+  data phy_u(14)/1.60219e-19_dp/
+  data phy_d(15)/'e'/
+  data phy_n(15)/'mev'/
+  data phy_u(15)/1.60219e-22_dp/
+  data phy_d(16)/'e'/
+  data phy_n(16)/'ry'/
+  data phy_u(16)/2.17991e-18_dp/
+  data phy_d(17)/'e'/
+  data phy_n(17)/'mry'/
+  data phy_u(17)/2.17991e-21_dp/
+  data phy_d(18)/'e'/
+  data phy_n(18)/'hartree'/
+  data phy_u(18)/4.35982e-18_dp/
+  data phy_d(19)/'e'/
+  data phy_n(19)/'kcal/mol'/
+  data phy_u(19)/6.94780e-21_dp/
+  data phy_d(20)/'e'/
+  data phy_n(20)/'mhartree'/
+  data phy_u(20)/4.35982e-21_dp/
+  data phy_d(21)/'e'/
+  data phy_n(21)/'kj/mol'/
+  data phy_u(21)/1.6606e-21_dp/
+  data phy_d(22)/'e'/
+  data phy_n(22)/'hz'/
+  data phy_u(22)/6.6262e-34_dp/
+  data phy_d(23)/'e'/
+  data phy_n(23)/'thz'/
+  data phy_u(23)/6.6262e-22_dp/
+  data phy_d(24)/'e'/
+  data phy_n(24)/'cm-1'/
+  data phy_u(24)/1.986e-23_dp/
+  data phy_d(25)/'e'/
+  data phy_n(25)/'cm^-1'/
+  data phy_u(25)/1.986e-23_dp/
+  data phy_d(26)/'e'/
+  data phy_n(26)/'cm**-1'/
+  data phy_u(26)/1.986e-23_dp/
+  data phy_d(27)/'f'/
+  data phy_n(27)/'N'/
+  data phy_u(27)/1.0_dp/
+  data phy_d(28)/'f'/
+  data phy_n(28)/'ev/ang'/
+  data phy_u(28)/1.60219e-9_dp/
+  data phy_d(29)/'f'/
+  data phy_n(29)/'ry/bohr'/
+  data phy_u(29)/4.11943e-8_dp/
+  data phy_d(30)/'l'/
+  data phy_n(30)/'cm'/
+  data phy_u(30)/1.0e-2_dp/
+  data phy_d(31)/'p'/
+  data phy_n(31)/'pa'/
+  data phy_u(31)/1.0_dp/
+  data phy_d(32)/'p'/
+  data phy_n(32)/'mpa'/
+  data phy_u(32)/1.0e6_dp/
+  data phy_d(33)/'p'/
+  data phy_n(33)/'gpa'/
+  data phy_u(33)/1.0e9_dp/
+  data phy_d(34)/'p'/
+  data phy_n(34)/'atm'/
+  data phy_u(34)/1.01325e5_dp/
+  data phy_d(35)/'p'/
+  data phy_n(35)/'bar'/
+  data phy_u(35)/1.0e5_dp/
+  data phy_d(36)/'p'/
+  data phy_n(36)/'mbar'/
+  data phy_u(36)/1.0e11_dp/
+  data phy_d(37)/'p'/
+  data phy_n(37)/'ry/bohr**3'/
+  data phy_u(37)/1.47108e13_dp/
+  data phy_d(38)/'p'/
+  data phy_n(38)/'ev/ang**3'/
+  data phy_u(38)/1.60219e11_dp/
+  data phy_d(39)/'c'/
+  data phy_n(39)/'c'/
+  data phy_u(39)/1.0_dp/
+  data phy_d(40)/'c'/
+  data phy_n(40)/'e'/
+  data phy_u(40)/1.602177e-19_dp/
+  data phy_d(41)/'d'/
+  data phy_n(41)/'C*m'/
+  data phy_u(41)/1.0_dp/
+  data phy_d(42)/'d'/
+  data phy_n(42)/'D'/
+  data phy_u(42)/3.33564e-30_dp/
+  data phy_d(43)/'d'/
+  data phy_n(43)/'debye'/
+  data phy_u(43)/3.33564e-30_dp/
+  data phy_d(44)/'d'/
+  data phy_n(44)/'e*bohr'/
+  data phy_u(44)/8.47835e-30_dp/
+  data phy_d(45)/'d'/
+  data phy_n(45)/'e*ang'/
+  data phy_u(45)/1.602177e-29_dp/
+  data phy_d(46)/'mom'/
+  data phy_n(46)/'kg*m**2'/
+  data phy_u(46)/1.0_dp/
+  data phy_d(47)/'mom'/
+  data phy_n(47)/'ry*fs**2'/
+  data phy_u(47)/2.1799e-48_dp/
+  data phy_d(48)/'ef'/
+  data phy_n(48)/'v/m'/
+  data phy_u(48)/1.0_dp/
+  data phy_d(49)/'ef'/
+  data phy_n(49)/'v/nm'/
+  data phy_u(49)/1.0e9_dp/
+  data phy_d(50)/'ef'/
+  data phy_n(50)/'v/ang'/
+  data phy_u(50)/1.0e10_dp/
+  data phy_d(51)/'ef'/
+  data phy_n(51)/'v/bohr'/
+  data phy_u(51)/1.8897268e10_dp/
+  data phy_d(52)/'ef'/
+  data phy_n(52)/'ry/bohr/e'/
+  data phy_u(52)/2.5711273e11_dp/
+  data phy_d(53)/'ef'/
+  data phy_n(53)/'har/bohr/e'/
+  data phy_u(53)/5.1422546e11_dp/
+  data phy_d(54)/'e'/
+  data phy_n(54)/'k'/
+  data phy_u(54)/1.38066e-23_dp/
 
-  data phy_d(55)      / 'mem' /
-  data phy_n(55)      / 'kB' /
-  data phy_u(55)      / 1.0e3_dp /
-  data phy_d(56)      / 'mem' /
-  data phy_n(56)      / 'MB' /
-  data phy_u(56)      / 1.0e6_dp /
-  data phy_d(57)      / 'mem' /
-  data phy_n(57)      / 'GB' /
-  data phy_u(57)      / 1.0e9_dp /
+  data phy_d(55)/'mem'/
+  data phy_n(55)/'kB'/
+  data phy_u(55)/1.0e3_dp/
+  data phy_d(56)/'mem'/
+  data phy_n(56)/'MB'/
+  data phy_u(56)/1.0e6_dp/
+  data phy_d(57)/'mem'/
+  data phy_n(57)/'GB'/
+  data phy_u(57)/1.0e9_dp/
 
 contains
 
-  !   --------------  esdf_init  ---------------------- 
+  !   --------------  esdf_init  ----------------------
 
-  subroutine esdf_init (filename)
+  subroutine esdf_init(filename)
 
-    character (len=*), intent (in) :: filename
+    character(len=*), intent(in) :: filename
 
-  ! Local
+    ! Local
 
-    integer (i4b), parameter :: ncomm = 3, ndiv  = 3
+    integer(i4b), parameter :: ncomm = 3, ndiv = 3
 
-    integer (i4b)       :: unit, ierr, i, j, ic, nt, ndef, nread, &
-         itemp, itemp2
-    character (len=llength) :: cjunk, ctemp
-    character (len=1)   :: comment(ncomm), divide(ndiv)
-    logical             :: inblock ! Integer :: temp1!, index 
-                                 !  djr:  had to change this to get
-                                 !  it to compile under linux.
+    integer(i4b)       :: unit, ierr, i, j, ic, nt, ndef, nread, &
+                          itemp, itemp2
+    character(len=llength) :: cjunk, ctemp
+    character(len=1)   :: comment(ncomm), divide(ndiv)
+    logical             :: inblock ! Integer :: temp1!, index
+    !  djr:  had to change this to get
+    !  it to compile under linux.
 
-  ! Define comment characters
+    ! Define comment characters
 
-    data comment        / '#', ';', '!' /
-    data divide         / ' ', '=', ':' /
+    data comment/'#', ';', '!'/
+    data divide/' ', '=', ':'/
 
-
-  ! "Reduce" the keyword list for comparison
+    ! "Reduce" the keyword list for comparison
 
     do i = 1, numkw
-       ctemp       = kw_label(i)
-       kw_label(i) = esdf_reduce(ctemp)
-    enddo
+      ctemp = kw_label(i)
+      kw_label(i) = esdf_reduce(ctemp)
+    end do
 
-
-  ! Initializing the array kw_index
+    ! Initializing the array kw_index
     kw_index = 1
-         
 
- ! Open the esdf file
+    ! Open the esdf file
 
-    call esdf_file (unit, filename, ierr)
-    cjunk = 'Unable to open main input file "'//trim (filename)// '"'
+    call esdf_file(unit, filename, ierr)
+    cjunk = 'Unable to open main input file "'//trim(filename)//'"'
 
     if (ierr == 1) then
-       write (*,*) 'ESDF WARNING: '//trim (cjunk)// ' - using defaults'
-       nread = 0
+      write (*, *) 'ESDF WARNING: '//trim(cjunk)//' - using defaults'
+      nread = 0
     else
-       nread = huge (1)
-    endif
+      nread = huge(1)
+    end if
 
-  ! Count the number of records (excluding blank lines and commented lines)
+    ! Count the number of records (excluding blank lines and commented lines)
 
     nrecords = 0
 
     do i = 1, nread
-       read (unit, '(a)', end = 10) cjunk
-       do j = 1, ncomm
-          ic = index(cjunk, comment(j))
-          if (ic > 0) cjunk(ic:) = ' '
-       enddo
-       if (len_trim (cjunk) > 0) nrecords = nrecords + 1
-    enddo
+      read (unit, '(a)', end=10) cjunk
+      do j = 1, ncomm
+        ic = index(cjunk, comment(j))
+        if (ic > 0) cjunk(ic:) = ' '
+      end do
+      if (len_trim(cjunk) > 0) nrecords = nrecords + 1
+    end do
 10  continue
     rewind (unit)
 
-  ! Allocate the array to hold the records and tokens
+    ! Allocate the array to hold the records and tokens
 
-    allocate(llist(nrecords), block_data(nrecords), &
-         tlist(llength,nrecords), warns(nrecords))
+    allocate (llist(nrecords), block_data(nrecords), &
+              tlist(llength, nrecords), warns(nrecords))
 
-  ! Set the number of warnings to zero
+    ! Set the number of warnings to zero
 
     nwarns = 0
-    warns  = ' '
+    warns = ' '
 
-  ! Read in the records
+    ! Read in the records
 
     nrecords = 0
     do i = 1, nread
-       read (unit, '(a)', end = 11) cjunk
-       do j = 1, ncomm
-          ic = index(cjunk, comment(j))
-          if (ic > 0) cjunk(ic:) = ' '
-       enddo
-       if (len_trim (cjunk) > 0) then
-          nrecords = nrecords + 1
-          llist(nrecords) = adjustl(cjunk)
-       endif
-    enddo
+      read (unit, '(a)', end=11) cjunk
+      do j = 1, ncomm
+        ic = index(cjunk, comment(j))
+        if (ic > 0) cjunk(ic:) = ' '
+      end do
+      if (len_trim(cjunk) > 0) then
+        nrecords = nrecords + 1
+        llist(nrecords) = adjustl(cjunk)
+      end if
+    end do
 11  continue
     close (unit)
 
- ! Now read in the tokens from llist
+    ! Now read in the tokens from llist
 
     tlist = ' '
 
     do i = 1, nrecords
-       ctemp = llist(i)
-       nt    = 0
-       do while (len_trim (ctemp) > 0)
+      ctemp = llist(i)
+      nt = 0
+      do while (len_trim(ctemp) > 0)
 
-  ! Apparently this a hack to make it compile under linux
-  !        temp1=index(ctemp,divide(1))
-  !        ic = minval(temp1)
-  !        ic = minval(index(ctemp,divide),mask=index(ctemp,divide)>0)
+        ! Apparently this a hack to make it compile under linux
+        !        temp1=index(ctemp,divide(1))
+        !        ic = minval(temp1)
+        !        ic = minval(index(ctemp,divide),mask=index(ctemp,divide)>0)
 
-          ic = len_trim (ctemp) + 1
-          do itemp = 1, size(divide)
-             itemp2 = index(ctemp, divide(itemp))
-             if (itemp2 == 0) itemp2 = len_trim (ctemp) + 1
-             if (itemp2 < ic) ic = itemp2
-          enddo
-          if (ic > 1) then
-             nt = nt + 1
-             tlist(nt,i) = adjustl(ctemp(:ic-1))
-          endif
-          ctemp = adjustl(ctemp(ic+1:))
-       enddo
-    enddo
+        ic = len_trim(ctemp) + 1
+        do itemp = 1, size(divide)
+          itemp2 = index(ctemp, divide(itemp))
+          if (itemp2 == 0) itemp2 = len_trim(ctemp) + 1
+          if (itemp2 < ic) ic = itemp2
+        end do
+        if (ic > 1) then
+          nt = nt + 1
+          tlist(nt, i) = adjustl(ctemp(:ic - 1))
+        end if
+        ctemp = adjustl(ctemp(ic + 1:))
+      end do
+    end do
 
-  ! Check if any of the "labels" in the input file are unrecognised
+    ! Check if any of the "labels" in the input file are unrecognised
 
     inblock = .false.
     do i = 1, nrecords
 
-  ! Check if we are in a block
+      ! Check if we are in a block
 
-       if (esdf_reduce(tlist(1,i)) == 'begin') then
-          inblock = .true.
+      if (esdf_reduce(tlist(1, i)) == 'begin') then
+        inblock = .true.
 
-  ! Check if block label is recognised
+        ! Check if block label is recognised
 
-          if ((count(esdf_reduce(tlist(2,i)) == kw_label) == 0)) then
-             ctemp = 'Label "'//trim (esdf_reduce(tlist(2,i)))// &
+        if ((count(esdf_reduce(tlist(2, i)) == kw_label) == 0)) then
+          ctemp = 'Label "'//trim(esdf_reduce(tlist(2, i)))// &
                   '" not in keyword list'
-             if (count(ctemp == warns) == 0) call esdf_warn (ctemp)
-          endif
+          if (count(ctemp == warns) == 0) call esdf_warn(ctemp)
+        end if
 
-  ! Check if "label" is multiply defined in the input file
+        ! Check if "label" is multiply defined in the input file
 
-          ndef = 0
-          do j = 1, nrecords
-             if (esdf_reduce(tlist(2,i)) == &
-                  esdf_reduce(tlist(2,j))) ndef = ndef + 1
-          enddo
-          ctemp = 'Label "'//trim (esdf_reduce(tlist(2,i)))// &
-               '" is multiply defined in the input file. '
-          if ((ndef > 2) .and. &
-               (count(ctemp == warns) == 0)) call esdf_warn (ctemp)
-       endif
+        ndef = 0
+        do j = 1, nrecords
+          if (esdf_reduce(tlist(2, i)) == &
+              esdf_reduce(tlist(2, j))) ndef = ndef + 1
+        end do
+        ctemp = 'Label "'//trim(esdf_reduce(tlist(2, i)))// &
+                '" is multiply defined in the input file. '
+        if ((ndef > 2) .and. &
+            (count(ctemp == warns) == 0)) call esdf_warn(ctemp)
+      end if
 
-  ! Check it is in the list of keywords
+      ! Check it is in the list of keywords
 
-       if ((count(esdf_reduce(tlist(1,i)) == kw_label) == &
-            0) .and. (.not. inblock)) then 
-          ctemp = 'Label "'//trim (esdf_reduce(tlist(1,i)))// &
-               '" not in keyword list'
-          if (count(ctemp == warns) == 0) call esdf_warn (ctemp)
-       endif
-       if (.not. inblock) then
+      if ((count(esdf_reduce(tlist(1, i)) == kw_label) == &
+           0) .and. (.not. inblock)) then
+        ctemp = 'Label "'//trim(esdf_reduce(tlist(1, i)))// &
+                '" not in keyword list'
+        if (count(ctemp == warns) == 0) call esdf_warn(ctemp)
+      end if
+      if (.not. inblock) then
 
-  ! Check if "label" is multiply defined in the input file
+        ! Check if "label" is multiply defined in the input file
 
-          ndef = 0
-          do j = 1, nrecords
-             if (esdf_reduce(tlist(1,i)) == esdf_reduce(tlist(1,j))) &
-                  ndef = ndef + 1
-          enddo
-          ctemp = 'Label "'//trim (esdf_reduce(tlist(1,i)))// &
-               '" is multiply defined in the input file. '
-          if ((ndef > 1) .and. (count(ctemp == warns) == 0)) &
-               call esdf_warn (ctemp)
-       endif
+        ndef = 0
+        do j = 1, nrecords
+          if (esdf_reduce(tlist(1, i)) == esdf_reduce(tlist(1, j))) &
+            ndef = ndef + 1
+        end do
+        ctemp = 'Label "'//trim(esdf_reduce(tlist(1, i)))// &
+                '" is multiply defined in the input file. '
+        if ((ndef > 1) .and. (count(ctemp == warns) == 0)) &
+          call esdf_warn(ctemp)
+      end if
 
-  ! Check if we have left a block
+      ! Check if we have left a block
 
-       if (esdf_reduce(tlist(1,i)) == 'end') inblock = .false.
+      if (esdf_reduce(tlist(1, i)) == 'end') inblock = .false.
 
-    enddo
+    end do
 
     return
   end subroutine esdf_init
 
-  !   --------------  esdf_string  ---------------------- 
+  !   --------------  esdf_string  ----------------------
 
   ! Return the string attached to the "label"
 
-  function esdf_string (label, default)
+  function esdf_string(label, default)
 
     character(len=*), intent(in) :: label, default
     character(len=llength) :: esdf_string
@@ -566,470 +563,470 @@ contains
 
     ! Check "label" is defined
 
-    call esdf_lablchk (label, 'T',kw_number)
+    call esdf_lablchk(label, 'T', kw_number)
 
     ! Set to default
 
     esdf_string = default
 
     do i = kw_index(kw_number), nrecords
-  ! Search in the first token for "label"
-  ! the first instance is returned
-       if (esdf_reduce(tlist(1,i)) == esdf_reduce(label)) then
-          esdf_string = llist(i)(index(llist(i),trim(tlist(2,i))):)
-          kw_index(kw_number) = i+1
-          exit
-       endif
+      ! Search in the first token for "label"
+      ! the first instance is returned
+      if (esdf_reduce(tlist(1, i)) == esdf_reduce(label)) then
+        esdf_string = llist(i) (index(llist(i), trim(tlist(2, i))):)
+        kw_index(kw_number) = i + 1
+        exit
+      end if
 
-    enddo
+    end do
 
     return
   end function esdf_string
 
-  !   --------------  esdf_integer  ---------------------- 
+  !   --------------  esdf_integer  ----------------------
 
   ! Return the integer attached to the "label"
 
-  function esdf_integer (label, default)
+  function esdf_integer(label, default)
 
     integer(i4b), intent(in)     :: default
     character(len=*), intent(in) :: label
     integer(i4b)      :: esdf_integer
-  ! Local
+    ! Local
     integer(i4b)       :: i
     character(len=llength) :: ctemp
     integer(i4b)      :: kw_number
 
-  ! Check "label" is defined
-    call esdf_lablchk (label, 'I',kw_number)
-        
-  ! Set to default
+    ! Check "label" is defined
+    call esdf_lablchk(label, 'I', kw_number)
+
+    ! Set to default
     esdf_integer = default
 
-    do i = kw_index(kw_number) , nrecords
-  ! Search in the first token for "label"
-  ! the first instance is returned
-       if (esdf_reduce(tlist(1,i)) == esdf_reduce(label)) then
-          read (tlist(2,i), *, err = 10) esdf_integer
-          kw_index(kw_number) = i+1
-          exit
-       endif
-    enddo
+    do i = kw_index(kw_number), nrecords
+      ! Search in the first token for "label"
+      ! the first instance is returned
+      if (esdf_reduce(tlist(1, i)) == esdf_reduce(label)) then
+        read (tlist(2, i), *, err=10) esdf_integer
+        kw_index(kw_number) = i + 1
+        exit
+      end if
+    end do
     return
 
 10  continue
-    ctemp = 'Unable to parse "'//trim (esdf_reduce(label))// &
-         '" in esdf_integer'
-    call esdf_die (ctemp)
+    ctemp = 'Unable to parse "'//trim(esdf_reduce(label))// &
+            '" in esdf_integer'
+    call esdf_die(ctemp)
 
     return
   end function esdf_integer
 
-  !   --------------  esdf_single  ---------------------- 
+  !   --------------  esdf_single  ----------------------
 
   ! Return the single precisioned value attached to the "label"
 
-  function esdf_single (label, default)
+  function esdf_single(label, default)
 
     real(sp), intent(in) :: default
     character(len=*), intent(in) :: label
     real(sp)          :: esdf_single
-  ! Local
+    ! Local
     integer(i4b)       :: i
     character(len=llength) :: ctemp
     integer(i4b)      :: kw_number
 
-  ! Check "label" is defined
+    ! Check "label" is defined
 
-    call esdf_lablchk (label, 'S',kw_number)
+    call esdf_lablchk(label, 'S', kw_number)
 
-  ! Set to default
+    ! Set to default
 
     esdf_single = default
 
     do i = kw_index(kw_number), nrecords
-  ! Search in the first token for "label"
-  ! the first instance is returned
-       if (esdf_reduce(tlist(1,i)) == esdf_reduce(label)) then
-          read (tlist(2,i), *, err = 10) esdf_single
-          kw_index(kw_number) = i+1
-          exit
-       endif
-    enddo
+      ! Search in the first token for "label"
+      ! the first instance is returned
+      if (esdf_reduce(tlist(1, i)) == esdf_reduce(label)) then
+        read (tlist(2, i), *, err=10) esdf_single
+        kw_index(kw_number) = i + 1
+        exit
+      end if
+    end do
     return
 
 10  continue
-    ctemp = 'Unable to parse "'//trim (esdf_reduce(label))// &
-                '" in esdf_single'
-    call esdf_die (ctemp)
+    ctemp = 'Unable to parse "'//trim(esdf_reduce(label))// &
+            '" in esdf_single'
+    call esdf_die(ctemp)
 
     return
   end function esdf_single
 
-  !   --------------  esdf_double  ---------------------- 
+  !   --------------  esdf_double  ----------------------
 
   ! Return the double precisioned value attached to the "label"
 
-  function esdf_double (label, default)
+  function esdf_double(label, default)
 
     real(dp), intent(in) :: default
     character(len=*), intent(in) :: label
     real(dp)          :: esdf_double
-  ! Local
+    ! Local
     integer(i4b)       :: i
     character(len=llength) :: ctemp
     integer(i4b)      :: kw_number
 
-  ! Check "label" is defined
+    ! Check "label" is defined
 
-    call esdf_lablchk (label, 'D',kw_number)
+    call esdf_lablchk(label, 'D', kw_number)
 
-  ! Set to default
+    ! Set to default
 
     esdf_double = default
 
     do i = kw_index(kw_number), nrecords
-  ! Search in the first token for "label"
-  ! the first instance is returned
-       if (esdf_reduce(tlist(1,i)) == esdf_reduce(label)) then
-          read (tlist(2,i), *, err = 10) esdf_double
-          kw_index(kw_number) = i+1
-          exit
-       endif
-    enddo
+      ! Search in the first token for "label"
+      ! the first instance is returned
+      if (esdf_reduce(tlist(1, i)) == esdf_reduce(label)) then
+        read (tlist(2, i), *, err=10) esdf_double
+        kw_index(kw_number) = i + 1
+        exit
+      end if
+    end do
 
     return
 
 10  continue
     esdf_double = default
-    ctemp       = 'Unable to parse "'//trim (esdf_reduce(label))// &
-                      '" in esdf_double'
-    call esdf_die (ctemp)
+    ctemp = 'Unable to parse "'//trim(esdf_reduce(label))// &
+            '" in esdf_double'
+    call esdf_die(ctemp)
 
     return
   end function esdf_double
 
-  !   --------------  esdf_physical  ---------------------- 
+  !   --------------  esdf_physical  ----------------------
 
   ! Return the double precisioned physical value attached to the "label"
   ! units converted to "dunit"
 
-  function esdf_physical (label, default, dunit)
+  function esdf_physical(label, default, dunit)
 
     real(dp), intent(in) :: default
     character(len=*), intent(in) :: label, dunit
     real(dp)          :: esdf_physical
-  ! Local
+    ! Local
     integer(i4b)       :: i
     character(len=llength) :: ctemp, iunit
     integer(i4b)      :: kw_number
 
-  ! Check "label" is defined
+    ! Check "label" is defined
 
-    call esdf_lablchk (label, 'P',kw_number)
+    call esdf_lablchk(label, 'P', kw_number)
 
-  ! Set to default
+    ! Set to default
 
     esdf_physical = default
 
     do i = kw_index(kw_number), nrecords
 
-  ! Search in the first token for "label"
-  ! the first instance is returned
+      ! Search in the first token for "label"
+      ! the first instance is returned
 
-       if (esdf_reduce(tlist(1,i)) == esdf_reduce(label)) then
-          read (tlist(2,i), *, err = 10) esdf_physical
-          iunit = dunit//repeat(' ', llength - len(dunit))
-          read (tlist(3,i), *, err = 10, end = 13) iunit
-          esdf_physical = esdf_convfac(iunit,dunit) * esdf_physical
-          kw_index(kw_number) = i+1
-          exit
-       endif
-    enddo
+      if (esdf_reduce(tlist(1, i)) == esdf_reduce(label)) then
+        read (tlist(2, i), *, err=10) esdf_physical
+        iunit = dunit//repeat(' ', llength - len(dunit))
+        read (tlist(3, i), *, err=10, end=13) iunit
+        esdf_physical = esdf_convfac(iunit, dunit)*esdf_physical
+        kw_index(kw_number) = i + 1
+        exit
+      end if
+    end do
     return
 13  continue
     iunit = dunit//repeat(' ', llength - len(dunit))
-    esdf_physical = esdf_convfac(iunit,dunit) * esdf_physical
-    kw_index(kw_number) = i+1
+    esdf_physical = esdf_convfac(iunit, dunit)*esdf_physical
+    kw_index(kw_number) = i + 1
 
     return
 
 10  continue
     esdf_physical = default
-    ctemp = 'Unable to parse "'//trim (esdf_reduce(label))// &
-         '" in esdf_physical'
-    call esdf_die (ctemp)
+    ctemp = 'Unable to parse "'//trim(esdf_reduce(label))// &
+            '" in esdf_physical'
+    call esdf_die(ctemp)
 
     return
   end function esdf_physical
 
-  !   --------------  esdf_defined  ---------------------- 
+  !   --------------  esdf_defined  ----------------------
 
   ! Is the "label" defined in the input file
 
-  function esdf_defined (label)
+  function esdf_defined(label)
 
     character(len=*), intent(in) :: label
     logical            :: esdf_defined
-  ! Local
+    ! Local
     integer(i4b)      :: i
     integer(i4b)      :: kw_number
 
-  ! Check "label" is defined
-    call esdf_lablchk (label, 'E',kw_number)       
+    ! Check "label" is defined
+    call esdf_lablchk(label, 'E', kw_number)
 
-  ! Set to default
+    ! Set to default
     esdf_defined = .false.
 
     do i = kw_index(kw_number), nrecords
-  ! Search in the first token for "label"
-  ! the first instance is returned
-       if (esdf_reduce(tlist(1,i)) == esdf_reduce(label)) then
-          esdf_defined = .true.
-          kw_index(kw_number) = i+1
-          exit
-       endif
+      ! Search in the first token for "label"
+      ! the first instance is returned
+      if (esdf_reduce(tlist(1, i)) == esdf_reduce(label)) then
+        esdf_defined = .true.
+        kw_index(kw_number) = i + 1
+        exit
+      end if
 
-    enddo
+    end do
 
     return
   end function esdf_defined
 
-  !   --------------  esdf_boolean  ---------------------- 
+  !   --------------  esdf_boolean  ----------------------
 
   ! Is the "label" defined in the input file
 
-  function esdf_boolean (label, default)
+  function esdf_boolean(label, default)
 
     character(len=*), intent(in) :: label
     logical, intent(in) :: default
     logical            :: esdf_boolean
-  ! Local
+    ! Local
     integer(i4b)       :: i
     character(len=llength) :: positive(3), negative(3)
-    data positive       / 'yes', 'true', 't' /
-    data negative       / 'no', 'false', 'f' /
+    data positive/'yes', 'true', 't'/
+    data negative/'no', 'false', 'f'/
     integer(i4b)      :: kw_number
 
-  ! Check "label" is defined
+    ! Check "label" is defined
 
-    call esdf_lablchk (label, 'L',kw_number)
+    call esdf_lablchk(label, 'L', kw_number)
 
-  ! Set to default
+    ! Set to default
     esdf_boolean = default
 
     do i = kw_index(kw_number), nrecords
-  ! Search in the first token for "label"
-  ! the first instance is returned
-       if (esdf_reduce(tlist(1,i)) == esdf_reduce(label)) then
-          kw_index(kw_number) = i+1
-          if (len_trim (tlist(2,i)) == 0) then
-             esdf_boolean = .true.
-             exit
-          endif
-          if (any(index(positive, esdf_reduce(tlist(2,i))) > 0)) then
-             esdf_boolean = .true.
-             exit
-          endif
-          if (any(index(negative, esdf_reduce(tlist(2,i))) > 0)) then
-             esdf_boolean = .false.
-             exit
-          endif
-          call esdf_die ('Unable to parse boolean value')
+      ! Search in the first token for "label"
+      ! the first instance is returned
+      if (esdf_reduce(tlist(1, i)) == esdf_reduce(label)) then
+        kw_index(kw_number) = i + 1
+        if (len_trim(tlist(2, i)) == 0) then
+          esdf_boolean = .true.
+          exit
+        end if
+        if (any(index(positive, esdf_reduce(tlist(2, i))) > 0)) then
+          esdf_boolean = .true.
+          exit
+        end if
+        if (any(index(negative, esdf_reduce(tlist(2, i))) > 0)) then
+          esdf_boolean = .false.
+          exit
+        end if
+        call esdf_die('Unable to parse boolean value')
 
-       endif
+      end if
 
-    enddo
+    end do
 
     return
   end function esdf_boolean
 
-  !   --------------  esdf_block  ---------------------- 
-  function esdf_block (label, nlines)
+  !   --------------  esdf_block  ----------------------
+  function esdf_block(label, nlines)
 
     character(len=*), intent(in) :: label
     integer(i4b), intent(out)    :: nlines
     logical            :: esdf_block
-  ! Local
+    ! Local
     integer(i4b)       :: i
     character(len=llength) :: ctemp
     integer(i4b)      :: kw_number
 
-  ! Check "label" is defined
-    call esdf_lablchk (label, 'B',kw_number)
+    ! Check "label" is defined
+    call esdf_lablchk(label, 'B', kw_number)
 
-    ctemp = 'Block "'//trim (esdf_reduce(label))// &
-         '" not closed correctly '
+    ctemp = 'Block "'//trim(esdf_reduce(label))// &
+            '" not closed correctly '
 
     esdf_block = .false.
 
     nlines = 0
 
     do i = kw_index(kw_number), nrecords
-       if ((esdf_reduce(tlist(1,i)) == esdf_reduce('begin')) .and. &
-            (esdf_reduce(tlist(2,i)) == esdf_reduce(label))) then
-          esdf_block = .true.
-          kw_index(kw_number) = i+1
-          do while (esdf_reduce(tlist(1,i+nlines+1)) /= &
-               esdf_reduce('end'))
-             nlines = nlines + 1
-             if (nlines + i > nrecords) call esdf_die (ctemp)
-             block_data(nlines) = llist(i+nlines)
-          enddo
-          if (esdf_reduce(tlist(2,i+nlines+1)) /= &
-               esdf_reduce(label)) call esdf_die (ctemp)
-          exit
-       endif
-    enddo
+      if ((esdf_reduce(tlist(1, i)) == esdf_reduce('begin')) .and. &
+          (esdf_reduce(tlist(2, i)) == esdf_reduce(label))) then
+        esdf_block = .true.
+        kw_index(kw_number) = i + 1
+        do while (esdf_reduce(tlist(1, i + nlines + 1)) /= &
+                  esdf_reduce('end'))
+          nlines = nlines + 1
+          if (nlines + i > nrecords) call esdf_die(ctemp)
+          block_data(nlines) = llist(i + nlines)
+        end do
+        if (esdf_reduce(tlist(2, i + nlines + 1)) /= &
+            esdf_reduce(label)) call esdf_die(ctemp)
+        exit
+      end if
+    end do
 
     return
   end function esdf_block
 
-  !   --------------  esdf_reduce  ---------------------- 
+  !   --------------  esdf_reduce  ----------------------
 
   ! Reduce the string to lower case and remove punctuation
 
-  function esdf_reduce (string)
+  function esdf_reduce(string)
 
     character(len=*), intent(in) :: string
     character(len=llength) :: esdf_reduce
-  ! Local
+    ! Local
     integer(i4b), parameter :: npunct = 2
     integer(i4b)       :: ia, iz, ishift, ic, i, ln
     character(len=llength) :: ctemp
     character(len=1)   :: punct(npunct)
     logical             :: keep_going
 
-  ! Define the punctuation to be removed
-    data punct          / '.', '-' /
+    ! Define the punctuation to be removed
+    data punct/'.', '-'/
 
-  ! Initialise system dependant bounds in collating sequence
+    ! Initialise system dependant bounds in collating sequence
 
-    ia     = ichar('A')
-    iz     = ichar('Z')
+    ia = ichar('A')
+    iz = ichar('Z')
     ishift = ichar('a') - ia
 
-  ! Initialise output
+    ! Initialise output
 
     ln = len(string)
 
     if (ln < llength) then
-       esdf_reduce(1:ln)  = string(1:ln)
-       esdf_reduce(ln+1:) = ' '
+      esdf_reduce(1:ln) = string(1:ln)
+      esdf_reduce(ln + 1:) = ' '
     else
-       esdf_reduce(1:llength) = string(1:llength)
-    endif
+      esdf_reduce(1:llength) = string(1:llength)
+    end if
 
-  ! Drop all upper case characters to lower case
+    ! Drop all upper case characters to lower case
 
     do i = 1, llength
-       ic = ichar(esdf_reduce(i:i))
-       if ((ic >= ia) .and. (ic <= iz)) &
-            esdf_reduce(i:i) = char(ishift + ic)
-    enddo
+      ic = ichar(esdf_reduce(i:i))
+      if ((ic >= ia) .and. (ic <= iz)) &
+        esdf_reduce(i:i) = char(ishift + ic)
+    end do
 
-  ! Now remove punctuation
+    ! Now remove punctuation
 
     do i = 1, npunct
-       keep_going = .true.
-       do while (keep_going)
-          ic = index(esdf_reduce, punct(i))
-          if (ic > 0) then
-             ctemp = esdf_reduce
-             esdf_reduce(ic:) = ctemp(ic+1:)
-          else
-             keep_going = .false.
-          endif
-       enddo
-    enddo
+      keep_going = .true.
+      do while (keep_going)
+        ic = index(esdf_reduce, punct(i))
+        if (ic > 0) then
+          ctemp = esdf_reduce
+          esdf_reduce(ic:) = ctemp(ic + 1:)
+        else
+          keep_going = .false.
+        end if
+      end do
+    end do
 
-    esdf_reduce = trim (adjustl(esdf_reduce))
+    esdf_reduce = trim(adjustl(esdf_reduce))
 
     return
   end function esdf_reduce
 
-  !   --------------  esdf_convfac  ---------------------- 
+  !   --------------  esdf_convfac  ----------------------
 
   ! Find the conversion factor between physical units
 
-  function esdf_convfac (from, to)
+  function esdf_convfac(from, to)
 
     character(len=*), intent(in) :: from, to
     real(dp)          :: esdf_convfac
-  ! Local
+    ! Local
     integer(i4b)       :: i, ifrom, ito
     character(len=llength) :: ctemp
 
-  ! Find the index numbers of the from and to units
+    ! Find the index numbers of the from and to units
 
     ifrom = 0
-    ito   = 0
+    ito = 0
     do i = 1, nphys
-       if (esdf_reduce(from) == esdf_reduce(phy_n(i))) ifrom = i
-       if (esdf_reduce(to) == esdf_reduce(phy_n(i))) ito = i
-    enddo
+      if (esdf_reduce(from) == esdf_reduce(phy_n(i))) ifrom = i
+      if (esdf_reduce(to) == esdf_reduce(phy_n(i))) ito = i
+    end do
 
-  ! Check that the units were recognised
+    ! Check that the units were recognised
 
     if (ifrom == 0) then
-       ctemp = 'Units not recognised in input file : '// &
-            trim (esdf_reduce(from))
-       call esdf_die (ctemp)
-    endif
+      ctemp = 'Units not recognised in input file : '// &
+              trim(esdf_reduce(from))
+      call esdf_die(ctemp)
+    end if
 
     if (ito == 0) then
-       ctemp = 'Units not recognised in Program : '// &
-            trim (esdf_reduce(to))
-       call esdf_die (ctemp)
-    endif
+      ctemp = 'Units not recognised in Program : '// &
+              trim(esdf_reduce(to))
+      call esdf_die(ctemp)
+    end if
 
-  ! Check that from and to are of the same dimensions
+    ! Check that from and to are of the same dimensions
 
     if (phy_d(ifrom) /= phy_d(ito)) then
-       ctemp = 'Dimensions Do not match : '// &
-            trim (esdf_reduce(from))//' vs '// trim (esdf_reduce(to))
-       call esdf_die (ctemp)
-    endif
+      ctemp = 'Dimensions Do not match : '// &
+              trim(esdf_reduce(from))//' vs '//trim(esdf_reduce(to))
+      call esdf_die(ctemp)
+    end if
 
-  ! Set the conversion factor
+    ! Set the conversion factor
 
-    esdf_convfac = phy_u(ifrom) / phy_u(ito)
+    esdf_convfac = phy_u(ifrom)/phy_u(ito)
 
     return
   end function esdf_convfac
 
-  !   --------------  esdf_unit  ---------------------- 
+  !   --------------  esdf_unit  ----------------------
 
   ! Find an unused i/o unit
 
-  function esdf_unit (ierr)
+  function esdf_unit(ierr)
 
     integer(i4b), intent(out) :: ierr
     integer(i4b)      :: esdf_unit
-  ! Local
+    ! Local
     logical            :: op
 
     ierr = 0
     do esdf_unit = 10, 99
-       inquire (unit = esdf_unit, opened = op, err = 10)
-       if (.not. op) return
-    enddo
-    call esdf_warn ('Unable to find a free i/o unit using esdf_u'// 'nit')
+      inquire (unit=esdf_unit, opened=op, err=10)
+      if (.not. op) return
+    end do
+    call esdf_warn('Unable to find a free i/o unit using esdf_u'//'nit')
     ierr = 1
 
     return
 
 10  continue
-    call esdf_die ('Error opening files by esdf_unit')
+    call esdf_die('Error opening files by esdf_unit')
 
     return
   end function esdf_unit
 
-  !   --------------  esdf_file  ---------------------- 
+  !   --------------  esdf_file  ----------------------
 
   ! Open an old file
 
-  subroutine esdf_file (unit, filename, ierr)
+  subroutine esdf_file(unit, filename, ierr)
 
     character(len=*), intent(in) :: filename
     integer(i4b), intent(out)    :: unit, ierr
@@ -1037,10 +1034,10 @@ contains
 
     unit = esdf_unit(ierr)
     if (ierr > 0) return
-    inquire (file = trim (filename), exist = ex, err = 10)
+    inquire (file=trim(filename), exist=ex, err=10)
     if (.not. ex) goto 10
-    open (unit = unit, file = trim (filename), form = 'formatted', &
-         status = 'old', err = 10)
+    open (unit=unit, file=trim(filename), form='formatted', &
+          status='old', err=10)
 
     return
 
@@ -1050,154 +1047,154 @@ contains
     return
   end subroutine esdf_file
 
-  subroutine esdf_lablchk (string, typ,index)
-      
+  subroutine esdf_lablchk(string, typ, index)
+
     character(len=*), intent(in) :: string
     character(len=1), intent(in) :: typ
-  ! Local
+    ! Local
     character(len=llength) :: ctemp
     character(len=1)   :: tp
-    integer(i4b)       :: i,index
+    integer(i4b)       :: i, index
 
-  ! Check if label is recognised
-      
-    i     = count(esdf_reduce(string) == kw_label)
-    ctemp = 'Label "'//trim (esdf_reduce(string))// &
-         '" not recognised in keyword list'
-    if (i == 0) call esdf_die (ctemp)
-    ctemp = 'Label "'//trim (esdf_reduce(string))// &
-         '" is multiply defined'
-    if (i > 1) call esdf_die (ctemp)
-    ctemp = 'Label "'//trim (esdf_reduce(string))// &
-         '" has been used with the wrong type'
-    tp    = ' '
-    i     = 0
+    ! Check if label is recognised
+
+    i = count(esdf_reduce(string) == kw_label)
+    ctemp = 'Label "'//trim(esdf_reduce(string))// &
+            '" not recognised in keyword list'
+    if (i == 0) call esdf_die(ctemp)
+    ctemp = 'Label "'//trim(esdf_reduce(string))// &
+            '" is multiply defined'
+    if (i > 1) call esdf_die(ctemp)
+    ctemp = 'Label "'//trim(esdf_reduce(string))// &
+            '" has been used with the wrong type'
+    tp = ' '
+    i = 0
     do while (tp == ' ')
-       i = i + 1
-       if (esdf_reduce(string) == kw_label(i)) tp = kw_typ(i)
-    enddo
+      i = i + 1
+      if (esdf_reduce(string) == kw_label(i)) tp = kw_typ(i)
+    end do
     index = i
-    if (typ /= tp) call esdf_die (ctemp)
-      
+    if (typ /= tp) call esdf_die(ctemp)
+
     return
   end subroutine esdf_lablchk
 
-  subroutine esdf_parse_block(blockword,nlines,ndata,maxdata,data)
+  subroutine esdf_parse_block(blockword, nlines, ndata, maxdata, data)
 
     character(len=*), intent(in) :: blockword
     integer, intent(in) :: nlines, maxdata
     integer, intent(inout) :: ndata
     integer, intent(inout) :: data(maxdata)
-  ! Local
+    ! Local
     integer :: ii, jj, ll, nmin, nmax, ierr
-    character (len=80) :: keyword, line
-    character (len=800) :: lastwords
+    character(len=80) :: keyword, line
+    character(len=800) :: lastwords
 
     ierr = 0
     ii = ndata
     do ll = 1, nlines
-       line = block_data(ll)
-       keyword = esdf_reduce(line(1:scan(line," ")-1))
-       if (keyword == 'range') then
-          line = adjustl(line(scan(line," ")+1:80))
-          read(line,*,iostat=ierr) nmin, nmax
-          ii = ndata + nmax - nmin + 1
-          if (ii > maxdata) then
-             ierr = -10
-             exit
-          endif
-          do jj = 0, nmax - nmin
-             data(jj+ndata+1) = jj + nmin
-          enddo
-       else
-          ii = ii + 1
-          if (ii > maxdata) then
-             ierr = -10
-             exit
-          endif
-          read(line,*,iostat=ierr) data(ii)
-       endif
-       ndata = ii
-    enddo
+      line = block_data(ll)
+      keyword = esdf_reduce(line(1:scan(line, " ") - 1))
+      if (keyword == 'range') then
+        line = adjustl(line(scan(line, " ") + 1:80))
+        read (line, *, iostat=ierr) nmin, nmax
+        ii = ndata + nmax - nmin + 1
+        if (ii > maxdata) then
+          ierr = -10
+          exit
+        end if
+        do jj = 0, nmax - nmin
+          data(jj + ndata + 1) = jj + nmin
+        end do
+      else
+        ii = ii + 1
+        if (ii > maxdata) then
+          ierr = -10
+          exit
+        end if
+        read (line, *, iostat=ierr) data(ii)
+      end if
+      ndata = ii
+    end do
 
     if (ierr == -10) then
-       write(lastwords,*) 'ERROR: Too many input elements while reading ', &
-            'elements of the block ',trim(blockword), ' Increase value ', &
-            'of internal parameter maxdata.'
-       call esdf_die(lastwords)
-    endif
+      write (lastwords, *) 'ERROR: Too many input elements while reading ', &
+        'elements of the block ', trim(blockword), ' Increase value ', &
+        'of internal parameter maxdata.'
+      call esdf_die(lastwords)
+    end if
     if (ierr /= 0) then
-       write(lastwords,*) 'ERROR: Unexpected characters were found while ', &
-            'reading elements  of the block ',trim(blockword),'. '
-       call esdf_die(lastwords)
-    endif
+      write (lastwords, *) 'ERROR: Unexpected characters were found while ', &
+        'reading elements  of the block ', trim(blockword), '. '
+      call esdf_die(lastwords)
+    end if
 
   end subroutine esdf_parse_block
-      
-  subroutine esdf_parse_block_2(blockword,nlines,ndata,maxdata,data)
+
+  subroutine esdf_parse_block_2(blockword, nlines, ndata, maxdata, data)
 
     character(len=*), intent(in) :: blockword
     integer, intent(in) :: nlines, maxdata
     integer, intent(inout) :: ndata
-    integer, intent(inout) :: data(maxdata,2)
-  ! Local
+    integer, intent(inout) :: data(maxdata, 2)
+    ! Local
     integer :: ii, jj, ll, nn, nmin, nmax, ierr
-    character (len=80) :: keyword, line
-    character (len=800) :: lastwords
+    character(len=80) :: keyword, line
+    character(len=800) :: lastwords
 
     ierr = 0
     ii = ndata
     do ll = 1, nlines
-       line = block_data(ll)
-       keyword = esdf_reduce(line(1:scan(line," ")-1))
-       if (keyword == 'range') then
-          line = adjustl(line(scan(line," ")+1:80))
-          read(line,*,iostat=ierr) nmin, nmax
-          do jj = nmin, nmax
-             do nn = jj + 1, nmax
-                ii = ii + 1
-                if (ii > maxdata) then
-                   ierr = -10
-                   exit
-                endif
-                data(ii,1) = jj
-                data(ii,2) = nn
-             enddo
-          enddo
-       else
-          ii = ii + 1
-          if (ii > maxdata) then
-             ierr = -10
-             exit
-          endif
-          read(line,*,iostat=ierr) data(ii,1), data(ii,2)
-       endif
-       ndata = ii
-    enddo
+      line = block_data(ll)
+      keyword = esdf_reduce(line(1:scan(line, " ") - 1))
+      if (keyword == 'range') then
+        line = adjustl(line(scan(line, " ") + 1:80))
+        read (line, *, iostat=ierr) nmin, nmax
+        do jj = nmin, nmax
+          do nn = jj + 1, nmax
+            ii = ii + 1
+            if (ii > maxdata) then
+              ierr = -10
+              exit
+            end if
+            data(ii, 1) = jj
+            data(ii, 2) = nn
+          end do
+        end do
+      else
+        ii = ii + 1
+        if (ii > maxdata) then
+          ierr = -10
+          exit
+        end if
+        read (line, *, iostat=ierr) data(ii, 1), data(ii, 2)
+      end if
+      ndata = ii
+    end do
 
     if (ierr == -10) then
-       write(lastwords,*) 'ERROR: Too many input elements while reading ', &
-            'elements of the block ',trim(blockword), ' Increase value ', &
-            'of internal parameter maxdata in typedefs.90p.'
-       call esdf_die(lastwords)
-    endif
+      write (lastwords, *) 'ERROR: Too many input elements while reading ', &
+        'elements of the block ', trim(blockword), ' Increase value ', &
+        'of internal parameter maxdata in typedefs.90p.'
+      call esdf_die(lastwords)
+    end if
     if (ierr /= 0) then
-       write(lastwords,*) 'ERROR: Unexpected characters were found while ', &
-            'reading elements  of the block ',trim(blockword),'. '
-       call esdf_die(lastwords)
-    endif
+      write (lastwords, *) 'ERROR: Unexpected characters were found while ', &
+        'reading elements  of the block ', trim(blockword), '. '
+      call esdf_die(lastwords)
+    end if
 
   end subroutine esdf_parse_block_2
-      
-  !   --------------  esdf_die  ---------------------- 
+
+  !   --------------  esdf_die  ----------------------
 
   ! Stop execution due to an error cause by esdf
 
-  subroutine esdf_die (string)
+  subroutine esdf_die(string)
 
     character(len=*), intent(in) :: string
 
-    write (*, '(a,a)') ' ESDF error: ', trim (string)
+    write (*, '(a,a)') ' ESDF error: ', trim(string)
     write (*, '(a)') ' Stopping now'
 
 !    stop
@@ -1206,11 +1203,11 @@ contains
     return
   end subroutine esdf_die
 
-  !   --------------  esdf_warn  ---------------------- 
+  !   --------------  esdf_warn  ----------------------
 
   ! Warning due to an error cause by esdf
 
-  subroutine esdf_warn (string)
+  subroutine esdf_warn(string)
 
     character(len=*), intent(in) :: string
 
@@ -1220,13 +1217,13 @@ contains
     return
   end subroutine esdf_warn
 
-  !   --------------  esdf_close  ---------------------- 
+  !   --------------  esdf_close  ----------------------
 
   ! Deallocate the data arrays --- call this before re-initialising
 
   subroutine esdf_close
-    deallocate(llist,tlist,block_data)
-    if (allocated(warns)) deallocate(warns)
+    deallocate (llist, tlist, block_data)
+    if (allocated(warns)) deallocate (warns)
   end subroutine esdf_close
 
 end module esdf

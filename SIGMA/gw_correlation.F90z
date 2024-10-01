@@ -19,9 +19,9 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine Zgw_correlation(gvec,kpt,qpt,k_c,pol,sig_in,sig,nspin,nkpt,irp, &
-     pol_unit,nn_p,nq,iq,sig_en,nolda,xsum,&
-     isdf_in, opt)
+subroutine Zgw_correlation(gvec, kpt, qpt, k_c, pol, sig_in, sig, nspin, nkpt, irp, &
+                           pol_unit, nn_p, nq, iq, sig_en, nolda, xsum, &
+                           isdf_in, opt)
 
   use typedefs
   use mpi_module
@@ -29,34 +29,34 @@ subroutine Zgw_correlation(gvec,kpt,qpt,k_c,pol,sig_in,sig,nspin,nkpt,irp, &
 
   ! arguments
   ! real-space grid
-  type (gspace), intent(in) :: gvec
+  type(gspace), intent(in) :: gvec
   ! k-points and q-vectors
-  type (kptinfo), intent(in) :: kpt
-  type (qptinfo), intent(in) :: qpt
+  type(kptinfo), intent(in) :: kpt
+  type(qptinfo), intent(in) :: qpt
   ! kernel data for correlation and vertex
-  type (kernelinfo), intent(inout) :: k_c
+  type(kernelinfo), intent(inout) :: k_c
   ! polarizability (TDLDA) data
-  type (polinfo), intent(inout) :: pol
+  type(polinfo), intent(inout) :: pol
   ! self-energy data
-  type (siginfo), intent(in) :: sig_in
+  type(siginfo), intent(in) :: sig_in
   ! self-energy for each spin component and each k-point
-  type (siginfo), dimension(nspin,nkpt), intent(inout) :: sig
+  type(siginfo), dimension(nspin, nkpt), intent(inout) :: sig
   integer, intent(in) :: &
-       nspin, &       ! number of spin channels
-       nkpt, &        ! number of k-points where self-energy is computed
-       irp, &         ! index of current representation
-       pol_unit, &    ! unit number of file pol_diag.dat
-       nn_p, &        ! number of TDLDA eigenvectors per PE
-       nq, &          ! number of q-vectors
-       iq, &          ! index of current q-vector
-       sig_en         ! energy flag, see subroutines correlation and vertex
+    nspin, &       ! number of spin channels
+    nkpt, &        ! number of k-points where self-energy is computed
+    irp, &         ! index of current representation
+    pol_unit, &    ! unit number of file pol_diag.dat
+    nn_p, &        ! number of TDLDA eigenvectors per PE
+    nq, &          ! number of q-vectors
+    iq, &          ! index of current q-vector
+    sig_en         ! energy flag, see subroutines correlation and vertex
   ! true if LDA kernel is ignored
   logical, intent(in) :: nolda
   ! f-sum rule
   real(dp), intent(in) :: xsum
   ! Additional input parameters for ISDF method
-  type (ISDF) :: isdf_in
-  type (options), intent(in) :: opt
+  type(ISDF) :: isdf_in
+  type(options), intent(in) :: opt
 
   ! other variables
   integer :: isp, ik, jk, chkpt, info
@@ -64,39 +64,39 @@ subroutine Zgw_correlation(gvec,kpt,qpt,k_c,pol,sig_in,sig,nspin,nkpt,irp, &
 #ifdef DEBUG
   integer :: jtape, pcol, icol, irow
 #endif
-  SCALAR, dimension(:,:), allocatable :: pot_c, pot_f
+  SCALAR, dimension(:, :), allocatable :: pot_c, pot_f
 
-  if (r_grp%master) write(6,'(/,a,/,a,i3,a,i3,/)') repeat('-',65), &
-       ' Working now with representation ', irp,' out of ', gvec%syms%ntrans
-  if (r_grp%master .and. kpt%lcplx) write(6,'(a,i4,a,3f16.8,a,/)') &
-       ' q-vector # ',iq,' ( ',qpt%fk(:,iq),' )'
+  if (r_grp%master) write (6, '(/,a,/,a,i3,a,i3,/)') repeat('-', 65), &
+    ' Working now with representation ', irp, ' out of ', gvec%syms%ntrans
+  if (r_grp%master .and. kpt%lcplx) write (6, '(a,i4,a,3f16.8,a,/)') &
+    ' q-vector # ', iq, ' ( ', qpt%fk(:, iq), ' )'
 
   !---------------------------------------------------------------
   ! Correlation part. Separate Coulomb and f_xc parts, but keep
   ! both. The f_xc part will be needed for the vertex term.
   !
-  if ( k_c%ncol * k_c%nrow * pol%ntr /= 0 ) then
-     call Zget_pol(pol,pol_unit,gvec%syms%ntrans,nq,irp,iq,nn_p)
-     !
-     ! Calculate potential fluctuation from exchange (Coulomb) kernel:
-     ! pot_c (i,n;m) = sum_(v,c) kernel_c (i,n;v,c) * vpol (v,c;m)
-     ! where
-     !  i : all DFT orbitals at which self-energy is computed
-     !  n : the first NN DFT orbitals, where NN is a *very* large number
-     !  v : all occupied DFT orbitals, used for polarizability
-     !  c : the lowest unoccupied DFT orbitals, used for polarizability
-     !  pot_c is distributed in the last index among PEs
-     !
-     call stopwatch(r_grp%master,' Calling readmatrix kernel_c')
-     call timacc(3,1,tsec)
-     call Zkernel(gvec,kpt,k_c,irp,0,nspin,qpt%fk(1,iq),'r',.true.,&
-            isdf_in)
-     call timacc(3,2,tsec)
-     call stopwatch(r_grp%master,' Calling potential pot_c ')
-     allocate(pot_c(pol%nn,k_c%ncol),stat=info)
-     call alccheck('pot_c','sigma_c',pol%nn*k_c%ncol,info)
-     call timacc(7,1,tsec)
-     call Zpotential(pol%ntr,pol%nn,pol%Ztv,k_c%ncol,k_c%Zm,pot_c, opt)
+  if (k_c%ncol*k_c%nrow*pol%ntr /= 0) then
+    call Zget_pol(pol, pol_unit, gvec%syms%ntrans, nq, irp, iq, nn_p)
+    !
+    ! Calculate potential fluctuation from exchange (Coulomb) kernel:
+    ! pot_c (i,n;m) = sum_(v,c) kernel_c (i,n;v,c) * vpol (v,c;m)
+    ! where
+    !  i : all DFT orbitals at which self-energy is computed
+    !  n : the first NN DFT orbitals, where NN is a *very* large number
+    !  v : all occupied DFT orbitals, used for polarizability
+    !  c : the lowest unoccupied DFT orbitals, used for polarizability
+    !  pot_c is distributed in the last index among PEs
+    !
+    call stopwatch(r_grp%master, ' Calling readmatrix kernel_c')
+    call timacc(3, 1, tsec)
+    call Zkernel(gvec, kpt, k_c, irp, 0, nspin, qpt%fk(1, iq), 'r', .true., &
+                 isdf_in)
+    call timacc(3, 2, tsec)
+    call stopwatch(r_grp%master, ' Calling potential pot_c ')
+    allocate (pot_c(pol%nn, k_c%ncol), stat=info)
+    call alccheck('pot_c', 'sigma_c', pol%nn*k_c%ncol, info)
+    call timacc(7, 1, tsec)
+    call Zpotential(pol%ntr, pol%nn, pol%Ztv, k_c%ncol, k_c%Zm, pot_c, opt)
 !#ifdef DEBUG
 !     jtape = 5000 + peinf%inode + 100 * irp
 !     do pcol = 1, pol%nn
@@ -113,43 +113,43 @@ subroutine Zgw_correlation(gvec,kpt,qpt,k_c,pol,sig_in,sig,nspin,nkpt,irp, &
 !     enddo
 !     call flush(jtape)
 !#endif
-     call timacc(7,2,tsec)
-     deallocate(k_c%Zm)
+    call timacc(7, 2, tsec)
+    deallocate (k_c%Zm)
 
-     !-------------------------------------------------------------------
-     ! Calculate correlation part of the self-energy.
-     ! Flag qpt%zerok is used because we want to update the static
-     ! correlation only once for each sig(isp,ik) structure. We assume
-     ! implicitly that qpt%zerok is true only for one q-vector.
-     !
-     call stopwatch(r_grp%master,' Calling correlation ')
-     call timacc(8,1,tsec)
-     do ik = 1, nkpt
-        do isp = 1, nspin
-           jk = sig(isp,ik)%indxk
-           call Zcorrelation(kpt,pol,k_c,sig(isp,ik),pot_c,qpt%zerok(iq), &
-                isp,nspin,jk,sig_in%nen,sig_en,sig_in%deltae,xsum)
-        enddo
-     enddo
-     call timacc(8,2,tsec)
+    !-------------------------------------------------------------------
+    ! Calculate correlation part of the self-energy.
+    ! Flag qpt%zerok is used because we want to update the static
+    ! correlation only once for each sig(isp,ik) structure. We assume
+    ! implicitly that qpt%zerok is true only for one q-vector.
+    !
+    call stopwatch(r_grp%master, ' Calling correlation ')
+    call timacc(8, 1, tsec)
+    do ik = 1, nkpt
+      do isp = 1, nspin
+        jk = sig(isp, ik)%indxk
+        call Zcorrelation(kpt, pol, k_c, sig(isp, ik), pot_c, qpt%zerok(iq), &
+                          isp, nspin, jk, sig_in%nen, sig_en, sig_in%deltae, xsum)
+      end do
+    end do
+    call timacc(8, 2, tsec)
 
-     !-------------------------------------------------------------------
-     ! Calculate potential fluctuation from tdlda kernel:
-     ! pot_f (m;n,i) = sum_(v,c) kernel_f (i,n;v,c) * vpol (v,c;m)
-     ! pot_f is distributed in the last index among PEs
-     !
-     ! Weiwei Gao: This is for vertex part 
-     if (.not. nolda) then
-        call stopwatch(r_grp%master,' Calling readmatrix kernel_f')
-        call timacc(3,1,tsec)
-        call Zkernel(gvec,kpt,k_c,irp,2,nspin,qpt%fk(1,iq),'r',.true.,&
-               isdf_in)
-        call timacc(3,2,tsec)
-        call stopwatch(r_grp%master,' Calling potential pot_f ')
-        allocate(pot_f(pol%nn,k_c%ncol),stat=info)
-        call alccheck('pot_f','sigma',pol%nn*k_c%ncol,info)
-        call timacc(7,1,tsec)
-        call Zpotential(pol%ntr,pol%nn,pol%Ztv,k_c%ncol,k_c%Zm,pot_f, opt)
+    !-------------------------------------------------------------------
+    ! Calculate potential fluctuation from tdlda kernel:
+    ! pot_f (m;n,i) = sum_(v,c) kernel_f (i,n;v,c) * vpol (v,c;m)
+    ! pot_f is distributed in the last index among PEs
+    !
+    ! Weiwei Gao: This is for vertex part
+    if (.not. nolda) then
+      call stopwatch(r_grp%master, ' Calling readmatrix kernel_f')
+      call timacc(3, 1, tsec)
+      call Zkernel(gvec, kpt, k_c, irp, 2, nspin, qpt%fk(1, iq), 'r', .true., &
+                   isdf_in)
+      call timacc(3, 2, tsec)
+      call stopwatch(r_grp%master, ' Calling potential pot_f ')
+      allocate (pot_f(pol%nn, k_c%ncol), stat=info)
+      call alccheck('pot_f', 'sigma', pol%nn*k_c%ncol, info)
+      call timacc(7, 1, tsec)
+      call Zpotential(pol%ntr, pol%nn, pol%Ztv, k_c%ncol, k_c%Zm, pot_f, opt)
 
 !#ifdef DEBUG
 !        jtape = 6000 + peinf%inode + 100 * irp
@@ -168,34 +168,34 @@ subroutine Zgw_correlation(gvec,kpt,qpt,k_c,pol,sig_in,sig,nspin,nkpt,irp, &
 !        call flush(jtape)
 !#endif
 
-        call timacc(7,2,tsec)
-        deallocate(k_c%Zm)
-        !
-        ! Calculate vertex part of the self-energy.
-        !
-        call stopwatch(r_grp%master,' Calling vertex ')
-        call timacc(9,1,tsec)
-        do ik = 1, nkpt
-           do isp = 1, nspin
-              jk = sig(isp,ik)%indxk
-              call Zvertex(kpt,pol,k_c,sig(isp,ik),pot_c,pot_f,qpt%zerok(iq), &
-                   isp,nspin,jk,sig_in%nen,sig_en,sig_in%deltae,xsum)
-           enddo
-        enddo
-        call timacc(9,2,tsec)
-        deallocate(pot_f)
-     endif
-     if (pol%ltv) then
-        deallocate(pol%Ztv)
-        pol%ltv = .false.
-     endif
-     deallocate(pot_c)
-  endif
+      call timacc(7, 2, tsec)
+      deallocate (k_c%Zm)
+      !
+      ! Calculate vertex part of the self-energy.
+      !
+      call stopwatch(r_grp%master, ' Calling vertex ')
+      call timacc(9, 1, tsec)
+      do ik = 1, nkpt
+        do isp = 1, nspin
+          jk = sig(isp, ik)%indxk
+          call Zvertex(kpt, pol, k_c, sig(isp, ik), pot_c, pot_f, qpt%zerok(iq), &
+                       isp, nspin, jk, sig_in%nen, sig_en, sig_in%deltae, xsum)
+        end do
+      end do
+      call timacc(9, 2, tsec)
+      deallocate (pot_f)
+    end if
+    if (pol%ltv) then
+      deallocate (pol%Ztv)
+      pol%ltv = .false.
+    end if
+    deallocate (pot_c)
+  end if
 
-  chkpt = irp + (qpt%nk + iq) * gvec%syms%ntrans
-  if (r_grp%master) call save_sigma(nkpt,nspin,sig_in,sig)
+  chkpt = irp + (qpt%nk + iq)*gvec%syms%ntrans
+  if (r_grp%master) call save_sigma(nkpt, nspin, sig_in, sig)
   if (r_grp%num == 1 .and. peinf%master) &
-       call write_sigma(nkpt,nspin,kpt,sig_in,sig,chkpt)
+    call write_sigma(nkpt, nspin, kpt, sig_in, sig, chkpt)
 
 end subroutine Zgw_correlation
 !===================================================================

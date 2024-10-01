@@ -9,7 +9,7 @@
 !   cubic-spline interpolated value y_0 = y(x_0).
 !
 !---------------------------------------------------------------
-subroutine splint(xx,yy,y2a,nn,x_0,y_0)
+subroutine splint(xx, yy, y2a, nn, x_0, y_0)
 
   use myconstants
   implicit none
@@ -30,24 +30,24 @@ subroutine splint(xx,yy,y2a,nn,x_0,y_0)
   khi = nn
 
   do
-     if (khi-klo > 1) then 
-        kk = (khi + klo)/2
-        if(xx(kk) > x_0)then 
-           khi = kk 
-        else 
-           klo = kk 
-        endif
-     else
-        exit
-     endif
-  enddo
+    if (khi - klo > 1) then
+      kk = (khi + klo)/2
+      if (xx(kk) > x_0) then
+        khi = kk
+      else
+        klo = kk
+      end if
+    else
+      exit
+    end if
+  end do
 
-  hh = xx(khi) - xx(klo) 
+  hh = xx(khi) - xx(klo)
   if (hh == zero) call die('bad xx input in splint')
   aa = (xx(khi) - x_0)/hh
-  bb = (x_0 - xx(klo))/hh 
-  y_0 = aa*yy(klo)+bb*yy(khi) + ((aa**3-aa)*y2a(klo) + &
-       (bb**3-bb)*y2a(khi))*(hh**2)/six
+  bb = (x_0 - xx(klo))/hh
+  y_0 = aa*yy(klo) + bb*yy(khi) + ((aa**3 - aa)*y2a(klo) + &
+                                   (bb**3 - bb)*y2a(khi))*(hh**2)/six
 
 end subroutine splint
 !===============================================================

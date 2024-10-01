@@ -9,7 +9,7 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine Zenergy_mtxel(gvec,wfn,rho,kvec,e_k,e_h,e_loc)
+subroutine Zenergy_mtxel(gvec, wfn, rho, kvec, e_k, e_h, e_loc)
 
   use typedefs
   use mpi_module
@@ -20,19 +20,19 @@ subroutine Zenergy_mtxel(gvec,wfn,rho,kvec,e_k,e_h,e_loc)
 
   ! arguments
   ! real-space grid
-  type (gspace), intent(inout) :: gvec
+  type(gspace), intent(inout) :: gvec
   ! electron wavefunctions for the current k-point and spin channel
-  type (wavefunction), intent(in) :: wfn
+  type(wavefunction), intent(in) :: wfn
   ! electron density for the current spin channel
   real(dp), intent(in) :: rho(w_grp%nr)
   ! k-point in units of reciprocal lattice vectors
   real(dp), intent(in) :: kvec(3)
   ! matrix elements of kinetic energy, Hartree operator,
   ! and electron-ion local potential
-  SCALAR, dimension(wfn%nmem,wfn%nmem), intent(out) :: e_k, e_h, e_loc
+  SCALAR, dimension(wfn%nmem, wfn%nmem), intent(out) :: e_k, e_h, e_loc
 
   ! local variables
-  character (len=800) :: lastwords
+  character(len=800) :: lastwords
   integer :: ii, jj, idir, icol_pe, ipe, ioff, ndim
   SCALAR :: xtmp
   ! Cartesian coordinates of k-vector
@@ -40,35 +40,35 @@ subroutine Zenergy_mtxel(gvec,wfn,rho,kvec,e_k,e_h,e_loc)
 
   real(dp), allocatable :: v_loc(:)
   SCALAR, dimension(:), allocatable :: wfn_loc, wfn_lap, v_h, wfn2, zv_loc
-  SCALAR, dimension(:,:), allocatable :: w_distr, wfn_grad
-  SCALAR, dimension(:,:,:), allocatable :: grad_distr
+  SCALAR, dimension(:, :), allocatable :: w_distr, wfn_grad
+  SCALAR, dimension(:, :, :), allocatable :: grad_distr
   SCALAR, external :: Zdot_c
 
-  call dmatvec3('N',gvec%bvec,kvec,kcart)
+  call dmatvec3('N', gvec%bvec, kvec, kcart)
   !-------------------------------------------------------------------
   ! Allocate data.
   !
-  allocate(w_distr(w_grp%ldn,w_grp%npes),stat=ii)
-  call alccheck('w_distr','energy_mtxel',w_grp%ldn*w_grp%npes,ii)
+  allocate (w_distr(w_grp%ldn, w_grp%npes), stat=ii)
+  call alccheck('w_distr', 'energy_mtxel', w_grp%ldn*w_grp%npes, ii)
   w_distr = Zzero
-  allocate(wfn_loc(w_grp%nr),stat=ii)
-  call alccheck('wfn_loc','energy_mtxel',w_grp%nr,ii)
-  allocate(wfn_lap(w_grp%nr),stat=ii)
-  call alccheck('wfn_lap','energy_mtxel',w_grp%nr,ii)
-  ndim = gvec%nr * gvec%syms%ntrans
-  allocate(wfn_grad(3,ndim),stat=ii)
-  call alccheck('wfn_grad','energy_mtxel',3*ndim,ii)
-  allocate(grad_distr(3,w_grp%ldn,w_grp%npes),stat=ii)
-  call alccheck('grad_distr','energy_mtxel',3*w_grp%ldn*w_grp%npes,ii)
-  allocate(wfn2(w_grp%mydim),stat=ii)
-  call alccheck('wfn2','energy_mtxel',w_grp%mydim,ii)
+  allocate (wfn_loc(w_grp%nr), stat=ii)
+  call alccheck('wfn_loc', 'energy_mtxel', w_grp%nr, ii)
+  allocate (wfn_lap(w_grp%nr), stat=ii)
+  call alccheck('wfn_lap', 'energy_mtxel', w_grp%nr, ii)
+  ndim = gvec%nr*gvec%syms%ntrans
+  allocate (wfn_grad(3, ndim), stat=ii)
+  call alccheck('wfn_grad', 'energy_mtxel', 3*ndim, ii)
+  allocate (grad_distr(3, w_grp%ldn, w_grp%npes), stat=ii)
+  call alccheck('grad_distr', 'energy_mtxel', 3*w_grp%ldn*w_grp%npes, ii)
+  allocate (wfn2(w_grp%mydim), stat=ii)
+  call alccheck('wfn2', 'energy_mtxel', w_grp%mydim, ii)
 
-  call Zinitialize_FFT(peinf%inode,fft_box)
+  call Zinitialize_FFT(peinf%inode, fft_box)
 
   !-------------------------------------------------------------------
   ! Calculate Hartree potential (non-periodic systems only).
   !
-  allocate(v_h(w_grp%nr))
+  allocate (v_h(w_grp%nr))
   v_h = Zzero
   if (gvec%per == 0) then
 !     if (gvec%per == 1) then
@@ -76,26 +76,26 @@ subroutine Zenergy_mtxel(gvec,wfn,rho,kvec,e_k,e_h,e_loc)
 !     elseif (gvec%per == 2) then
 !        call Zcreate_coul_2D(gvec%bdot,kvec(1),fft_box)
 !     else
-        call Zcreate_coul_0D(gvec%bdot,kvec,fft_box)
+    call Zcreate_coul_0D(gvec%bdot, kvec, fft_box)
 !     endif
-     v_h = Zone*rho
-     call Zpoisson(gvec,v_h,1)
-  endif
+    v_h = Zone*rho
+    call Zpoisson(gvec, v_h, 1)
+  end if
 
   !-------------------------------------------------------------------
   ! Calculate local pseudo-potential (non-periodic systems only).
   !
-  allocate(zv_loc(w_grp%mydim))
+  allocate (zv_loc(w_grp%mydim))
   zv_loc = Zzero
   if (gvec%per == 0) then
-     allocate(v_loc(w_grp%mydim))
-     v_loc = zero
-     do ii = 1, type_num
-        call v_local(gvec,psp(ii),v_loc)
-     enddo
-     zv_loc = Zone*v_loc
-     deallocate(v_loc)
-  endif
+    allocate (v_loc(w_grp%mydim))
+    v_loc = zero
+    do ii = 1, type_num
+      call v_local(gvec, psp(ii), v_loc)
+    end do
+    zv_loc = Zone*v_loc
+    deallocate (v_loc)
+  end if
 
   !-------------------------------------------------------------------
   ! Start calculation of matrix elements.
@@ -105,88 +105,88 @@ subroutine Zenergy_mtxel(gvec,wfn,rho,kvec,e_k,e_h,e_loc)
   e_loc = Zzero
   ioff = w_grp%offset + 1
   do icol_pe = 1, wfn%nmem, peinf%npes
-     w_distr = Zzero
-     do ipe = 0, w_grp%npes - 1
-        ii = icol_pe + ipe + &
-             w_grp%npes * w_grp%mygr + r_grp%npes * r_grp%mygr
-        if (ii > wfn%nmem) cycle
-        if (wfn%imap(ii) == 0) then
-           write(lastwords,*) ' ERROR in energy_mtxel: could not find ', &
-                'wavefunction ',ii,' in memory! '
-           call die(lastwords)
-        endif
-        call Zcopy(w_grp%mydim,wfn%Zwf(1,ii),1,w_distr(1,ipe+1),1)
-     enddo
+    w_distr = Zzero
+    do ipe = 0, w_grp%npes - 1
+      ii = icol_pe + ipe + &
+           w_grp%npes*w_grp%mygr + r_grp%npes*r_grp%mygr
+      if (ii > wfn%nmem) cycle
+      if (wfn%imap(ii) == 0) then
+        write (lastwords, *) ' ERROR in energy_mtxel: could not find ', &
+          'wavefunction ', ii, ' in memory! '
+        call die(lastwords)
+      end if
+      call Zcopy(w_grp%mydim, wfn%Zwf(1, ii), 1, w_distr(1, ipe + 1), 1)
+    end do
 
-     do ipe = 0, w_grp%npes - 1
-        ii = icol_pe + ipe + w_grp%npes * w_grp%mygr + r_grp%npes * r_grp%mygr
-        if (ii > wfn%nmem) cycle
-        do jj = 1, wfn%nmem
-           if ( wfn%irep(wfn%imap(jj)) /= wfn%irep(wfn%imap(ii)) ) cycle
-           call Zcopy(w_grp%mydim,wfn%Zwf(1,jj),1,wfn2,1)
-           call Zmultiply_vec(w_grp%mydim,v_h(ioff),wfn2)
-           e_h(ii,jj) = Zdot_c(w_grp%mydim,w_distr(1,ipe+1),1,wfn2,1)
-           call Zcopy(w_grp%mydim,wfn%Zwf(1,jj),1,wfn2,1)
-           call Zmultiply_vec(w_grp%mydim,zv_loc,wfn2)
-           e_loc(ii,jj) = Zdot_c(w_grp%mydim,w_distr(1,ipe+1),1,wfn2,1)
-        enddo
-     enddo
+    do ipe = 0, w_grp%npes - 1
+      ii = icol_pe + ipe + w_grp%npes*w_grp%mygr + r_grp%npes*r_grp%mygr
+      if (ii > wfn%nmem) cycle
+      do jj = 1, wfn%nmem
+        if (wfn%irep(wfn%imap(jj)) /= wfn%irep(wfn%imap(ii))) cycle
+        call Zcopy(w_grp%mydim, wfn%Zwf(1, jj), 1, wfn2, 1)
+        call Zmultiply_vec(w_grp%mydim, v_h(ioff), wfn2)
+        e_h(ii, jj) = Zdot_c(w_grp%mydim, w_distr(1, ipe + 1), 1, wfn2, 1)
+        call Zcopy(w_grp%mydim, wfn%Zwf(1, jj), 1, wfn2, 1)
+        call Zmultiply_vec(w_grp%mydim, zv_loc, wfn2)
+        e_loc(ii, jj) = Zdot_c(w_grp%mydim, w_distr(1, ipe + 1), 1, wfn2, 1)
+      end do
+    end do
 
-     call Zgather(1,w_distr,wfn_loc)
-     ii = icol_pe + w_grp%inode + &
-          w_grp%npes * w_grp%mygr + r_grp%npes * r_grp%mygr
-     if (ii < wfn%nmem) then
-        if (fd%norder < 0) then
-           call Zget_lap_FFT(gvec,wfn_loc,wfn_lap,wfn%jrep(0,wfn%imap(ii)))
-           call Zget_grad_FFT(gvec,wfn_loc,wfn_grad,wfn%jrep(0,wfn%imap(ii)))
-        else
-           call Zget_lap_fd(gvec%syms,wfn_loc,wfn_lap,wfn%irep(wfn%imap(ii)))
-           call Zget_grad_fd(gvec%syms,wfn_loc,wfn_grad,wfn%irep(wfn%imap(ii)))
-        endif
-     endif
-     call Zscatter(1,w_distr,wfn_lap)
-     call Zscatter(3,grad_distr,wfn_grad)
+    call Zgather(1, w_distr, wfn_loc)
+    ii = icol_pe + w_grp%inode + &
+         w_grp%npes*w_grp%mygr + r_grp%npes*r_grp%mygr
+    if (ii < wfn%nmem) then
+      if (fd%norder < 0) then
+        call Zget_lap_FFT(gvec, wfn_loc, wfn_lap, wfn%jrep(0, wfn%imap(ii)))
+        call Zget_grad_FFT(gvec, wfn_loc, wfn_grad, wfn%jrep(0, wfn%imap(ii)))
+      else
+        call Zget_lap_fd(gvec%syms, wfn_loc, wfn_lap, wfn%irep(wfn%imap(ii)))
+        call Zget_grad_fd(gvec%syms, wfn_loc, wfn_grad, wfn%irep(wfn%imap(ii)))
+      end if
+    end if
+    call Zscatter(1, w_distr, wfn_lap)
+    call Zscatter(3, grad_distr, wfn_grad)
 
-     do ipe = 0, w_grp%npes - 1
-        ii = icol_pe + ipe + &
-             w_grp%npes * w_grp%mygr + r_grp%npes * r_grp%mygr
-        if (ii > wfn%nmem) cycle
-        do jj = 1, wfn%nmem
-           if ( wfn%irep(wfn%imap(jj)) /= wfn%irep(wfn%imap(ii)) ) cycle
-           e_k(ii,jj) = Zdot_c(w_grp%mydim,w_distr(1,ipe+1),1,wfn%Zwf(1,jj),1)
+    do ipe = 0, w_grp%npes - 1
+      ii = icol_pe + ipe + &
+           w_grp%npes*w_grp%mygr + r_grp%npes*r_grp%mygr
+      if (ii > wfn%nmem) cycle
+      do jj = 1, wfn%nmem
+        if (wfn%irep(wfn%imap(jj)) /= wfn%irep(wfn%imap(ii))) cycle
+        e_k(ii, jj) = Zdot_c(w_grp%mydim, w_distr(1, ipe + 1), 1, wfn%Zwf(1, jj), 1)
 #ifdef CPLX
-           do idir = 1, gvec%per
-              e_k(ii,jj) = e_k(ii,jj) - Zi * two * kcart(idir) * &
-                   Zdot_c(w_grp%mydim,grad_distr(idir,1,ipe+1),3,wfn%Zwf(1,jj),1) + &
-                   Zone*kcart(idir)**2 * Zdot_c(w_grp%mydim,wfn%Zwf(1,ii),1,wfn%Zwf(1,jj),1)
-           enddo
+        do idir = 1, gvec%per
+          e_k(ii, jj) = e_k(ii, jj) - Zi*two*kcart(idir)* &
+                        Zdot_c(w_grp%mydim, grad_distr(idir, 1, ipe + 1), 3, wfn%Zwf(1, jj), 1) + &
+                        Zone*kcart(idir)**2*Zdot_c(w_grp%mydim, wfn%Zwf(1, ii), 1, wfn%Zwf(1, jj), 1)
+        end do
 #endif
-        enddo
-     enddo
-  enddo
+      end do
+    end do
+  end do
 
   !-------------------------------------------------------------------
   ! Done. Deallocate memory and collect data on all PEs.
   !
-  call Zfinalize_FFT(peinf%inode,fft_box)
+  call Zfinalize_FFT(peinf%inode, fft_box)
 
-  deallocate(zv_loc)
-  deallocate(v_h)
-  deallocate(wfn2)
-  deallocate(grad_distr)
-  deallocate(wfn_grad)
-  deallocate(wfn_lap)
-  deallocate(wfn_loc)
-  deallocate(w_distr)
+  deallocate (zv_loc)
+  deallocate (v_h)
+  deallocate (wfn2)
+  deallocate (grad_distr)
+  deallocate (wfn_grad)
+  deallocate (wfn_lap)
+  deallocate (wfn_loc)
+  deallocate (w_distr)
 
   ii = wfn%nmem*wfn%nmem
-  xtmp = Zone * gvec%syms%ntrans
-  call Zpsum(ii,peinf%npes,peinf%comm,e_k)
-  call Zscal(ii,xtmp,e_k,1)
-  call Zpsum(ii,peinf%npes,peinf%comm,e_h)
-  call Zscal(ii,xtmp,e_h,1)
-  call Zpsum(ii,peinf%npes,peinf%comm,e_loc)
-  call Zscal(ii,xtmp,e_loc,1)
+  xtmp = Zone*gvec%syms%ntrans
+  call Zpsum(ii, peinf%npes, peinf%comm, e_k)
+  call Zscal(ii, xtmp, e_k, 1)
+  call Zpsum(ii, peinf%npes, peinf%comm, e_h)
+  call Zscal(ii, xtmp, e_h, 1)
+  call Zpsum(ii, peinf%npes, peinf%comm, e_loc)
+  call Zscal(ii, xtmp, e_loc, 1)
 
   return
 end subroutine Zenergy_mtxel
