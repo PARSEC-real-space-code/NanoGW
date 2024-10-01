@@ -817,11 +817,13 @@ subroutine isdf_parallel_sym(gvec, pol_in, kpt, nspin, isdf_in, kflag, &
   if (peinf%master .and. verbose) then
     do jrp = 1, gvec%syms%ntrans
       write (dbgunit, '(a,i2,a)') " Mmtrx (:, :, rsp=1, csp=1, ikp=1, 1, jrp=", jrp, ") = "
-      call printmatrix(isdf_in%Mmtrx(1:isdf_in%n_intp_r, 1:isdf_in%n_intp_r, 1, 1, 1, 1, jrp), isdf_in%n_intp_r, isdf_in%n_intp_r, dbgunit)
+      call printmatrix(isdf_in%Mmtrx(1:isdf_in%n_intp_r, 1:isdf_in%n_intp_r, 1, 1, 1, 1, jrp), &
+                       isdf_in%n_intp_r, isdf_in%n_intp_r, dbgunit)
     end do
     do jrp = 1, gvec%syms%ntrans
       write (dbgunit, '(a,i2,a)') " Mmtrx (:, :, rsp=1, csp=1, ikp=1, 2, jrp=", jrp, ") = "
-      call printmatrix(isdf_in%Mmtrx(1:isdf_in%n_intp_r, 1:isdf_in%n_intp_r, 1, 1, 1, 2, jrp), isdf_in%n_intp_r, isdf_in%n_intp_r, dbgunit)
+      call printmatrix(isdf_in%Mmtrx(1:isdf_in%n_intp_r, 1:isdf_in%n_intp_r, 1, 1, 1, 2, jrp), &
+                       isdf_in%n_intp_r, isdf_in%n_intp_r, dbgunit)
     end do
   end if
 #endif

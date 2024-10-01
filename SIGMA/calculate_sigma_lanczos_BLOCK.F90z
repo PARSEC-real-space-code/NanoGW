@@ -379,10 +379,11 @@ subroutine Zcalculate_sigma_lanczos_BLOCK(nspin, nkpt, &
                                             tmp_vec(1:isdf_in%n_intp_r, 1:blksz), &
                                             tmp_Hvec(1:ldncv, 1:blksz), tmp_cvpair, blksz)
             do kk = 1, blksz
-              sigma_corr(1:sig_in%nen) = sigma_corr(1:sig_in%nen) + &
-                                         2.0*pnorm2(kk)*(-sigma_corr_tmp(sig_in%nen + 1, kk) + sigma_corr_tmp(1:sig_in%nen, kk))/(-ezz(1:sig_in%nen, kk))
+              sigma_corr(1:sig_in%nen) = sigma_corr(1:sig_in%nen) + 2.0*pnorm2(kk)/(-ezz(1:sig_in%nen, kk))* &
+                                         (-sigma_corr_tmp(sig_in%nen + 1, kk) + sigma_corr_tmp(1:sig_in%nen, kk))
 #ifdef DEBUG
-              if (peinf%master) print *, jn + kk - 1, "incr ", 2.0*pnorm2(kk)*(-sigma_corr_tmp(sig_in%nen + 1, kk) + sigma_corr_tmp(2, kk))/(-ezz(2, kk))
+              if (peinf%master) print *, jn + kk - 1, "incr ", 2.0*pnorm2(kk)/(-ezz(2, kk))* &
+                (-sigma_corr_tmp(sig_in%nen + 1, kk) + sigma_corr_tmp(2, kk))
 #endif
             end do
             !
@@ -404,10 +405,11 @@ subroutine Zcalculate_sigma_lanczos_BLOCK(nspin, nkpt, &
                                             tmp_vec(1:isdf_in%n_intp_r, 1:blksz), &
                                             tmp_Hvec(1:ldncv, 1:blksz), tmp_cvpair, blksz)
             do kk = 1, blksz
-              sigma_corr(1:sig_in%nen) = sigma_corr(1:sig_in%nen) + &
-                                         2.0*pnorm2(kk)*(-sigma_corr_tmp(sig_in%nen + 1, kk) + sigma_corr_tmp(1:sig_in%nen, kk))/ezz(1:sig_in%nen, kk)
+              sigma_corr(1:sig_in%nen) = sigma_corr(1:sig_in%nen) + 2.0*pnorm2(kk)/ezz(1:sig_in%nen, kk)* &
+                                         (-sigma_corr_tmp(sig_in%nen + 1, kk) + sigma_corr_tmp(1:sig_in%nen, kk))
 #ifdef DEBUG
-              if (peinf%master) print *, jn + kk - 1, "incr ", 2.0*pnorm2(kk)*(-sigma_corr_tmp(sig_in%nen + 1, kk) + sigma_corr_tmp(2, kk))/ezz(2, kk)
+              if (peinf%master) print *, jn + kk - 1, "incr ", 2.0*pnorm2(kk)/ezz(2, kk)* &
+                (-sigma_corr_tmp(sig_in%nen + 1, kk) + sigma_corr_tmp(2, kk))
 #endif
             end do
             !
@@ -427,11 +429,13 @@ subroutine Zcalculate_sigma_lanczos_BLOCK(nspin, nkpt, &
         if (peinf%master) then
           print *, "sigma_corr", sig_in%map(sig_in%diag(isig))
           do ien = 1, sig_in%nen
-            write (6, '(a,i7,f15.6,f15.6,f15.6)') " #sigma_c ", ien, ryd*(deltae*(ien - 1) + en0), real(sigma_corr(ien))*ryd, aimag(sigma_corr(ien))*ryd
+            write (6, '(a,i7,f15.6,f15.6,f15.6)') " #sigma_c ", ien, ryd*(deltae*(ien - 1) + en0), &
+              real(sigma_corr(ien))*ryd, aimag(sigma_corr(ien))*ryd
           end do
           print *, "E_qp(E)", sig_in%map(sig_in%diag(isig))
           do ien = 1, sig_in%nen
-            write (6, '(a,i7,f15.6,f15.6)') " #E_qp ", ien, ryd*(deltae*(ien - 1) + en0), (kpt%wfn(1, 1)%e1(m1) + real(sig(1, 1)%xdiag(isig) + sigma_corr(ien) - sig(1, 1)%vxcdiag(isig)))*ryd
+            write (6, '(a,i7,f15.6,f15.6)') " #E_qp ", ien, ryd*(deltae*(ien - 1) + en0), &
+              (kpt%wfn(1, 1)%e1(m1) + real(sig(1, 1)%xdiag(isig) + sigma_corr(ien) - sig(1, 1)%vxcdiag(isig)))*ryd
           end do
         end if ! peinf%master
         do ien = 1, sig_in%nen

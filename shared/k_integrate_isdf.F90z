@@ -356,7 +356,8 @@ subroutine Zk_integrate_isdf(gvec, kpt, k_mat, k_tmp, irp, kflag, nspin, nbuff_m
             m2 = ipe_quadr(2, dicount)
             m3 = ipe_quadr(3, dicount)
             m4 = ipe_quadr(4, dicount)
-            if (verbose) write (outdbg, '( i5,"  <",2i4,"|F|",2i4,">",e16.5)') dicount, m3, m4, m1, m2, k_tmp(iblock)%Zm_f(jcount + dicount)
+            if (verbose) write (outdbg, '( i5,"  <",2i4,"|F|",2i4,">",e16.5)') &
+              dicount, m3, m4, m1, m2, k_tmp(iblock)%Zm_f(jcount + dicount)
           end do
         end if
 

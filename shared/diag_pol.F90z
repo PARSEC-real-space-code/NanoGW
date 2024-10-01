@@ -106,7 +106,8 @@ subroutine Zdiag_pol(kpt, kernel_p, pol, irp, iq, nspin, celvol, tamm_d, notrunc
     pol%Zv(irow, pcol) = kpt%wfn(isp, pol%tr(4, irow))%e1(i2) - kpt%wfn(isp, pol%tr(3, irow))%e1(i1)
     pol%Zv(irow, pcol) = pol%Zv(irow, pcol)/occdif
     if (.false.) then ! for debug, print out the diagonal part
-      write (6, '(a,i7,i7,3f13.6)') "diagonal ", i1, i2, kpt%wfn(isp, pol%tr(4, irow))%e1(i2), kpt%wfn(isp, pol%tr(3, irow))%e1(i1), pol%Zv(irow, pcol)
+      write (6, '(a,i7,i7,3f13.6)') "diagonal ", i1, i2, kpt%wfn(isp, pol%tr(4, irow))%e1(i2), &
+        kpt%wfn(isp, pol%tr(3, irow))%e1(i1), pol%Zv(irow, pcol)
     end if
   end do
   !call Zsave_pol(pol,4000,irp,iq)

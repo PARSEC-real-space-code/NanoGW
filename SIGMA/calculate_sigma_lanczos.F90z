@@ -309,9 +309,11 @@ subroutine Zcalculate_sigma_lanczos(nspin, nkpt, &
               + cmplx(0.d0, 1.d0)*ecuts
             ezz(sig_in%nen + 1) = cmplx(0.d0, 0.d0)
             ! call lanczos_spectra to compute <Pvec| 1/(ezz-H_aux) |Pvec>
-            call lanczos_spectra_isdf(Pvec, sqrt(pnorm2), ncv_loc, ezz, sig_in%nen + 1, niter, isdf_in, kpt%wfn(isp, ik), tmp_Cmtrx, sqrtR, polynomial, npoly, sigma_corr_tmp)
-            sigma_corr(1:sig_in%nen) = sigma_corr(1:sig_in%nen) + &
-                                       2.0*pnorm2*(-sigma_corr_tmp(sig_in%nen + 1) + sigma_corr_tmp(1:sig_in%nen))/(-ezz(1:sig_in%nen))
+            call lanczos_spectra_isdf(Pvec, sqrt(pnorm2), ncv_loc, ezz, sig_in%nen + 1, &
+                                      niter, isdf_in, kpt%wfn(isp, ik), tmp_Cmtrx, sqrtR, &
+                                      polynomial, npoly, sigma_corr_tmp)
+            sigma_corr(1:sig_in%nen) = sigma_corr(1:sig_in%nen) + 2.0*pnorm2/(-ezz(1:sig_in%nen))* &
+                                       (-sigma_corr_tmp(sig_in%nen + 1) + sigma_corr_tmp(1:sig_in%nen))
 #ifdef DEBUG
             if (peinf%master) print *, "incr ", 2.0*pnorm2*(-sigma_corr_tmp(sig_in%nen + 1) + sigma_corr_tmp(2))/(-ezz(2))
 #endif
@@ -322,9 +324,11 @@ subroutine Zcalculate_sigma_lanczos(nspin, nkpt, &
               + cmplx(0.d0, 1.d0)*ecuts
             ezz(sig_in%nen + 1) = cmplx(0.d0, 0.d0)
             ! call lanczos_spectra to compute <Pvec| 1/(ezz-H_aux) |Pvec>
-            call lanczos_spectra_isdf(Pvec, sqrt(pnorm2), ncv_loc, ezz, sig_in%nen + 1, niter, isdf_in, kpt%wfn(isp, ik), tmp_Cmtrx, sqrtR, polynomial, npoly, sigma_corr_tmp)
-            sigma_corr(1:sig_in%nen) = sigma_corr(1:sig_in%nen) + &
-                                       2.0*pnorm2*(-sigma_corr_tmp(sig_in%nen + 1) + sigma_corr_tmp(1:sig_in%nen))/ezz(1:sig_in%nen)
+            call lanczos_spectra_isdf(Pvec, sqrt(pnorm2), ncv_loc, ezz, sig_in%nen + 1, &
+                                      niter, isdf_in, kpt%wfn(isp, ik), tmp_Cmtrx, sqrtR, &
+                                      polynomial, npoly, sigma_corr_tmp)
+            sigma_corr(1:sig_in%nen) = sigma_corr(1:sig_in%nen) + 2.0*pnorm2/ezz(1:sig_in%nen)* &
+                                       (-sigma_corr_tmp(sig_in%nen + 1) + sigma_corr_tmp(1:sig_in%nen))
 #ifdef DEBUG
             if (peinf%master) print *, "incr ", 2.0*pnorm2*(-sigma_corr_tmp(sig_in%nen + 1) + sigma_corr_tmp(2))/ezz(2)
 #endif

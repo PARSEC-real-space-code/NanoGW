@@ -294,10 +294,11 @@ subroutine Zcalculate_sigma_lanczos_UltraLowMem(nspin, nkpt, &
             call lanczos_spectra_isdf_UltraLowMem(Pvec, sqrt(pnorm2), myncv, ezz, sig_in%nen + 1, niter, isdf_in, &
                                                   kpt%wfn(isp, ik), cvpair, sqrtR, polynomial, npoly, sigma_corr_tmp, &
                                                   MC_vec, CMC_vec, tmp_vec, tmp_Hvec, tmp_cvpair)
-            sigma_corr(1:sig_in%nen) = sigma_corr(1:sig_in%nen) + &
-                                       2.0*pnorm2*(-sigma_corr_tmp(sig_in%nen + 1) + sigma_corr_tmp(1:sig_in%nen))/(-ezz(1:sig_in%nen))
+            sigma_corr(1:sig_in%nen) = sigma_corr(1:sig_in%nen) + 2.0*pnorm2/(-ezz(1:sig_in%nen))* &
+                                       (-sigma_corr_tmp(sig_in%nen + 1) + sigma_corr_tmp(1:sig_in%nen))
 #ifdef DEBUG
-            if (peinf%master) print *, jn, "incr ", 2.0*pnorm2*(-sigma_corr_tmp(sig_in%nen + 1) + sigma_corr_tmp(2))/(-ezz(2))
+            if (peinf%master) print *, jn, "incr ", 2.0*pnorm2/(-ezz(2))* &
+              (-sigma_corr_tmp(sig_in%nen + 1) + sigma_corr_tmp(2))
 #endif
             ! stop
           else ! for unoccupied states
@@ -306,12 +307,15 @@ subroutine Zcalculate_sigma_lanczos_UltraLowMem(nspin, nkpt, &
               + cmplx(0.d0, 1.d0)*ecuts
             ezz(sig_in%nen + 1) = cmplx(0.d0, 0.d0)
             ! call lanczos_spectra to compute <Pvec| 1/(ezz-H_aux) |Pvec>
-            call lanczos_spectra_isdf_UltraLowMem(Pvec, sqrt(pnorm2), myncv, ezz, sig_in%nen + 1, niter, isdf_in, kpt%wfn(isp, ik), cvpair, sqrtR, polynomial, npoly, sigma_corr_tmp, &
-                                                  MC_vec, CMC_vec, tmp_vec, tmp_Hvec, tmp_cvpair)
-            sigma_corr(1:sig_in%nen) = sigma_corr(1:sig_in%nen) + &
-                                       2.0*pnorm2*(-sigma_corr_tmp(sig_in%nen + 1) + sigma_corr_tmp(1:sig_in%nen))/ezz(1:sig_in%nen)
+            call lanczos_spectra_isdf_UltraLowMem(Pvec, sqrt(pnorm2), myncv, ezz, sig_in%nen + 1, &
+                                                  niter, isdf_in, kpt%wfn(isp, ik), cvpair, sqrtR, &
+                                                  polynomial, npoly, sigma_corr_tmp, MC_vec, CMC_vec, &
+                                                  tmp_vec, tmp_Hvec, tmp_cvpair)
+            sigma_corr(1:sig_in%nen) = sigma_corr(1:sig_in%nen) + 2.0*pnorm2/ezz(1:sig_in%nen)* &
+                                       (-sigma_corr_tmp(sig_in%nen + 1) + sigma_corr_tmp(1:sig_in%nen))
 #ifdef DEBUG
-            if (peinf%master) print *, jn, "incr ", 2.0*pnorm2*(-sigma_corr_tmp(sig_in%nen + 1) + sigma_corr_tmp(2))/ezz(2)
+            if (peinf%master) print *, jn, "incr ", 2.0*pnorm2/ezz(2)* &
+              (-sigma_corr_tmp(sig_in%nen + 1) + sigma_corr_tmp(2))
 #endif
           end if
           if (mod(jn, 5) == 0) then
