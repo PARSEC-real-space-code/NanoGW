@@ -6,7 +6,7 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine delete_file(itape,filnam)
+subroutine delete_file(itape, filnam)
 
   implicit none
   ! arguments
@@ -15,8 +15,8 @@ subroutine delete_file(itape,filnam)
   ! name of file to be deleted
   character(len=*), intent(in) :: filnam
 
-  open(itape,file=filnam(1:len_trim(filnam)))
-  close(itape,status='DELETE')
+  open (itape, file=filnam(1:len_trim(filnam)))
+  close (itape, status='DELETE')
 
 end subroutine delete_file
 !===============================================================

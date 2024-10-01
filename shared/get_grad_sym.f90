@@ -11,7 +11,7 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine get_grad_sym(gvec,given_func,gradf) 
+subroutine get_grad_sym(gvec, given_func, gradf)
 
   use myconstants
   use typedefs
@@ -21,19 +21,19 @@ subroutine get_grad_sym(gvec,given_func,gradf)
 
   ! arguments
   ! grid
-  type (gspace), intent(inout) :: gvec
+  type(gspace), intent(inout) :: gvec
   ! the function
-  real(dp), dimension (gvec%nr), intent(in) :: given_func
+  real(dp), dimension(gvec%nr), intent(in) :: given_func
   ! gradient
-  real(dp), dimension (3,gvec%nr*gvec%syms%ntrans), intent(out) :: gradf
+  real(dp), dimension(3, gvec%nr*gvec%syms%ntrans), intent(out) :: gradf
 
 !-------------------------------------------------------------------
 
   if (fd%norder < 0) then
-     call dget_grad_FFT(gvec,given_func,gradf,1)
+    call dget_grad_FFT(gvec, given_func, gradf, 1)
   else
-     call dget_grad_fd(gvec%syms,given_func,gradf,1)
-  endif
+    call dget_grad_fd(gvec%syms, given_func, gradf, 1)
+  end if
 
 end subroutine get_grad_sym
 !===============================================================

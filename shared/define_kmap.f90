@@ -21,18 +21,18 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine define_kmap(syms,kpt,kernel,irp,ncol_in,mapcol_in, &
-  nrow_in,maprow_in,ncol_up,nrow_up)
+subroutine define_kmap(syms, kpt, kernel, irp, ncol_in, mapcol_in, &
+                       nrow_in, maprow_in, ncol_up, nrow_up)
   use mpi_module
   use typedefs
   implicit none
 
   ! arguments
-  type (symmetries), intent(in) :: syms
-  type (kptinfo), intent(in) :: kpt
+  type(symmetries), intent(in) :: syms
+  type(kptinfo), intent(in) :: kpt
   type(kernelinfo), intent(inout) :: kernel
   integer, intent(in) :: irp, ncol_in, nrow_in, ncol_up, nrow_up
-  integer, intent(in) :: mapcol_in(4,ncol_in), maprow_in(4,nrow_in)
+  integer, intent(in) :: mapcol_in(4, ncol_in), maprow_in(4, nrow_in)
 
   ! local variables
   integer :: ii, jj, iv, ic, ik, jk, rprod, isp
@@ -42,68 +42,68 @@ subroutine define_kmap(syms,kpt,kernel,irp,ncol_in,mapcol_in, &
   kernel%ncol_up = 0
   jj = 0
   do ii = 1, ncol_in
-     iv = mapcol_in(1,ii)
-     ic = mapcol_in(2,ii)
-     jk = mapcol_in(3,ii)
-     ik = mapcol_in(4,ii)
-     isp = 1
-     if (ii > ncol_up) isp = 2
-     rprod = syms%prod(kpt%wfn(isp,jk)%irep(iv),kpt%wfn(isp,ik)%irep(ic))
-     if (rprod == irp) jj = jj + 1
-     if ( ii <= ncol_up ) kernel%ncol_up = jj
-  enddo
+    iv = mapcol_in(1, ii)
+    ic = mapcol_in(2, ii)
+    jk = mapcol_in(3, ii)
+    ik = mapcol_in(4, ii)
+    isp = 1
+    if (ii > ncol_up) isp = 2
+    rprod = syms%prod(kpt%wfn(isp, jk)%irep(iv), kpt%wfn(isp, ik)%irep(ic))
+    if (rprod == irp) jj = jj + 1
+    if (ii <= ncol_up) kernel%ncol_up = jj
+  end do
   kernel%ncol = jj
-  if ( kernel%ncol /= 0 ) then
-     allocate(kernel%col(4,kernel%ncol))
-     jj = 0
-     do ii = 1, ncol_in
-        iv = mapcol_in(1,ii)
-        ic = mapcol_in(2,ii)
-        jk = mapcol_in(3,ii)
-        ik = mapcol_in(4,ii)
-        isp = 1
-        if (ii > ncol_up) isp = 2
-        rprod = syms%prod(kpt%wfn(isp,jk)%irep(iv),kpt%wfn(isp,ik)%irep(ic))
-        if (rprod == irp) then
-           jj = jj + 1
-           kernel%col(:,jj) = mapcol_in(:,ii)
-        endif
-     enddo
-  endif
+  if (kernel%ncol /= 0) then
+    allocate (kernel%col(4, kernel%ncol))
+    jj = 0
+    do ii = 1, ncol_in
+      iv = mapcol_in(1, ii)
+      ic = mapcol_in(2, ii)
+      jk = mapcol_in(3, ii)
+      ik = mapcol_in(4, ii)
+      isp = 1
+      if (ii > ncol_up) isp = 2
+      rprod = syms%prod(kpt%wfn(isp, jk)%irep(iv), kpt%wfn(isp, ik)%irep(ic))
+      if (rprod == irp) then
+        jj = jj + 1
+        kernel%col(:, jj) = mapcol_in(:, ii)
+      end if
+    end do
+  end if
   !-------------------------------------------------------------------
   ! Now, work with rows.
   !
   kernel%nrow_up = 0
   jj = 0
   do ii = 1, nrow_in
-     iv = maprow_in(1,ii)
-     ic = maprow_in(2,ii)
-     jk = maprow_in(3,ii)
-     ik = maprow_in(4,ii)
-     isp = 1
-     if (ii > nrow_up) isp = 2
-     rprod = syms%prod(kpt%wfn(isp,jk)%irep(iv),kpt%wfn(isp,ik)%irep(ic))
-     if (rprod == irp) jj = jj + 1
-     if ( ii <= nrow_up ) kernel%nrow_up = jj
-  enddo
+    iv = maprow_in(1, ii)
+    ic = maprow_in(2, ii)
+    jk = maprow_in(3, ii)
+    ik = maprow_in(4, ii)
+    isp = 1
+    if (ii > nrow_up) isp = 2
+    rprod = syms%prod(kpt%wfn(isp, jk)%irep(iv), kpt%wfn(isp, ik)%irep(ic))
+    if (rprod == irp) jj = jj + 1
+    if (ii <= nrow_up) kernel%nrow_up = jj
+  end do
   kernel%nrow = jj
-  if ( kernel%nrow /= 0 ) then
-     allocate(kernel%row(4,kernel%nrow))
-     jj = 0
-     do ii = 1, nrow_in
-        iv = maprow_in(1,ii)
-        ic = maprow_in(2,ii)
-        jk = maprow_in(3,ii)
-        ik = maprow_in(4,ii)
-        isp = 1
-        if (ii > nrow_up) isp = 2
-        rprod = syms%prod(kpt%wfn(isp,jk)%irep(iv),kpt%wfn(isp,ik)%irep(ic))
-        if (rprod == irp) then
-           jj = jj + 1
-           kernel%row(:,jj) = maprow_in(:,ii)
-        endif
-     enddo
-  endif
+  if (kernel%nrow /= 0) then
+    allocate (kernel%row(4, kernel%nrow))
+    jj = 0
+    do ii = 1, nrow_in
+      iv = maprow_in(1, ii)
+      ic = maprow_in(2, ii)
+      jk = maprow_in(3, ii)
+      ik = maprow_in(4, ii)
+      isp = 1
+      if (ii > nrow_up) isp = 2
+      rprod = syms%prod(kpt%wfn(isp, jk)%irep(iv), kpt%wfn(isp, ik)%irep(ic))
+      if (rprod == irp) then
+        jj = jj + 1
+        kernel%row(:, jj) = maprow_in(:, ii)
+      end if
+    end do
+  end if
   kernel%nn = 0
 
 end subroutine define_kmap

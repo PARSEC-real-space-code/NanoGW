@@ -1,86 +1,86 @@
-subroutine printmatrix ( mat, n, m, iounit)
- 
- use myconstants
- implicit none
- 
- ! arguments
- real(dp), intent(in) :: mat(n,m)
- integer, intent(in) :: n, m, iounit
+subroutine printmatrix(mat, n, m, iounit)
 
- ! local constants and variables
- integer, parameter :: w = 15, w2 = 6
- integer :: i, j
- 
- write ( iounit, '( A, i12, A, i12, A )') "size: (", n, " * ", m, " )"
+  use myconstants
+  implicit none
 
-101 format( 3x, e10.3 )
-102 format( "  ...  " )
-103 format( 6x, "  ... ... ...  " )
+  ! arguments
+  real(dp), intent(in) :: mat(n, m)
+  integer, intent(in) :: n, m, iounit
 
- if ( n <= w .and. m <= w ) then
-   ! print all the matrix 
-   do i = 1, n
+  ! local constants and variables
+  integer, parameter :: w = 15, w2 = 6
+  integer :: i, j
+
+  write (iounit, '( A, i12, A, i12, A )') "size: (", n, " * ", m, " )"
+
+101 format(3x, e10.3)
+102 format("  ...  ")
+103 format(6x, "  ... ... ...  ")
+
+  if (n <= w .and. m <= w) then
+    ! print all the matrix
+    do i = 1, n
       do j = 1, m
-        write ( iounit, 101, advance='no' ) mat(i,j)
-      enddo
-      write ( iounit, * ) 
-   enddo
- endif
+        write (iounit, 101, advance='no') mat(i, j)
+      end do
+      write (iounit, *)
+    end do
+  end if
 
- if ( n <= w .and. m > w ) then
-   ! print part of the matrix
-   do i = 1, n
+  if (n <= w .and. m > w) then
+    ! print part of the matrix
+    do i = 1, n
       do j = 1, w2
-        write ( iounit, 101, advance='no' ) mat(i,j)
-      enddo
-      write ( iounit, 102, advance='no' )
-      do j = m-w2+1, m
-        write ( iounit, 101, advance='no' ) mat(i,j)
-      enddo
-      write ( iounit, * )
-   enddo
- endif
+        write (iounit, 101, advance='no') mat(i, j)
+      end do
+      write (iounit, 102, advance='no')
+      do j = m - w2 + 1, m
+        write (iounit, 101, advance='no') mat(i, j)
+      end do
+      write (iounit, *)
+    end do
+  end if
 
- if ( n > w .and. m <= w ) then
-   ! print part of the matrix
-   do i = 1, w2
+  if (n > w .and. m <= w) then
+    ! print part of the matrix
+    do i = 1, w2
       do j = 1, m
-        write ( iounit, 101, advance='no' ) mat(i,j)
-      enddo
-      write ( iounit, * )
-   enddo
-   write ( iounit, 103 )
-   do i = n-w2+1, n
+        write (iounit, 101, advance='no') mat(i, j)
+      end do
+      write (iounit, *)
+    end do
+    write (iounit, 103)
+    do i = n - w2 + 1, n
       do j = 1, m
-        write ( iounit, 101, advance='no' ) mat(i,j)
-      enddo
-      write ( iounit, * )
-   enddo
- endif
+        write (iounit, 101, advance='no') mat(i, j)
+      end do
+      write (iounit, *)
+    end do
+  end if
 
- if ( n > w .and. m > w ) then
-   ! print part of the matrix
-   do i = 1, w2
+  if (n > w .and. m > w) then
+    ! print part of the matrix
+    do i = 1, w2
       do j = 1, w2
-         write ( iounit, 101, advance='no' ) mat(i,j)
-      enddo
-      write ( iounit, 102, advance='no' )
-      do j = m-w2+1, m
-         write ( iounit, 101, advance='no' ) mat(i,j)
-      enddo
-      write ( iounit, * )
-   enddo
-   write ( iounit, 103 )
-   do i = n-w2+1, n
+        write (iounit, 101, advance='no') mat(i, j)
+      end do
+      write (iounit, 102, advance='no')
+      do j = m - w2 + 1, m
+        write (iounit, 101, advance='no') mat(i, j)
+      end do
+      write (iounit, *)
+    end do
+    write (iounit, 103)
+    do i = n - w2 + 1, n
       do j = 1, w2
-         write ( iounit, 101, advance='no' ) mat(i,j)
-      enddo
-      write ( iounit, 102, advance='no' )
-      do j = m-w2+1, m
-         write ( iounit, 101, advance='no' ) mat(i,j)
-      enddo
-      write ( iounit, * )
-   enddo
- endif
+        write (iounit, 101, advance='no') mat(i, j)
+      end do
+      write (iounit, 102, advance='no')
+      do j = m - w2 + 1, m
+        write (iounit, 101, advance='no') mat(i, j)
+      end do
+      write (iounit, *)
+    end do
+  end if
 
 end subroutine printmatrix

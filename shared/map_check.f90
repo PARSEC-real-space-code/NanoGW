@@ -8,12 +8,12 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !---------------------------------------------------------------
-subroutine map_check(filename,label,nn,map_1,map_2,lcheck)
+subroutine map_check(filename, label, nn, map_1, map_2, lcheck)
 
   implicit none
 
   ! name of checkpoint file, name of field in parent routine
-  character (len=*), intent(in) :: filename, label
+  character(len=*), intent(in) :: filename, label
   ! length of arrays
   integer, intent(in) :: nn
   ! arrays to be compared
@@ -25,18 +25,18 @@ subroutine map_check(filename,label,nn,map_1,map_2,lcheck)
 
   lcheck = .true.
   do ii = 1, nn
-     if (map_1(ii) /= map_2(ii)) then
-        lcheck = .false.
-        exit
-     endif
-  enddo
+    if (map_1(ii) /= map_2(ii)) then
+      lcheck = .false.
+      exit
+    end if
+  end do
 
   if (.not. lcheck) then
-     write(6,*) ' WARNING: parameter mismatch in checkpoint file '
-     write(6,*) ' Value of ', label, ' in memory is ', map_1
-     write(6,*) ' Value of ', label, ' from ', filename, ' is ', map_2
-     write(6,*) ' Ignoring checkpoint file.'
-  endif
+    write (6, *) ' WARNING: parameter mismatch in checkpoint file '
+    write (6, *) ' Value of ', label, ' in memory is ', map_1
+    write (6, *) ' Value of ', label, ' from ', filename, ' is ', map_2
+    write (6, *) ' Ignoring checkpoint file.'
+  end if
 
 end subroutine map_check
 !===============================================================
