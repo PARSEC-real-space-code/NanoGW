@@ -12,7 +12,7 @@
 #  subdirectory ./config
 #####################
 
-MACH ?= perlmutter_nvdia
+MACH ?= ubuntu_intel
 
 # Version date: must have exactly 28 characters!
 VERSIONDATE = "Wed Aug 23 17:07:49 EST 2023"
