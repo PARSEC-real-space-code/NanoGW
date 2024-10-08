@@ -125,6 +125,9 @@ subroutine input_g(pol_in, qpt, tdldacut, nbuff, lcache, wgr_npes, &
   ii = 1
   rgr_num = esdf_integer('distribute_representations', ii)
 
+  ii = peinf%npes/rgr_num
+  wgr_npes = esdf_integer('distribute_wavefunctions', ii)
+
   strflag = esdf_reduce(esdf_string('dft_program', 'parsec'))
   select case (trim(strflag))
   case ('parsec', 'PARSEC')
@@ -134,9 +137,6 @@ subroutine input_g(pol_in, qpt, tdldacut, nbuff, lcache, wgr_npes, &
   case default
     write (6, *) 'ERROR: unknown DFT program : ', trim(strflag)
   end select
-
-  ii = 1
-  wgr_npes = esdf_integer('distribute_wavefunctions', ii)
 
   if (esdf_block('tdlda_valence', nlines)) then
     if (pol_in(1)%nval < 0) pol_in(1)%nval = 0
