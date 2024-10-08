@@ -1,6 +1,6 @@
 !===================================================================
 !
-! Read input parameters from file rgwbs.in
+! Read input parameters from file nanogw.in
 ! This is a parsing subroutine that searches for meaningful keywords
 ! in input file and initializes parameters according to input.
 !
@@ -61,7 +61,7 @@ subroutine input_g(pol_in, qpt, tdldacut, nbuff, lcache, wgr_npes, &
   !-----------------------------------------------------------------------
   ! Start reading input parameters and search for ESDF keywords.
   !
-  call esdf_init('rgwbs.in')
+  call esdf_init('nanogw.in')
 
   dtmp = -one
   tdldacut = esdf_physical('tdlda_cutoff', dtmp, 'eV')

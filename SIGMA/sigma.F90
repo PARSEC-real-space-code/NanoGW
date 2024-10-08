@@ -153,7 +153,7 @@ program sigma
   open (outdbg, file=dbg_filename, status='unknown', iostat=info)
 #endif
   !-------------------------------------------------------------------
-  ! Read input parameters from rgwbs.in.
+  ! Read input parameters from nanogw.in.
   !
   call input_g(pol_in, qpt, tdldacut, nbuff, lcache, w_grp%npes, nolda, &
                tamm_d, r_grp%num, dft_code, doisdf, n_intp, intp_type, isdf_type, &
@@ -344,7 +344,7 @@ program sigma
         end do ! ii loop
       end do ! ikp loop
     end do ! isp loop
-    ! if n_intp can not be found in rgwbs.in or invalid (i.e., less than the
+    ! if n_intp can not be found in nanogw.in or invalid (i.e., less than the
     ! number of occupied states), then set it to the default value
     if (n_intp < ihomo) then
       n_intp = int(2.0*ihomo)

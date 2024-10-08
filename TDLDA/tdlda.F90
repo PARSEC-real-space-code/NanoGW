@@ -219,7 +219,7 @@ program tdlda
         end do ! ii loop
       end do ! ikp loop
     end do ! isp loop
-    ! if n_intp can not be found in rgwbs.in or invalid (i.e., less than the
+    ! if n_intp can not be found in nanogw.in or invalid (i.e., less than the
     ! number of occupied states), then set it to a default value
     if (n_intp < ihomo) then
       n_intp = int(2.0*ihomo)
