@@ -9,8 +9,7 @@
 subroutine Zcalculate_sigma_lanczos_lowcom(nspin, nkpt, &
                                            sig_en, dft_code, gvec, kpt, qpt, k_c, k_p, sig_in, &
                                            sig, q_p, nolda, tamm_d, writeqp, snorm, cohsex, &
-                                           ecuts, sig_cut, max_sig, &
-                                           isdf_in, doisdf, opt)
+                                           ecuts, sig_cut, max_sig, isdf_in, doisdf, opt)
 
   use typedefs
   use mpi_module

@@ -6,9 +6,10 @@
 ! Author: Weiwei Gao @ Dalian Univ. of Tech.
 !
 !---------------------------------------------------------------
-subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, &
-                                              gvec, kpt, qpt, k_c, k_p, sig_in, sig, q_p, nolda, tamm_d, writeqp, snorm, &
-                                              cohsex, ecuts, sig_cut, max_sig, isdf_in, doisdf, opt)
+subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
+                                              sig_en, dft_code, gvec, kpt, qpt, k_c, k_p, sig_in, &
+                                              sig, q_p, nolda, tamm_d, writeqp, snorm, cohsex, &
+                                              ecuts, sig_cut, max_sig, isdf_in, doisdf, opt)
 
   use typedefs
   use mpi_module
@@ -91,8 +92,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, &
   ! -------- temporary arrays for lanczos iterations --------
   integer :: tmp_cvpair(2, w_grp%ldncv), irep, kk, blksz, iblk, cvstart, jc, &
              jv, jvrep, jcrep, istart, ivstart, icstart, lncond, lnval, m1_rep, &
-             maxnblks, nmrep, ibnd, irp1, irp2, lrp1, lrp2, nx, nx_select
-  integer :: n_intp_r, icend
+             maxnblks, nmrep, ibnd, irp1, irp2, lrp1, lrp2, nx, nx_select, n_intp_r, icend
   integer, allocatable :: blks(:, :, :), tmp_lrep(:, :), tmp_lvrep(:, :), &
                           tmp_lcrep(:, :), nvblks(:), nblks(:), ncblks(:), tmp_count(:)
   real(dp) :: pnorm2(opt%jnblock), pnorm(opt%jnblock), fit_error, max_fit_error
