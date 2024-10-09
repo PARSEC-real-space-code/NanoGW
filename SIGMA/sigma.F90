@@ -1036,19 +1036,11 @@ program sigma
                                               isdf_in, doisdf, opt)
           lstop = .true.
         else if (isdf_in%lessmemory == 4) then
-          if (gvec%syms%ntrans == 1) then
-            if (peinf%master) print *, "call calculate_sigma_lanczos_lowcom "
-            call dcalculate_sigma_lanczos_lowcom(nspin, kpt_sig%nk, sig_en, &
-                                                 dft_code, gvec, kpt, qpt, k_c, k_p, sig_in, sig, q_p, nolda, &
-                                                 tamm_d, writeqp, snorm, cohsex, ecuts, sig_cut, max_sig, &
-                                                 isdf_in, doisdf, opt)
-          else
-            if (peinf%master) print *, "call calculate_sigma_lanczos_lowcomsym "
-            call dcalculate_sigma_lanczos_lowcomsym(nspin, kpt_sig%nk, &
-                                                    sig_en, dft_code, gvec, kpt, qpt, k_c, k_p, sig_in, sig, q_p, &
-                                                    nolda, tamm_d, writeqp, snorm, cohsex, ecuts, sig_cut, &
-                                                    max_sig, isdf_in, doisdf, opt)
-          end if
+          if (peinf%master) print *, "call calculate_sigma_lanczos_lowcomsym "
+          call dcalculate_sigma_lanczos_lowcomsym(nspin, kpt_sig%nk, &
+                                                  sig_en, dft_code, gvec, kpt, qpt, k_c, k_p, sig_in, sig, q_p, &
+                                                  nolda, tamm_d, writeqp, snorm, cohsex, ecuts, sig_cut, &
+                                                  max_sig, isdf_in, doisdf, opt)
           lstop = .true.
         else
           if (peinf%master) print *, "call calculate_sigma_lanczos"
@@ -1082,7 +1074,7 @@ program sigma
       call stopwatch(peinf%master, 'WARNING: abort SCGW')
       exit
     end if
-  end do
+  end do ! it_scf
   if (peinf%master) print *, " finished calculate sigma"
 
   ! Deallocate arrays for ISDF method
