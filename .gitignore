@@ -49,3 +49,4 @@ LIB/libxc/src/Makefile
 LIB/libxc/stamp-h1
 LIB/libxc/testsuite/.deps/
 LIB/libxc/testsuite/Makefile
+LIB/*/autom4te.cache
