@@ -1,6 +1,6 @@
 !===================================================================
 !
-! Read input parameters from file rgwbs.in
+! Read input parameters from file nanogw.in
 ! This is a parsing subroutine that searches for meaningful keywords
 ! in input file and initializes parameters according to input.
 !
@@ -61,7 +61,7 @@ subroutine input_g(pol_in, qpt, tdldacut, nbuff, lcache, wgr_npes, &
   !-----------------------------------------------------------------------
   ! Start reading input parameters and search for ESDF keywords.
   !
-  call esdf_init('rgwbs.in')
+  call esdf_init('nanogw.in')
 
   dtmp = -one
   tdldacut = esdf_physical('tdlda_cutoff', dtmp, 'eV')
@@ -125,6 +125,9 @@ subroutine input_g(pol_in, qpt, tdldacut, nbuff, lcache, wgr_npes, &
   ii = 1
   rgr_num = esdf_integer('distribute_representations', ii)
 
+  ii = peinf%npes/rgr_num
+  wgr_npes = esdf_integer('distribute_wavefunctions', ii)
+
   strflag = esdf_reduce(esdf_string('dft_program', 'parsec'))
   select case (trim(strflag))
   case ('parsec', 'PARSEC')
@@ -134,9 +137,6 @@ subroutine input_g(pol_in, qpt, tdldacut, nbuff, lcache, wgr_npes, &
   case default
     write (6, *) 'ERROR: unknown DFT program : ', trim(strflag)
   end select
-
-  ii = 1
-  wgr_npes = esdf_integer('distribute_wavefunctions', ii)
 
   if (esdf_block('tdlda_valence', nlines)) then
     if (pol_in(1)%nval < 0) pol_in(1)%nval = 0

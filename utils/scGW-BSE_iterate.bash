@@ -5,8 +5,8 @@
 #
 # input files in work directory :
 #    parsec_dft.dat  : DFT wave-functions and eigenvalues
-#    rgwbs.in_0      : parameter file in zero-th iteration
-#    rgwbs.in_1      : parameter file in subsequent iterations
+#    nanogw.in_0      : parameter file in zero-th iteration
+#    nanogw.in_1      : parameter file in subsequent iterations
 #    occup.in        : orbital occupancies, optional
 #
 # Output of n-th iteration is kept under subdirectory iteration_n.
@@ -80,10 +80,10 @@ do
     if (( iter==0 ))
     then
 # for 0-th iteration, use TDLDA polarizability
-# input files: parsec_dft.dat, rgwbs.in_0
+# input files: parsec_dft.dat, nanogw.in_0
 # output files: parsec_qp.dat, sigma_mtxel_qp.dat
         ln -s ../parsec_dft.dat parsec.dat
-        cp -p ../rgwbs.in_0 rgwbs.in
+        cp -p ../nanogw.in_0 nanogw.in
 
         date
         echo ------------------------------------------------------------------
@@ -100,14 +100,14 @@ do
 
     else
 # for n-th iteration, use BSE polarizability
-# input/output files: parsec_qp.dat, rgwbs.in_1, sigma_mtxel_qp.dat
+# input/output files: parsec_qp.dat, nanogw.in_1, sigma_mtxel_qp.dat
         sigma_mtxel='../iteration_'$iterm1'/sigma_mtxel_qp.dat'
         wfn='../iteration_'$iterm1'/parsec_qp.dat'
         pol='../iteration_'$iterm1'/bse_diag_qp.dat'
         ln -s $sigma_mtxel sigma_mtxel.dat
         ln -s $wfn parsec.dat
         ln -s $pol pol_diag.dat
-        cp -p ../rgwbs.in_1 rgwbs.in
+        cp -p ../nanogw.in_1 nanogw.in
 
         date
         echo ------------------------------------------------------------------

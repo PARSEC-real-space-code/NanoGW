@@ -16,7 +16,7 @@
 !
 !            E_new = E_old + ( E_old - E_ref ) * slope + const
 !
-! If no scissors operator is found in rgwbs.in, then E_new = E_old.
+! If no scissors operator is found in nanogw.in, then E_new = E_old.
 !
 ! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
 ! This file is part of RGWBS. It is distributed under the GPL v1.
@@ -32,7 +32,7 @@ subroutine read_scissors(verbose, isp, nstate, e_old, e_new)
   ! output flag
   logical, intent(in) :: verbose
   ! input spin component, length of eigenvalue arrays
-  ! scissors operators in rgwbs.in with spin component different from isp are ignored
+  ! scissors operators in nanogw.in with spin component different from isp are ignored
   integer, intent(in) :: isp, nstate
   ! input list of eigenvalues
   real(dp), intent(in) :: e_old(nstate)
@@ -45,7 +45,7 @@ subroutine read_scissors(verbose, isp, nstate, e_old, e_new)
 
   call dcopy(nstate, e_old, 1, e_new, 1)
 
-  call esdf_init('rgwbs.in')
+  call esdf_init('nanogw.in')
   if (esdf_block('scissors', nscissors)) then
     if (verbose) write (6, '(/,a,/)') repeat('*', 65)
     do jj = 1, nscissors

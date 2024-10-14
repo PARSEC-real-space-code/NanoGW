@@ -5,7 +5,7 @@
 #
 # input files in work directory :
 #    parsec_dft.dat  : DFT wave-functions and eigenvalues
-#    rgwbs.in_0      : parameter file in zero-th iteration
+#    nanogw.in_0      : parameter file in zero-th iteration
 #    scissors.pl     : appropriate script to build scissors operator
 #    occup.in        : orbital occupancies, optional
 #
@@ -75,13 +75,13 @@ do
         ln -s ../parsec.in .
     fi
 
-# input files: parsec_dft.dat, rgwbs.in_0
+# input files: parsec_dft.dat, nanogw.in_0
 # output files: parsec_qp.dat, sigma_mtxel_qp.dat
         ln -s ../parsec_dft.dat parsec.dat
-        cp -p ../rgwbs.in_0 rgwbs.in
-        cat rgwbs.in ../scissors > tt
-        rm -f rgwbs.in
-        mv tt rgwbs.in
+        cp -p ../nanogw.in_0 nanogw.in
+        cat nanogw.in ../scissors > tt
+        rm -f nanogw.in
+        mv tt nanogw.in
 
         date
         echo ------------------------------------------------------------------

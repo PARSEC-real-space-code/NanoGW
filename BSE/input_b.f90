@@ -1,6 +1,6 @@
 !===================================================================
 !
-! Read input parameters from file rgwbs.in
+! Read input parameters from file nanogw.in
 ! Only search for parameters specific to BSESOLV.
 !
 ! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
@@ -48,7 +48,7 @@ subroutine input_b(bsepol_in, q_bse, writeig, trip_flag, trunc_c, mix_flag, &
   !-----------------------------------------------------------------------
   ! Start searching for keywords in input file.
   !
-  call esdf_init('rgwbs.in')
+  call esdf_init('nanogw.in')
 
   eref = esdf_physical('energy_reference', -one, 'eV')
 

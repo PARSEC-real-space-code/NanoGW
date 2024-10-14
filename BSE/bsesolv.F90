@@ -76,7 +76,7 @@ program bsesolv
   call header('BSESOLV')
 
   !-------------------------------------------------------------------
-  ! Read input parameters from rgwbs.in.
+  ! Read input parameters from nanogw.in.
   !
   call input_g(pol_in, qpt, tdldacut, nbuff, lcache, w_grp%npes, &
                nolda, tamm_d, r_grp%num, dft_code, doisdf, n_intp, intp_type, isdf_type, &

@@ -153,7 +153,7 @@ program sigma
   open (outdbg, file=dbg_filename, status='unknown', iostat=info)
 #endif
   !-------------------------------------------------------------------
-  ! Read input parameters from rgwbs.in.
+  ! Read input parameters from nanogw.in.
   !
   call input_g(pol_in, qpt, tdldacut, nbuff, lcache, w_grp%npes, nolda, &
                tamm_d, r_grp%num, dft_code, doisdf, n_intp, intp_type, isdf_type, &
@@ -344,7 +344,7 @@ program sigma
         end do ! ii loop
       end do ! ikp loop
     end do ! isp loop
-    ! if n_intp can not be found in rgwbs.in or invalid (i.e., less than the
+    ! if n_intp can not be found in nanogw.in or invalid (i.e., less than the
     ! number of occupied states), then set it to the default value
     if (n_intp < ihomo) then
       n_intp = int(2.0*ihomo)
@@ -1036,19 +1036,11 @@ program sigma
                                               isdf_in, doisdf, opt)
           lstop = .true.
         else if (isdf_in%lessmemory == 4) then
-          if (gvec%syms%ntrans == 1) then
-            if (peinf%master) print *, "call calculate_sigma_lanczos_lowcom "
-            call dcalculate_sigma_lanczos_lowcom(nspin, kpt_sig%nk, sig_en, &
-                                                 dft_code, gvec, kpt, qpt, k_c, k_p, sig_in, sig, q_p, nolda, &
-                                                 tamm_d, writeqp, snorm, cohsex, ecuts, sig_cut, max_sig, &
-                                                 isdf_in, doisdf, opt)
-          else
-            if (peinf%master) print *, "call calculate_sigma_lanczos_lowcomsym "
-            call dcalculate_sigma_lanczos_lowcomsym(nspin, kpt_sig%nk, &
-                                                    sig_en, dft_code, gvec, kpt, qpt, k_c, k_p, sig_in, sig, q_p, &
-                                                    nolda, tamm_d, writeqp, snorm, cohsex, ecuts, sig_cut, &
-                                                    max_sig, isdf_in, doisdf, opt)
-          end if
+          if (peinf%master) print *, "call calculate_sigma_lanczos_lowcomsym "
+          call dcalculate_sigma_lanczos_lowcomsym(nspin, kpt_sig%nk, &
+                                                  sig_en, dft_code, gvec, kpt, qpt, k_c, k_p, sig_in, sig, q_p, &
+                                                  nolda, tamm_d, writeqp, snorm, cohsex, ecuts, sig_cut, &
+                                                  max_sig, isdf_in, doisdf, opt)
           lstop = .true.
         else
           if (peinf%master) print *, "call calculate_sigma_lanczos"
@@ -1082,7 +1074,7 @@ program sigma
       call stopwatch(peinf%master, 'WARNING: abort SCGW')
       exit
     end if
-  end do
+  end do ! it_scf
   if (peinf%master) print *, " finished calculate sigma"
 
   ! Deallocate arrays for ISDF method

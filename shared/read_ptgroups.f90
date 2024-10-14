@@ -1,6 +1,6 @@
 !===================================================================
 !
-! Read parameters for symmetry groups from rgwbs.in file.
+! Read parameters for symmetry groups from nanogw.in file.
 !
 ! INPUT:
 !    none
@@ -28,7 +28,7 @@ subroutine read_ptgroups(syms)
   ! local variables
   integer :: ii
 
-  call esdf_init('rgwbs.in')
+  call esdf_init('nanogw.in')
 
   if (esdf_block('point_group_tables', syms%ngr)) then
     allocate (syms%grfilename(syms%ngr))

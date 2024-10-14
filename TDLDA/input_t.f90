@@ -1,6 +1,6 @@
 !===================================================================
 !
-! Read input parameters from file rgwbs.in
+! Read input parameters from file nanogw.in
 ! Only search for parameters specific to TDLDA.
 !
 ! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
@@ -9,7 +9,7 @@
 !-------------------------------------------------------------------
 subroutine input_t(tamm_d, rpaonly, trip_flag, noxchange, trunc_c)
   !
-  ! Read input parameters from file rgwbs.in
+  ! Read input parameters from file nanogw.in
   !
   use myconstants
   use esdf
@@ -29,7 +29,7 @@ subroutine input_t(tamm_d, rpaonly, trip_flag, noxchange, trunc_c)
   !-----------------------------------------------------------------------
   ! Start reading input parameters until the end of file is reached.
   !
-  call esdf_init('rgwbs.in')
+  call esdf_init('nanogw.in')
 
   rpaonly = (esdf_defined('rpa_spectrum_only'))
 

@@ -7,7 +7,7 @@
 ! ncv_loc = isdf_in%ncv_sym(nmrep)
 subroutine lanczos_spectra_isdf_lowcomsym(v0, v0_norm, ncv_loc, zz, nz, niter, isdf_in, &
                                           ncv, sqrtR, polynomial, npoly, spectra, &
-#if defined DCU
+#ifdef DCU
                                           !MC_vec, CMC_vec, tmp_vec,
                                           blksz, nmrep, gvec, d_PsiV, d_PsiC, d_Cmtrx, &
                                           d_pvec, d_cvec, d_lcrep, hipblasHandle &
@@ -62,7 +62,7 @@ subroutine lanczos_spectra_isdf_lowcomsym(v0, v0_norm, ncv_loc, zz, nz, niter, i
   integer(kind=cuda_stream_kind), intent(in) :: streamid
 #endif
   real(dp)   :: a_elmt(niter, blksz), b_elmt(niter, blksz)
-  complex(8) :: enum, deno
+  complex(8) :: enumerator, denominator
   real(dp), parameter :: eps = 1.0d-8
   integer :: ii, i, j, k, iz, info
 #ifndef _CUDA
@@ -170,16 +170,16 @@ subroutine lanczos_spectra_isdf_lowcomsym(v0, v0_norm, ncv_loc, zz, nz, niter, i
   spectra = 0.d0
 
   do ii = 1, blksz
-  do iz = 1, nz
-    do j = niter, 1, -1
-      enum = b_elmt(j, ii)*b_elmt(j, ii)
-      if (j == 1) enum = (1.d0, 0.d0)
-      deno = zz(iz, ii) - a_elmt(j, ii) - spectra(iz, ii)
-      spectra(iz, ii) = enum/deno
-      !if (nz .eq. 1) print *, "check ", j, enum, deno
-    end do ! j
-    !print *, "spectra ", iz, zz(iz), spectra(iz)
-  end do ! iz
+    do iz = 1, nz
+      do j = niter, 1, -1
+        enumerator = b_elmt(j, ii)*b_elmt(j, ii)
+        if (j == 1) enumerator = (1.d0, 0.d0)
+        denominator = zz(iz, ii) - a_elmt(j, ii) - spectra(iz, ii)
+        spectra(iz, ii) = enumerator/denominator
+        !if (nz .eq. 1) print *, "check ", j, enumerator, denominator
+      end do ! j
+      !print *, "spectra ", iz, zz(iz), spectra(iz)
+    end do ! iz
   end do ! ii
 ! deallocate(a_elmt)
 ! deallocate(b_elmt)

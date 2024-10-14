@@ -1,6 +1,6 @@
 !===================================================================
 !
-! Read input parameters from file rgwbs.in
+! Read input parameters from file nanogw.in
 ! Only search for parameters specific to BSESOLV.
 !
 ! Copyright (C) 2009 Murilo L. Tiago, http://users.ices.utexas.edu/~mtiago
@@ -69,7 +69,7 @@ subroutine input_s(sig, kpt_sig, snorm, writeqp, readvxc, readocc, cohsex, &
   !-----------------------------------------------------------------------
   ! Start searching for keywords in input file.
   !
-  call esdf_init('rgwbs.in')
+  call esdf_init('nanogw.in')
 
   sig%nmax_c = esdf_integer('max_number_states', -1)
 

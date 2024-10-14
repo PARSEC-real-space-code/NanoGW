@@ -6,8 +6,7 @@
 ##
 
 ##
-SRC	= alccheck.f90 define_kmap.f90 define_xc.f90 \
-	  delete_file.f90 \
+SRC	= alccheck.f90 define_kmap.f90 define_xc.f90 delete_file.f90 \
 	  get_date.f90 get_grad_sym.f90 get_lap_sym.f90 input_g.f90 \
 	  inverse_map.f90 map_check.f90 mapinverse.f90 mtrxin.f90 \
 	  newtonr.f90 paratec_atoms.f90 paratec_xc.f90 parsec_atoms.f90 \
@@ -17,14 +16,15 @@ SRC	= alccheck.f90 define_kmap.f90 define_xc.f90 \
 	  spline_evaluate.f90 splint.f90 stopwatch.f90 sum_rule.f90 \
 	  timacc.f90 unfold.f90 vector_check.f90 \
 	  write_sigma.f90 linear_solver.f90 printmatrix.f90 \
-	  lanczos_spectra.f90 lanczos_spectra_UltraLowMem.f90 \
-	  lanczos_spectra_BLOCK.f90 lanczos_spectra_lowcom.f90 \
-      apply_matvec_BLOCK.f90 apply_matvec_lowcom.f90 \
-      lanczos_spectra_lowcomsym.f90 apply_matvec_lowcomsym.f90 \
-	  polyfit.f90 polyfitcheb.f90 apply_matvec.f90 apply_matvec_UltraLowMem.f90 $(AUX_SRC)
-PSRCZ	= calculate_tdlda.F90z calculate_sigma.F90z calculate_sigma_lanczos.F90z \
+	  lanczos_spectra.f90 apply_matvec.f90\
+      lanczos_spectra_UltraLowMem.f90 apply_matvec_UltraLowMem.f90 \
+	  lanczos_spectra_BLOCK.f90 apply_matvec_BLOCK.f90 \
+	  lanczos_spectra_lowcomsym.f90 apply_matvec_lowcomsym.f90 \
+	  polyfit.f90 polyfitcheb.f90 $(AUX_SRC)
+PSRCZ = calculate_tdlda.F90z calculate_sigma.F90z \
+      calculate_sigma_lanczos.F90z \
       calculate_sigma_lanczos_UltraLowMem.F90z \
-      calculate_sigma_lanczos_BLOCK.F90z calculate_sigma_lanczos_lowcom.F90z\
+      calculate_sigma_lanczos_BLOCK.F90z \
 	  calculate_sigma_lanczos_lowcomsym.F90z \
 	  charac_group.F90z  contract_en.F90z correlation.F90z  \
 	  redistribute_psi_loc.F90z \
@@ -43,7 +43,7 @@ PSRC	= die.F90 grid_setup.F90 finalize.F90 input_s.F90 paratec_wfn.F90 \
 	  save_sigma.F90 sigma.F90 isdf_parallel_sym.F90 cvt_wfn.F90 cvt_parallel_sym1.F90 \
 	  cvt_parallel_sym2.F90 isdf_parallel_sym_lessmemory.F90 cvt.F90 isdf_parallel_sym_lessmemory2.F90 \
 	  isdf_parallel_sym_UltraLowMem.F90 int_psum.F90 
-# CSRC	= hadamard_prod_mat.cpp hadamard_prod_mat_sym.cpp
+# CSRC	= hadamard_prod_mat_sym.cpp
 
 OBJ	= $(SRC:.f90=.o)
 POBJ	= $(PSRC:.F90=.o)
