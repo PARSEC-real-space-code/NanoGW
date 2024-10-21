@@ -478,10 +478,10 @@ subroutine isdf_parallel_sym_lessmemory(gvec, pol_in, kpt, nspin, isdf_in, kflag
         !endif
         do jrp = 1, gvec%syms%ntrans
 #ifdef DEBUG
-          if (peinf%master and verbose) write (6, *) " jrp = ", jrp
-          !
-          if (verbose .and. peinf%master) &
+          if (peinf%master .and. verbose) then
+            write (6, *) " jrp = ", jrp
             write (dbgunit, *) ' isp = ', isp, ', ikp = ', ikp
+          end if
 #endif
           !
           do iv = 1, isdf_in%nv(isp, ikp, jrp)
