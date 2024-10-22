@@ -6,33 +6,27 @@
 !
 ! ncv_loc = isdf_in%ncv_sym(nmrep)
 subroutine lanczos_spectra_isdf_lowcomsym(v0, v0_norm, ncv_loc, zz, nz, niter, isdf_in, &
-                                          ncv, sqrtR, polynomial, npoly, spectra, &
-#ifdef DCU
-                                          !MC_vec, CMC_vec, tmp_vec,
-                                          blksz, nmrep, gvec, d_PsiV, d_PsiC, d_Cmtrx, &
-                                          d_pvec, d_cvec, d_lcrep, hipblasHandle &
-#elif defined _CUDA
-                                          !MC_vec, CMC_vec, tmp_vec,
-                                          blksz, nmrep, gvec, d_PsiV, d_PsiC, d_Cmtrx, &
-                                          d_pvec, d_cvec, d_lcrep, vstep, tmp_vec, streamid &
-#else
+                                          ncv, sqrtR, polynomial, npoly, spectra, tamm_d, &
                                           blksz, nmrep, gvec &
+#ifdef DCU
+                                          , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
+                                          hipblasHandle &
+#elif defined _CUDA
+                                          , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
+                                          vstep, tmp_vec, streamid &
 #endif
                                           )
 
   use typedefs
   use mpi_module
+
 #ifdef DCU
   use hipfort_types
+#elif defined _CUDA
+  use cublas  ! required to use generic BLAS interface
+  use cudafor ! CUDA runtime API routines (e.g. cudaDeviceSynchronize)
 #endif
-#ifdef _CUDA
-! Need to include a couple of modules:
-!   cublas: required to use generic BLAS interface
-!   cudafor: required to use CUDA runtime API routines (e.g. cudaDeviceSynchronize)
-!            not explicitly required if file has *.cuf suffix
-  use cublas
-  use cudafor
-#endif
+
   implicit none
   include 'mpif.h'
 
@@ -43,10 +37,12 @@ subroutine lanczos_spectra_isdf_lowcomsym(v0, v0_norm, ncv_loc, zz, nz, niter, i
                           polynomial(npoly + 1), v0_norm(blksz), &
                           sqrtR(ncv_loc)
   type(gspace), intent(in) :: gvec
+  logical, intent(in) :: tamm_d
   complex(dp), intent(out):: spectra(nz, blksz)
   !real(dp), target, intent(inout) :: MC_vec(w_grp%myn_intp_r, blksz), &
   !  CMC_vec(ncv_loc, blksz), tmp_vec(isdf_in%n_intp_r, blksz)
-#if defined DCU
+
+#ifdef DCU
   type(c_ptr), intent(inout) :: d_PsiV, d_PsiC, d_Cmtrx, d_cvec, &
                                 d_pvec, d_lcrep
   type(c_ptr), intent(in) :: hipblasHandle
@@ -61,44 +57,52 @@ subroutine lanczos_spectra_isdf_lowcomsym(v0, v0_norm, ncv_loc, zz, nz, niter, i
   integer, intent(in) :: vstep
   integer(kind=cuda_stream_kind), intent(in) :: streamid
 #endif
+
   real(dp)   :: a_elmt(niter, blksz), b_elmt(niter, blksz)
   complex(8) :: enumerator, denominator
   real(dp), parameter :: eps = 1.0d-8
   integer :: ii, i, j, k, iz, info
+
 #ifndef _CUDA
   real(dp), external :: ddot
 #endif
-  real(dp) :: vec(ncv_loc, blksz), &
-              wvec(ncv_loc, blksz), tmpvec(ncv_loc, blksz)
 
-  !print *, "inside lanczos_spectra_lowcom "
+  real(dp) :: vec(ncv_loc, blksz), wvec(ncv_loc, blksz), tmpvec(ncv_loc, blksz)
+
+
   ! normalize the vector
   do ii = 1, blksz
     vec(1:ncv_loc, ii) = v0(1:ncv_loc, ii)/v0_norm(ii)
   end do
 
-! allocate(a_elmt(niter))
-! allocate(b_elmt(niter))
-
   b_elmt(1, 1:blksz) = 1.d0
 
   ! compute wvec = H*vec
-  !if (peinf%master) print *, "vec = ", vec(1:5,1), "...", &
-  !    vec(ncv_loc-4:ncv_loc,1)
-  call polynomial_matvec_isdf_lowcomsym(vec, wvec, ncv_loc, &
-                                        polynomial, npoly, isdf_in, ncv, sqrtR, &
-#if defined DCU
-                                        blksz, nmrep, gvec, d_PsiV, d_PsiC, d_Cmtrx, &
-                                        d_pvec, d_cvec, d_lcrep, hipblasHandle &
+  ! if (peinf%master) print *, "vec = ", vec(1:5,1), "...", vec(ncv_loc-4:ncv_loc,1)
+  if (tamm_d) then ! TDA - poly fitting
+    call matvec_isdf_lowcomsym(vec, wvec, ncv_loc, isdf_in, ncv, sqrtR, .true., &
+                               blksz, nmrep, gvec &
+#ifdef DCU
+                               , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
+                               hipblasHandle &
 #elif defined _CUDA
-                                        blksz, nmrep, gvec, d_PsiV, d_PsiC, d_Cmtrx, &
-                                        d_pvec, d_cvec, d_lcrep, vstep, tmp_vec, streamid &
-#else
-                                        blksz, nmrep, gvec &
+                               , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
+                               vstep, tmp_vec, streamid &
 #endif
-                                        )
-  !if (peinf%master) print *, "wvec = ",wvec(1:10, 2), "...", &
-  !    vec(ncv_loc-4:ncv_loc,2)
+                               )
+  else
+    call polynomial_matvec_isdf_lowcomsym(vec, wvec, ncv_loc, polynomial, npoly, isdf_in, ncv, sqrtR, &
+                                          blksz, nmrep, gvec &
+#ifdef DCU
+                                          , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
+                                          hipblasHandle &
+#elif defined _CUDA
+                                          , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
+                                          vstep, tmp_vec, streamid &
+#endif
+                                          )
+  end if
+  ! if (peinf%master) print *, "wvec = ",wvec(1:10, 2), "...", vec(ncv_loc-4:ncv_loc,2)
   ! stop
   ! dot(vec, wvec)
   !
@@ -131,18 +135,29 @@ subroutine lanczos_spectra_isdf_lowcomsym(v0, v0_norm, ncv_loc, zz, nz, niter, i
     vec = wvec
     wvec = tmpvec
     ! wvec = wvec + H*vec
-    call polynomial_matvec_isdf_lowcomsym(vec, tmpvec, ncv_loc, &
-                                          polynomial, npoly, isdf_in, ncv, sqrtR, &
-#if defined DCU
-                                          blksz, nmrep, gvec, d_PsiV, d_PsiC, d_Cmtrx, &
-                                          d_pvec, d_cvec, d_lcrep, hipblasHandle &
+    if (tamm_d) then ! TDA - poly fitting
+      call matvec_isdf_lowcomsym(vec, tmpvec, ncv_loc, isdf_in, ncv, sqrtR, .true., &
+                                 blksz, nmrep, gvec &
+#ifdef DCU
+                                 , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
+                                 hipblasHandle &
 #elif defined _CUDA
-                                          blksz, nmrep, gvec, d_PsiV, d_PsiC, d_Cmtrx, &
-                                          d_pvec, d_cvec, d_lcrep, vstep, tmp_vec, streamid &
-#else
-                                          blksz, nmrep, gvec &
+                                 , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
+                                 vstep, tmp_vec, streamid &
 #endif
-                                          )
+                                 )
+    else ! not TDA
+      call polynomial_matvec_isdf_lowcomsym(vec, tmpvec, ncv_loc, polynomial, npoly, isdf_in, ncv, sqrtR, &
+                                            blksz, nmrep, gvec &
+#ifdef DCU
+                                            , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
+                                            hipblasHandle &
+#elif defined _CUDA
+                                            , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
+                                            vstep, tmp_vec, streamid &
+#endif
+                                            )
+    end if
     wvec = wvec + tmpvec
     !call stopwatch(peinf%master,'mpi_allreduce k start')
     do ii = 1, blksz
@@ -181,8 +196,6 @@ subroutine lanczos_spectra_isdf_lowcomsym(v0, v0_norm, ncv_loc, zz, nz, niter, i
       !print *, "spectra ", iz, zz(iz), spectra(iz)
     end do ! iz
   end do ! ii
-! deallocate(a_elmt)
-! deallocate(b_elmt)
 
 end subroutine
 

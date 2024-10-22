@@ -171,13 +171,13 @@ subroutine printsigma(nrep, sig_in, sig, wfn, q_p, itape, isp, ik, &
       write (jtape, '(a)') repeat('-', 65)
       write (jtape, '(/,2a)') ' OUTPUT SELF-ENERGY DIAGONAL MATRIX ', &
         'ELEMENTS (eV)'
-      write (jtape, '(3a)') '     n   occ        E_dft     V_xc   ', &
-        'Sigma_x  Sigma_sx   Sigma_c   Sigma_g  Sigma-V_xc   ', &
-        'zfac  Im[Sigma]      E_0      E_qp  '
+      write (jtape, '(3a)') '     n     occ       E_dft        V_xc', &
+        '     Sigma_x    Sigma_sx     Sigma_c     Sigma_g  Sigma-V_xc', &
+        '        zfac   Im[Sigma]         E_0        E_qp'
       do isig = 1, sig%ndiag
         en0 = wfn%e1(sig%map(sig%diag(isig)))*ryd
         edft = wfn%e0(sig%map(sig%diag(isig)))*ryd
-        write (jtape, '(i6,f8.3,11(1x,f14.8))') sig%map(sig%diag(isig)), &
+        write (jtape, '(i6,f8.3,11(1x,f11.5))') sig%map(sig%diag(isig)), &
           wfn%occ1(sig%map(sig%diag(isig))), edft, &
           real(sig%vxcdiag(isig), dp), real(sig%xdiag(isig), dp), &
           real(sexdiag(isig), dp), real(scdiag(isig), dp), &
@@ -216,7 +216,7 @@ subroutine printsigma(nrep, sig_in, sig, wfn, q_p, itape, isp, ik, &
     write (jtape, '(/,a)') repeat('-', 65)
     write (jtape, '(/,2a)') ' OUTPUT SELF-ENERGY DIAGONAL MATRIX ', &
       'ELEMENTS (eV)'
-    write (jtape, '(2a)') '    n     E_dft   Sigma_x      zfac  ', &
+    write (jtape, '(2a)') '     n     E_dft   Sigma_x      zfac  ', &
       'Sigma_sx     Sigma      V_xc       E_0      E_qp  '
     do isig = 1, sig%ndiag
       en0 = wfn%e1(sig%map(sig%diag(isig)))*ryd
