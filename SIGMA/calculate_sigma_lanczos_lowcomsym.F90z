@@ -254,6 +254,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
     else ! not TDA 
       npoly = opt%lanczos_npoly
       allocate (polynomial(npoly + 1))
+      
       ! fit a polynomial
       ! kpt%wfn(1,1)%nmem == isdf_in%maxicc ??
       if (peinf%master) then
