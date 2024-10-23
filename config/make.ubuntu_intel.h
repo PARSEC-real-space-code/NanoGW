@@ -11,7 +11,7 @@
 #
 
 FCPP    = /usr/bin/cpp -P -traditional-cpp
-CPPOPT  = -DMPI -DUSEFFTW3
+CPPOPT  = -DMPI -DUSEFFTW3 -DDEBUG
 
 EXT     = .mpi
 

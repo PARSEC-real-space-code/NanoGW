@@ -455,10 +455,10 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, pol_in, kpt, nspin, isdf_in, kfla
       !endif
       do jrp = 1, gvec%syms%ntrans
 #ifdef DEBUG
-        if (w_grp%master .and. verbose) write (6, *) " jrp = ", jrp
-        !
-        if (verbose .and. w_grp%master) &
+        if (w_grp%master .and. verbose) then
+          print *, " jrp = ", jrp
           write (dbgunit, *) ' isp = ', isp, ', ikp = ', ikp
+        end if
 #endif
         !
         ! ldn_intp_r = max(myn_intp_r) among all the procs
