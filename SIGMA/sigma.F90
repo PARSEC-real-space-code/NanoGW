@@ -960,6 +960,7 @@ program sigma
   !-------------------------------------------------------------------
   ! Calculate Vxc matrix elements and total energy.
   !
+  call timacc(55, 1, tsec)
   if (kpt%lcplx) then
     do ik = 1, kpt_sig%nk
       do isp = 1, nspin
@@ -975,6 +976,7 @@ program sigma
     end do
     !call detotal(gvec,kpt,nspin)
   end if
+  call timacc(55, 2, tsec)
   if (peinf%master) write (6, *) " done vxc "
 
   !-------------------------------------------------------------------
@@ -1134,34 +1136,46 @@ program sigma
   !-------------------------------------------------------------------
   ! Time accounting.
   !
-  ii = 9
-  ik = 14
+  ii = 13
+  ik = 35-13
   allocate (routnam(ii + ik))
   allocate (timerlist(ii + ik))
-  routnam(1) = 'SETUP_S:'; timerlist(1) = 2
-  routnam(2) = 'KERNEL:'; timerlist(2) = 3
-  routnam(3) = 'DIAG_POL:'; timerlist(3) = 4
-  routnam(4) = 'WPOL_0:'; timerlist(4) = 5
-  routnam(5) = 'EXCHANGE:'; timerlist(5) = 6
-  routnam(6) = 'POTENTIAL:'; timerlist(6) = 7
-  routnam(7) = 'CORRELATION:'; timerlist(7) = 8
-  routnam(8) = 'VERTEX:'; timerlist(8) = 9
-  routnam(9) = 'ROTATE:'; timerlist(9) = 10
+  routnam(1) = 'SETUP_S'; timerlist(1) = 2
+  routnam(2) = 'KERNEL'; timerlist(2) = 3
+  routnam(3) = 'DIAG_POL'; timerlist(3) = 4
+  routnam(4) = 'WPOL_0'; timerlist(4) = 5
+  routnam(5) = 'EXCHANGE'; timerlist(5) = 6
+  routnam(6) = 'POTENTIAL'; timerlist(6) = 7
+  routnam(7) = 'CORRELATION'; timerlist(7) = 8
+  routnam(8) = 'VERTEX'; timerlist(8) = 9
+  routnam(9) = 'ROTATE'; timerlist(9) = 10
+  routnam(10) = 'CVT'; timerlist(10) = 51
+  routnam(11) = 'ISDF'; timerlist(11) = 52
+  routnam(12) = 'VXC'; timerlist(12) = 55
+  routnam(13) = 'LANCZOS'; timerlist(13) = 56
 
-  routnam(10) = 'POISSON_FFT:'; timerlist(10) = 11
-  routnam(11) = 'EIGENSOLVER:'; timerlist(11) = 12
-  routnam(12) = 'INTEGRATION:'; timerlist(12) = 13
-  routnam(13) = 'Find intp pts:'; timerlist(13) = 51
-  routnam(14) = 'ISDF_PARALLEL:'; timerlist(14) = 52
-  routnam(15) = 'Calc intp vectors:'; timerlist(15) = 53
-  routnam(16) = 'Calc <zeta|K|zeta>:'; timerlist(16) = 54
-  routnam(17) = '(in cvt step1):'; timerlist(17) = 61
-  routnam(18) = '(in cvt step2):'; timerlist(18) = 62
-  routnam(19) = 'k_integrate_isdf:'; timerlist(19) = 63
-  routnam(20) = 'kernel k_print:'; timerlist(20) = 64
-  routnam(21) = 'k_int_isdf 1  :'; timerlist(21) = 65
-  routnam(22) = 'k_int_isdf 2  :'; timerlist(22) = 66
-  routnam(23) = 'k_int_isdf 3  :'; timerlist(23) = 67
+  routnam(14) = 'POISSON_FFT'; timerlist(14) = 11
+  routnam(15) = 'EIGENSOLVER'; timerlist(15) = 12
+  routnam(16) = 'INTEGRATION'; timerlist(16) = 13
+  routnam(17) = 'Find intp pts'; timerlist(17) = 51
+  routnam(18) = 'ISDF_PARALLEL'; timerlist(18) = 52
+  routnam(19) = 'Calc intp vectors'; timerlist(19) = 53
+  routnam(20) = 'Calc <zeta|K|zeta>'; timerlist(20) = 54
+  routnam(21) = '(in cvt step1)'; timerlist(21) = 61
+  routnam(22) = '(in cvt step2)'; timerlist(22) = 62
+  routnam(23) = 'k_integrate_isdf'; timerlist(23) = 63
+  routnam(24) = 'kernel k_print'; timerlist(24) = 64
+  routnam(25) = 'k_int_isdf 1'; timerlist(25) = 65
+  routnam(26) = 'k_int_isdf 2'; timerlist(26) = 66
+  routnam(27) = 'k_int_isdf 3'; timerlist(27) = 67
+  routnam(28) = 'Lanczos_matvec'; timerlist(28) = 58
+  routnam(29) = 'Lanczos_poly'; timerlist(29) = 57
+  routnam(30) = 'matvec: sqR@vec'; timerlist(30) = 68
+  routnam(31) = 'matvec: Hadamard'; timerlist(31) = 69
+  routnam(32) = 'matvec: C@vec'; timerlist(32) = 71
+  routnam(33) = 'matvec: M@vec'; timerlist(33) = 72
+  routnam(34) = 'matvec: mpi'; timerlist(34) = 70
+  routnam(35) = 'matvec: vec_final'; timerlist(35) = 73
 
 #ifdef HIPMAGMA
   !if (opt%linear_algebra .eq. 2 .or. opt%eigsolver .eq. 2) then
@@ -1173,21 +1187,6 @@ program sigma
     print *, "before Finalize"
   end if
   call timacc(1, 2, tsec)
-  !jj = 3
-  !call timacc(57, jj, tsec)
-  !if (peinf%master) print *, "running time for constructing Cmtrx ", tsec(1), tsec(2), "sec", jj
-  !jj = 3
-  !call timacc(67, jj, tsec)
-  !if (peinf%master) print *, "call dgemm in matvec ", tsec(1), tsec(2), "sec", jj
-  !jj = 3
-  !call timacc(68, jj, tsec)
-  !if (peinf%master) print *, "Hadamard product in matvec ", tsec(1), tsec(2), "sec", jj
-  !jj = 3
-  !call timacc(69, jj, tsec)
-  !if (peinf%master) print *, "Matrix copy and MPI_calls in matvec ", tsec(1), tsec(2), "sec", jj
-  !jj = 3
-  !call timacc(58, jj, tsec)
-  !if (peinf%master) print *, "running time for polynomial matvec  ", tsec(1), tsec(2), "sec", jj
   call finalize(peinf%master, peinf%comm, ii, ik, routnam, timerlist)
 
 end program sigma

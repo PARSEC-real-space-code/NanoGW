@@ -412,7 +412,6 @@ subroutine Zk_integrate_isdf(gvec, kpt, k_mat, k_tmp, irp, kflag, nspin, nbuff_m
           k_tmp(iblock)%Zm_f = Zzero
         end if
       end do ! do i_row = startrow(rsp), endrow(rsp), r_grp%npes
-      call timacc(67, 1, tsec)
       !
       !  Finished!
       !  Write last computed matrix elements to disk.
@@ -438,7 +437,6 @@ subroutine Zk_integrate_isdf(gvec, kpt, k_mat, k_tmp, irp, kflag, nspin, nbuff_m
       call alccheck(trim(lastwords), 'k_integrate', &
                     k_tmp(iblock)%nblock_max, info)
       k_tmp(iblock)%Zm_f = Zzero
-      call timacc(67, 2, tsec)
     end do ! do csp
   end do ! do rsp
   !-------------------------------------------------------------------

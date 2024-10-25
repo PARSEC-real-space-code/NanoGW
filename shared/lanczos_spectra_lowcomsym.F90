@@ -33,9 +33,8 @@ subroutine lanczos_spectra_isdf_lowcomsym(v0, v0_norm, ncv_loc, zz, nz, niter, i
   integer, intent(in) :: ncv_loc, niter, nz, npoly, blksz, ncv, nmrep
   complex(dp), intent(in) :: zz(nz, blksz)
   type(ISDF), intent(in) :: isdf_in
-  real(dp), intent(in) :: v0(ncv_loc, blksz), &
-                          polynomial(npoly + 1), v0_norm(blksz), &
-                          sqrtR(ncv_loc)
+  real(dp), intent(in) :: v0(ncv_loc, blksz), polynomial(npoly + 1), &
+                          v0_norm(blksz), sqrtR(ncv_loc)
   type(gspace), intent(in) :: gvec
   logical, intent(in) :: tamm_d
   complex(dp), intent(out):: spectra(nz, blksz)
@@ -58,7 +57,7 @@ subroutine lanczos_spectra_isdf_lowcomsym(v0, v0_norm, ncv_loc, zz, nz, niter, i
   integer(kind=cuda_stream_kind), intent(in) :: streamid
 #endif
 
-  real(dp)   :: a_elmt(niter, blksz), b_elmt(niter, blksz)
+  real(dp) :: a_elmt(niter, blksz), b_elmt(niter, blksz)
   complex(8) :: enumerator, denominator
   real(dp), parameter :: eps = 1.0d-8
   integer :: ii, i, j, k, iz, info
