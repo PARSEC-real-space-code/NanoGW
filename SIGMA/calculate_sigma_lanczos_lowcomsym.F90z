@@ -250,7 +250,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
     if (tamm_d) then
       npoly = 1
       allocate (polynomial(2))
-      polynomial = [0.d0, 1.d0]
+      polynomial = [1.d0, 0.d0]
     else ! not TDA 
       npoly = opt%lanczos_npoly
       allocate (polynomial(npoly + 1))
@@ -556,6 +556,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
     do ik = 1, nkpt
       do isp = 1, nspin
         do isig = 1, sig_in%ndiag
+          call timacc(56, 1, tsec)
           sigma_corr = 0.d0
           m1 = sig_in%map(sig_in%diag(isig))
           en0 = kpt%wfn(isp, ik)%e1(m1) - sig_in%deltae*half
@@ -563,7 +564,6 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
             zz(ien) = deltae*(ien - 1) + en0
           end do ! ien energy index
           do irep = 1, gvec%syms%ntrans
-
             m1_rep = kpt%wfn(1, 1)%irep(m1)
             nmrep = gvec%syms%prod(irep, m1_rep)
             allocate (Pvec(isdf_in%myncv_sym(nmrep), jnblock))
@@ -584,6 +584,12 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
               end do ! iv loop
             end do ! jvrep loop
             do iblk = 1, nblks(irep)
+              if (peinf%master) then
+                write (6, '(/,a)') repeat('-', 65)
+                write (*, '(6(a,i0))') " ik = ", ik, "/", nkpt, "   isp = ", isp, "/", nspin, &
+                  "   isig = ", isig, "/", sig_in%ndiag
+                write (*, '(4(a,i0))') " irep = ", irep, "/", gvec%syms%ntrans, "   iblk = ", iblk, "/",  nblks(irep)
+              end if
               ! ----------------------------------------------------------------
               ! prepare vector |P_mn>
               ! m is the band which we want to compute its GW quasiparticle energy
@@ -744,8 +750,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
                 ! if TDA, |P_nm>_vc=(nm|vc)(Ec-Ev)^0.5,
                 if (.not. tamm_d) then
                   Pvec(1:isdf_in%myncv_sym(nmrep), kk) = &
-                    Pvec(1:isdf_in%myncv_sym(nmrep), kk)* &
-                    sqrtR(1:isdf_in%myncv_sym(nmrep))
+                    Pvec(1:isdf_in%myncv_sym(nmrep), kk)*sqrtR(1:isdf_in%myncv_sym(nmrep))
                 end if
                 pnorm2(kk) = ddot(isdf_in%myncv_sym(nmrep), Pvec(1, kk), 1, &
                                   Pvec(1, kk), 1)
@@ -873,17 +878,6 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
               end if
 
               call stopwatch(peinf%master, ' summation over bands ')
-              do kk = 68, 73
-                jj = 3
-                call timacc(kk, jj, tsec)
-                if (peinf%master) write (6, '(i3,f15.6,f15.6,a,i12)') kk, &
-                  tsec(1), tsec(2), " sec", jj
-              end do ! kk
-              jj = 3
-              call timacc(58, jj, tsec)
-              if (peinf%master) write (6, '(i3,f15.6,f15.6,a,i12,a)') 58, &
-                tsec(1), tsec(2), " sec", jj, " matvec_isdf runs"
-              ! stop
 
             end do ! iblk
 
@@ -892,6 +886,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
           end do ! irep
 
           if (peinf%master) then
+            write (6, '(a)') repeat('-', 65)
             print *, "sigma_corr", sig_in%map(sig_in%diag(isig))
             do ien = 1, sig_in%nen
               write (6, '(a,i7,f15.6,f15.6,f15.6)') " #sigma_c ", ien, &
@@ -911,6 +906,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
             sig(isp, ik)%scdiag(ien, sig_in%ndiag + isig) = aimag(sigma_corr(ien))
           end do ! ien
           ! sig(isp,ik)%scdiag
+          call timacc(56, 2, tsec)
         end do ! isig
       end do ! isp
     end do ! ik

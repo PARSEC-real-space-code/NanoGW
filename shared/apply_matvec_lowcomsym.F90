@@ -77,7 +77,7 @@ subroutine matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, isdf_in, ncv, sqrtR, tamm_d
   real(dp), target :: tmp_vec(isdf_in%n_intp_r, blksz)
 #endif
 
-#if defined DCU
+#ifdef DCU
   type(c_ptr), intent(inout) :: d_PsiV, d_PsiC, d_Cmtrx, d_cvec, &
                                 d_pvec, d_lcrep
   type(c_ptr), intent(in) :: hipblasHandle
@@ -116,6 +116,8 @@ subroutine matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, isdf_in, ncv, sqrtR, tamm_d
 #ifndef _CUDA
   real(dp), external :: ddot
 #endif
+
+  call timacc(58, 1, tsec)
 
   if (tamm_d) then
     ! if TDA, apply vec <-- vec
@@ -160,7 +162,6 @@ subroutine matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, isdf_in, ncv, sqrtR, tamm_d
   MC_vec = 0.d0
   CMC_vec = 0.d0
   !if (w_grp%master) print *, "breakpoint 1"
-  !call timacc(69,1,tsec)
   ! d_cvec ( n_intp_r, jnblock )
   ! d_pvec ( mync, jnblock )
   cvstart = 0
@@ -185,7 +186,8 @@ subroutine matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, isdf_in, ncv, sqrtR, tamm_d
       jv = isdf_in%lvrep(iv)
 #endif
 
-#if defined DCU
+#ifdef DCU
+      call timacc(69, 1, tsec)
       Nbytes = isdf_in%maxmync_sym*blksz*Bytes_double
       tmparray = 0.d0
       tmparray(1:isdf_in%mync_sym(jcrep), 1:blksz) = Hvec(cvstart + 1:cvstart + isdf_in%mync_sym(jcrep), 1:blksz)
@@ -196,6 +198,8 @@ subroutine matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, isdf_in, ncv, sqrtR, tamm_d
                                  isdf_in%maxmync_sym, &
                                  isdf_in%lcrep_bound(jcrep, 1), isdf_in%lcrep_bound(jcrep, 2) &
                                  )
+      call timacc(69, 2, tsec)
+      call timacc(71, 1, tsec)
       if (cvstart == 0) then
         beta = d_zero
       else
@@ -204,6 +208,7 @@ subroutine matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, isdf_in, ncv, sqrtR, tamm_d
       call hipblasCheck(hipblasDgemm(hipblasHandle, transn, transn, n_intp_r, &
                                      blksz, isdf_in%mync_sym(jcrep), d_one, d_Cmtrx, n_intp_r, &
                                      d_pvec, isdf_in%maxmync_sym, beta, d_cvec, n_intp_r))
+      call timacc(71, 2, tsec)
 #elif defined _CUDA
       istat = cudaDeviceSynchronize()
       call timacc(69, 1, tsec)
@@ -215,8 +220,7 @@ subroutine matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, isdf_in, ncv, sqrtR, tamm_d
             voffset = (v_incr - 1)*d_mync_sym
             jv = d_lvrep(iv + v_incr - 1)
             d_Cmtrx(voffset + ic - icstart + 1, ir) = &
-              d_PsiC(ir, jc)* &
-              d_PsiV(ir, jv)
+              d_PsiC(ir, jc)*d_PsiV(ir, jv)
           end do ! ir
         end do ! ic
       end do ! v_incr
@@ -241,13 +245,17 @@ subroutine matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, isdf_in, ncv, sqrtR, tamm_d
       istat = cudaDeviceSynchronize()
       call timacc(71, 2, tsec)
 #else
+      call timacc(69, 1, tsec)
       do ic = isdf_in%lcrep_bound(jcrep, 1), isdf_in%lcrep_bound(jcrep, 2)
         jc = isdf_in%lcrep(ic)
         tmp_Cmtrx(1:n_intp_r, ic - isdf_in%lcrep_bound(jcrep, 1) + 1) = isdf_in%PsiC_intp_bl(1:n_intp_r, jc, 1, 1)* &
                                                                         isdf_in%PsiV_intp_bl(1:n_intp_r, jv, 1, 1)
       end do ! ic
+      call timacc(69, 2, tsec)
+      call timacc(71, 1, tsec)
       call dgemm('N', 'N', n_intp_r, blksz, isdf_in%mync_sym(jcrep), 1.d0, tmp_Cmtrx, n_intp_r, &
                  Hvec(cvstart + 1, 1), ncv_loc, 1.d0, tmp_vec(1, 1), n_intp_r)
+      call timacc(71, 2, tsec)
 #endif
 
 #ifndef _CUDA
@@ -342,11 +350,14 @@ subroutine matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, isdf_in, ncv, sqrtR, tamm_d
 #endif
 
 #ifdef DCU
+      call timacc(69, 1, tsec)
       call hadamard_prod_mat_sym(d_PsiV, d_PsiC, d_Cmtrx, d_lcrep, &
                                  isdf_in%n_intp_r, jv - 1, isdf_in%mynv, isdf_in%mync, &
                                  isdf_in%maxmync_sym, &
                                  isdf_in%lcrep_bound(jcrep, 1), isdf_in%lcrep_bound(jcrep, 2) &
                                  )
+      call timacc(69, 2, tsec)
+      call timacc(71, 1, tsec)
       call hipblasCheck(hipblasDgemm(hipblasHandle, transt, transn, &
                                      isdf_in%mync_sym(jcrep), blksz, n_intp_r, &
                                      d_one, d_Cmtrx, n_intp_r, &
@@ -357,6 +368,7 @@ subroutine matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, isdf_in, ncv, sqrtR, tamm_d
                               Nbytes, hipMemcpyDeviceToHost))
       CMC_vec(cvstart + 1:cvstart + isdf_in%mync_sym(jcrep), 1:blksz) = &
         tmparray(1:isdf_in%mync_sym(jcrep), 1:blksz)
+      call timacc(71, 2, tsec)
 #elif defined _CUDA
       istat = cudaDeviceSynchronize()
       call timacc(69, 1, tsec)
@@ -387,14 +399,18 @@ subroutine matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, isdf_in, ncv, sqrtR, tamm_d
       call timacc(71, 2, tsec)
       cvstart = cvstart + isdf_in%mync_sym(jcrep)*v_incr_end
 #else
+      call timacc(69, 1, tsec)
       do ic = isdf_in%lcrep_bound(jcrep, 1), isdf_in%lcrep_bound(jcrep, 2)
         jc = isdf_in%lcrep(ic)
         tmp_Cmtrx(1:n_intp_r, ic - isdf_in%lcrep_bound(jcrep, 1) + 1) = &
           isdf_in%PsiC_intp_bl(1:n_intp_r, jc, 1, 1)* &
           isdf_in%PsiV_intp_bl(1:n_intp_r, jv, 1, 1)
       end do
+      call timacc(69, 2, tsec)
+      call timacc(71, 1, tsec)
       call dgemm('T', 'N', isdf_in%mync_sym(jcrep), blksz, n_intp_r, 1.d0, tmp_Cmtrx, n_intp_r, &
                  tmp_vec, n_intp_r, 0.d0, CMC_vec(cvstart + 1, 1), ncv_loc)
+      call timacc(71, 2, tsec)
 #endif
 
 #ifndef _CUDA
@@ -403,7 +419,6 @@ subroutine matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, isdf_in, ncv, sqrtR, tamm_d
 
     end do ! iv
   end do ! jvrep
-
 
   !if (w_grp%master) print *, "breakpoint 4"
   call timacc(73, 1, tsec)
@@ -425,12 +440,14 @@ subroutine matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, isdf_in, ncv, sqrtR, tamm_d
     end do ! blksz
   end if
   call timacc(73, 2, tsec)
+  call timacc(58, 2, tsec)
+
 end subroutine matvec_isdf_lowcomsym
 
 
 subroutine polynomial_matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, polynomial, npoly, isdf_in, ncv, sqrtR, &
                                             blksz, nmrep, gvec &
-#if defined DCU
+#ifdef DCU
                                             , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
                                             hipblasHandle &
 #elif defined _CUDA
@@ -441,6 +458,7 @@ subroutine polynomial_matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, polynomial, npol
 
   use typedefs
   use mpi_module
+
 #ifdef DCU
   use hipfort_types
 #elif defined _CUDA
@@ -473,7 +491,8 @@ subroutine polynomial_matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, polynomial, npol
   !real(dp), target, intent(inout) :: MC_vec(w_grp%myn_intp_r, blksz), &
   !  CMC_vec(ncv_loc, blksz), &
   !  tmp_vec(isdf_in%n_intp_r, blksz)
-#if defined DCU
+
+#ifdef DCU
   type(c_ptr), intent(inout) :: d_PsiV, d_PsiC, d_Cmtrx, d_cvec, &
                                 d_pvec, d_lcrep
   type(c_ptr), intent(in) :: hipblasHandle
@@ -488,8 +507,9 @@ subroutine polynomial_matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, polynomial, npol
   integer, intent(in) :: vstep
   integer(kind=cuda_stream_kind), intent(in) :: streamid
 #endif
+
   real(dp) :: Hvec_old(ncv_loc, blksz), tsec(2)
-  integer  :: k
+  integer :: k
 
   ! isdf_in%n_intp_r == w_grp%n_intp_r
   ! allocate(MC_vec(w_grp%myn_intp_r))
@@ -500,7 +520,7 @@ subroutine polynomial_matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, polynomial, npol
   ! = (H*...(H*(H*(a_n H*vec + a_{n-1} vec) + a_{n-2} vec) + a_{n-3} vec)...a_1 vec) + a_0 vec
   ! Recursively:
   !   Hvec <- a_k H*vec + a_{k-1}
-  call timacc(58, 1, tsec)
+
   Hvec_old = vec
   do k = 1, npoly
     call matvec_isdf_lowcomsym(Hvec_old, Hvec, ncv_loc, isdf_in, ncv, sqrtR, .false., &
@@ -514,6 +534,7 @@ subroutine polynomial_matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, polynomial, npol
 #endif
                                )
     !if (peinf%master) print *, "k =", k, polynomial(k)
+    call timacc(57, 1, tsec)
     if (k == 1) then
       Hvec = polynomial(k)*Hvec + polynomial(k + 1)*vec
       !if (peinf%master) print *, "In polynomial_matvec_isdf: Hvec", Hvec(1:10)
@@ -523,6 +544,7 @@ subroutine polynomial_matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, polynomial, npol
       !stop
     end if
     Hvec_old = Hvec
+    call timacc(57, 2, tsec)
   end do ! k
-  call timacc(58, 2, tsec)
+
 end subroutine polynomial_matvec_isdf_lowcomsym

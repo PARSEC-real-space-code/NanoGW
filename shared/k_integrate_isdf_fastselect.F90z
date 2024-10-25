@@ -455,7 +455,6 @@ subroutine Zk_integrate_isdf_fastselect(gvec, kpt, k_mat, k_tmp, irp, kflag, nsp
           k_tmp(iblock)%Zm_f = Zzero
         end if
       end do ! do i_row = startrow(rsp), endrow(rsp), r_grp%npes
-      call timacc(67, 1, tsec)
 #ifndef CPLX
       deallocate (row_check, col_check)
 #endif
@@ -484,7 +483,6 @@ subroutine Zk_integrate_isdf_fastselect(gvec, kpt, k_mat, k_tmp, irp, kflag, nsp
       call alccheck(trim(lastwords), 'k_integrate', &
                     k_tmp(iblock)%nblock_max, info)
       k_tmp(iblock)%Zm_f = Zzero
-      call timacc(67, 2, tsec)
     end do ! do csp
   end do ! do rsp
   !-------------------------------------------------------------------
