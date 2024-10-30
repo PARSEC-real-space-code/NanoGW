@@ -34,7 +34,7 @@ subroutine matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, isdf_in, sqrtR, tamm_d, &
                                  , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
                                  hipblasHandle &
 #elif defined _CUDA
-                                 , d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
+                                 , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
                                  vstep, tmp_vec, streamid &
 #endif
                                  )
