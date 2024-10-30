@@ -867,12 +867,11 @@ program sigma
     mem1 = sum(kpt%wfn(:, :)%nmem)*two/real(nspin, dp)* &
            real(nspin*gvec%nr, dp)/two/131072.d0/real(w_grp%npes, dp)
     if (kpt%lcplx) mem1 = mem1*two
-    write (6, '(a,f10.2,a)') ' Memory needed to store wavefunctions : ', &
-      mem1, ' MB/proc.'
+    write (6, '(a,f10.2,a)') ' Memory needed to store wavefunctions : ', mem1, ' MB/proc.'
     mem1 = real(5*gvec%nr, dp)/131072.d0
     if (kpt%lcplx) mem1 = mem1*two
-    write (6, '(a,a,f10.2,a)') ' Memory needed to calculate kernel ', &
-      'matrix elements : ', mem1, ' MB/proc.'
+    write (6, '(a,f10.2,a)') ' Memory needed to calculate kernel matrix elements : ', &
+      mem1, ' MB/proc.'
     if (sig_in%xc == XC_GW) then
       ! For diagonalization, we store 4 matrices: hamiltonian/eigenvectors,
       ! temporary array (in eigensolver), and kernel.
@@ -908,12 +907,9 @@ program sigma
         end do
       end do
       mem3 = real(xmax, dp)/1024.d0/128.d0/r_grp%npes
-      write (6, '(a,f10.2,a)') ' Memory needed for diagonalization : ', &
-        mem1, ' MB/proc.'
-      write (6, '(a,f10.2,a)') ' Memory needed in self-energy calculation :', &
-        max(mem2, mem3), ' MB/proc.'
-      write (6, '(a,f10.2,a)') ' Minimum memory needed : ', max(mem1, &
-                                                                mem2, mem3), ' MB/proc.'
+      write (6, '(a,f10.2,a)') ' Memory needed for diagonalization : ', mem1, ' MB/proc.'
+      write (6, '(a,f10.2,a)') ' Memory needed in self-energy calculation :', max(mem2, mem3), ' MB/proc.'
+      write (6, '(a,f10.2,a)') ' Minimum memory needed : ', max(mem1, mem2, mem3), ' MB/proc.'
     end if
     write (6, '(/,a,/)') repeat('-', 65)
     call flush (6)
@@ -1137,7 +1133,7 @@ program sigma
   ! Time accounting.
   !
   ii = 13
-  ik = 35-13
+  ik = 33-13
   allocate (routnam(ii + ik))
   allocate (timerlist(ii + ik))
   routnam(1) = 'SETUP_S'; timerlist(1) = 2
@@ -1157,25 +1153,23 @@ program sigma
   routnam(14) = 'POISSON_FFT'; timerlist(14) = 11
   routnam(15) = 'EIGENSOLVER'; timerlist(15) = 12
   routnam(16) = 'INTEGRATION'; timerlist(16) = 13
-  routnam(17) = 'Find intp pts'; timerlist(17) = 51
-  routnam(18) = 'ISDF_PARALLEL'; timerlist(18) = 52
-  routnam(19) = 'Calc intp vectors'; timerlist(19) = 53
-  routnam(20) = 'Calc <zeta|K|zeta>'; timerlist(20) = 54
-  routnam(21) = '(in cvt step1)'; timerlist(21) = 61
-  routnam(22) = '(in cvt step2)'; timerlist(22) = 62
-  routnam(23) = 'k_integrate_isdf'; timerlist(23) = 63
-  routnam(24) = 'kernel k_print'; timerlist(24) = 64
-  routnam(25) = 'k_int_isdf 1'; timerlist(25) = 65
-  routnam(26) = 'k_int_isdf 2'; timerlist(26) = 66
-  routnam(27) = 'k_int_isdf 3'; timerlist(27) = 67
-  routnam(28) = 'Lanczos_matvec'; timerlist(28) = 58
-  routnam(29) = 'Lanczos_poly'; timerlist(29) = 57
-  routnam(30) = 'matvec: sqR@vec'; timerlist(30) = 68
-  routnam(31) = 'matvec: Hadamard'; timerlist(31) = 69
-  routnam(32) = 'matvec: C@vec'; timerlist(32) = 71
-  routnam(33) = 'matvec: M@vec'; timerlist(33) = 72
-  routnam(34) = 'matvec: mpi'; timerlist(34) = 70
-  routnam(35) = 'matvec: vec_final'; timerlist(35) = 73
+  routnam(17) = 'Calc intp vectors'; timerlist(19) = 53
+  routnam(18) = 'Calc <zeta|K|zeta>'; timerlist(20) = 54
+  routnam(19) = '(in cvt step1)'; timerlist(21) = 61
+  routnam(20) = '(in cvt step2)'; timerlist(22) = 62
+  routnam(21) = 'k_integrate_isdf'; timerlist(23) = 63
+  routnam(22) = 'kernel k_print'; timerlist(24) = 64
+  routnam(23) = 'k_int_isdf 1'; timerlist(25) = 65
+  routnam(24) = 'k_int_isdf 2'; timerlist(26) = 66
+  routnam(25) = 'k_int_isdf 3'; timerlist(27) = 67
+  routnam(26) = 'Lanczos_matvec'; timerlist(28) = 58
+  routnam(27) = 'Lanczos_poly'; timerlist(29) = 57
+  routnam(28) = 'matvec: sqR@vec'; timerlist(30) = 68
+  routnam(29) = 'matvec: Hadamard'; timerlist(31) = 69
+  routnam(30) = 'matvec: C@vec'; timerlist(32) = 71
+  routnam(31) = 'matvec: M@vec'; timerlist(33) = 72
+  routnam(32) = 'matvec: mpi'; timerlist(34) = 70
+  routnam(33) = 'matvec: vec_final'; timerlist(35) = 73
 
 #ifdef HIPMAGMA
   !if (opt%linear_algebra .eq. 2 .or. opt%eigsolver .eq. 2) then
