@@ -72,23 +72,19 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
   character(len=100) :: file_name
 
   logical :: staticcorr
-  integer :: ii, jj, irp, jrp, iq, ik, jk, isp, isig, info, chkpt, neig_qp, &
-             ien, n_intp_loc, ic, iv, icv, icv_start, icv_end, intp_start, intp_end, &
-             ij, incr, jn, m1, ncv, ncv_loc, iprocs, inode, ipe, ldncv, mycv_end, &
-             mycv_start, myn_intp_end, myn_intp_start, myn_intp_r, myncv, this_ncv, &
-             jnend, npoly, ncond, nval, jnblock
-  real(dp) :: tsec(2), xsum, rtmp, epsinv, deltae, emin, emax, en0, res
+  integer :: ii, jj, irp, iq, ik, jk, isp, isig, info, neig_qp, ien, ic, iv, icv, jn, m1, inode, &
+             myn_intp_start, myn_intp_end, myn_intp_r, jnend, npoly, ncond, nval, jnblock
+  real(dp) :: tsec(2), rtmp, deltae, emin, emax, en0
   real(dp), allocatable :: polynomial(:), Pvec(:, :), tmp_Cmtrx(:, :), &
                            tmp_CvecM(:, :), tmp_poly(:), sqrtR(:), tmp_Cvec(:, :), tmparray(:, :)
   integer, allocatable :: iord(:) !, cvpair(:,:)
   integer, parameter :: it_scf = 0
   real(dp), parameter :: qpmix = 1.d0
-  complex(dp), allocatable :: zz(:), ezz(:, :), sigma_corr(:), &
-                              sigma_corr_tmp(:, :)
+  complex(dp), allocatable :: zz(:), ezz(:, :), sigma_corr(:), sigma_corr_tmp(:, :)
+
   ! -------- temporary arrays for lanczos iterations --------
-  integer :: tmp_cvpair(2, w_grp%ldncv), irep, kk, blksz, iblk, cvstart, jc, &
-             jv, jvrep, jcrep, istart, ivstart, icstart, lncond, lnval, m1_rep, &
-             maxnblks, nmrep, ibnd, irp1, irp2, lrp1, lrp2, nx, nx_select, n_intp_r, icend
+  integer :: irep, kk, blksz, iblk, cvstart, jc, jv, jvrep, jcrep, istart, ivstart, icstart, &
+             lncond, lnval, m1_rep, maxnblks, nmrep, ibnd, lrp1, lrp2, nx, nx_select, n_intp_r, icend
   integer, allocatable :: blks(:, :, :), tmp_lrep(:, :), tmp_lvrep(:, :), &
                           tmp_lcrep(:, :), nvblks(:), nblks(:), ncblks(:), tmp_count(:)
   real(dp) :: pnorm2(opt%jnblock), pnorm(opt%jnblock), fit_error, max_fit_error
@@ -234,7 +230,6 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
       end do
     end do
     inode = w_grp%inode
-    ncv = w_grp%ncv
     myn_intp_start = w_grp%n_intp_start(inode)
     myn_intp_end = w_grp%n_intp_end(inode)
     myn_intp_r = w_grp%myn_intp_r
@@ -264,7 +259,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
         print *, "emin = ", emin, " emax = ", emax
         !call polyfit_sqrt(emin, emax, npoly, 20, peinf%inode, tmp_poly, .False.)
         ! search for best polynomial fitting
-        max_fit_error = 1e3
+        max_fit_error = 1.d3
         do nx = 20, 300, 20
           call polyfitcheb_sqrt(emin, emax, npoly, nx, peinf%inode, tmp_poly, fit_error, .false.)
           if (fit_error < max_fit_error) then
@@ -286,7 +281,6 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
     if (peinf%master) print *, "Redistribute Psi_intp_loc to PsiV_intp_bl and PsiC_intp_bl"
     call Zredistribute_Psi_loc(isdf_in, nval, ncond)
 
-    !
     !-------------------------------------------------------------------
     ! Calculate correlation and vertex. Must reset the file with
     ! polarizability eigenvectors.
@@ -302,7 +296,6 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
     !cvpair(1:2, 1:myncv) = &
     !  k_p(1,1)%col(1:2, mycv_start:mycv_end)
     ! local number of interpolation points
-    myncv = isdf_in%mynv*isdf_in%mync
     ! prepare indices for symmetry representations
     allocate (tmp_lrep(kpt%wfn(1, 1)%nmem, gvec%syms%ntrans))
     allocate (tmp_lvrep(isdf_in%mynv, gvec%syms%ntrans))
@@ -772,7 +765,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
                 ezz(sig_in%nen + 1, 1:blksz) = cmplx(0.d0, 0.d0)
                 ! call lanczos_spectra to compute <Pvec| 1/(ezz-H_aux) |Pvec>
                 call lanczos_spectra_isdf_lowcomsym(Pvec, pnorm, isdf_in%myncv_sym(nmrep), ezz, sig_in%nen + 1, &
-                                                    opt%lanczos_niter, isdf_in, ncv, sqrtR, polynomial, npoly, &
+                                                    opt%lanczos_niter, isdf_in, sqrtR, polynomial, npoly, &
                                                     sigma_corr_tmp, tamm_d, &
                                                     blksz, nmrep, gvec &
 #ifdef DCU
@@ -829,7 +822,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
                 ezz(sig_in%nen + 1, 1:blksz) = cmplx(0.d0, 0.d0)
                 ! call lanczos_spectra to compute <Pvec| 1/(ezz-H_aux) |Pvec>
                 call lanczos_spectra_isdf_lowcomsym(Pvec, pnorm, isdf_in%myncv_sym(nmrep), ezz, sig_in%nen + 1, &
-                                                    opt%lanczos_niter, isdf_in, ncv, sqrtR, polynomial, npoly, &
+                                                    opt%lanczos_niter, isdf_in, sqrtR, polynomial, npoly, &
                                                     sigma_corr_tmp, tamm_d, &
                                                     blksz, nmrep, gvec &
 #ifdef DCU
@@ -1082,8 +1075,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
     close (12)
   end if
 #ifdef MPI
-  call MPI_BCAST(max_sig, 1, MPI_DOUBLE_PRECISION, peinf%masterid, peinf%comm, &
-                 info)
+  call MPI_BCAST(max_sig, 1, MPI_DOUBLE_PRECISION, peinf%masterid, peinf%comm, info)
 #endif
 
   !-------------------------------------------------------------------

@@ -6,7 +6,7 @@
 !
 ! ncv_loc = isdf_in%ncv_sym(nmrep)
 subroutine lanczos_spectra_isdf_lowcomsym(v0, v0_norm, ncv_loc, zz, nz, niter, isdf_in, &
-                                          ncv, sqrtR, polynomial, npoly, spectra, tamm_d, &
+                                          sqrtR, polynomial, npoly, spectra, tamm_d, &
                                           blksz, nmrep, gvec &
 #ifdef DCU
                                           , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
@@ -30,7 +30,7 @@ subroutine lanczos_spectra_isdf_lowcomsym(v0, v0_norm, ncv_loc, zz, nz, niter, i
   implicit none
   include 'mpif.h'
 
-  integer, intent(in) :: ncv_loc, niter, nz, npoly, blksz, ncv, nmrep
+  integer, intent(in) :: ncv_loc, niter, nz, npoly, blksz, nmrep
   complex(dp), intent(in) :: zz(nz, blksz)
   type(ISDF), intent(in) :: isdf_in
   real(dp), intent(in) :: v0(ncv_loc, blksz), polynomial(npoly + 1), &
@@ -79,7 +79,7 @@ subroutine lanczos_spectra_isdf_lowcomsym(v0, v0_norm, ncv_loc, zz, nz, niter, i
   ! compute wvec = H*vec
   ! if (peinf%master) print *, "vec = ", vec(1:5,1), "...", vec(ncv_loc-4:ncv_loc,1)
   if (tamm_d) then ! TDA - poly fitting
-    call matvec_isdf_lowcomsym(vec, wvec, ncv_loc, isdf_in, ncv, sqrtR, .true., &
+    call matvec_isdf_lowcomsym(vec, wvec, ncv_loc, isdf_in, sqrtR, .true., &
                                blksz, nmrep, gvec &
 #ifdef DCU
                                , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
@@ -90,7 +90,7 @@ subroutine lanczos_spectra_isdf_lowcomsym(v0, v0_norm, ncv_loc, zz, nz, niter, i
 #endif
                                )
   else
-    call polynomial_matvec_isdf_lowcomsym(vec, wvec, ncv_loc, polynomial, npoly, isdf_in, ncv, sqrtR, &
+    call polynomial_matvec_isdf_lowcomsym(vec, wvec, ncv_loc, polynomial, npoly, isdf_in, sqrtR, &
                                           blksz, nmrep, gvec &
 #ifdef DCU
                                           , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
@@ -135,7 +135,7 @@ subroutine lanczos_spectra_isdf_lowcomsym(v0, v0_norm, ncv_loc, zz, nz, niter, i
     wvec = tmpvec
     ! wvec = wvec + H*vec
     if (tamm_d) then ! TDA - poly fitting
-      call matvec_isdf_lowcomsym(vec, tmpvec, ncv_loc, isdf_in, ncv, sqrtR, .true., &
+      call matvec_isdf_lowcomsym(vec, tmpvec, ncv_loc, isdf_in, sqrtR, .true., &
                                  blksz, nmrep, gvec &
 #ifdef DCU
                                  , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
@@ -146,7 +146,7 @@ subroutine lanczos_spectra_isdf_lowcomsym(v0, v0_norm, ncv_loc, zz, nz, niter, i
 #endif
                                  )
     else ! not TDA
-      call polynomial_matvec_isdf_lowcomsym(vec, tmpvec, ncv_loc, polynomial, npoly, isdf_in, ncv, sqrtR, &
+      call polynomial_matvec_isdf_lowcomsym(vec, tmpvec, ncv_loc, polynomial, npoly, isdf_in, sqrtR, &
                                             blksz, nmrep, gvec &
 #ifdef DCU
                                             , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &

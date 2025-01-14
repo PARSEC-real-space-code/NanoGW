@@ -28,13 +28,13 @@
 !   Hvec = A @ vec
 !        = R @ vec + 2 * Cmtrx^T @ Mmtrx @ Cmtrx @ vec
 
-subroutine matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, isdf_in, ncv, sqrtR, tamm_d, &
+subroutine matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, isdf_in, sqrtR, tamm_d, &
                                  blksz, nmrep, gvec &
 #if defined DCU
                                  , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
                                  hipblasHandle &
 #elif defined _CUDA
-                                 , d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
+                                 , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
                                  vstep, tmp_vec, streamid &
 #endif
                                  )
@@ -59,7 +59,7 @@ subroutine matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, isdf_in, ncv, sqrtR, tamm_d
   include 'mpif.h'
 #endif
 
-  integer, intent(in) :: ncv_loc, blksz, ncv, nmrep
+  integer, intent(in) :: ncv_loc, blksz, nmrep
   type(gspace), intent(in) :: gvec
   real(dp), intent(in) :: vec(ncv_loc, blksz)
   type(ISDF), intent(in) :: isdf_in
@@ -108,8 +108,7 @@ subroutine matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, isdf_in, ncv, sqrtR, tamm_d
 #endif
 
   real(dp) :: tsec(2)
-  integer :: iv, ic, icv, incr, intp_end, intp_start, &
-             res, err, n_intp_r, ncvdim, ipe, ncvpair, ii, &
+  integer :: iv, ic, intp_end, intp_start, err, n_intp_r, ii, &
              cvstart, jc, jv, jcrep, jvrep
   ! external functions
 
@@ -445,7 +444,7 @@ subroutine matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, isdf_in, ncv, sqrtR, tamm_d
 end subroutine matvec_isdf_lowcomsym
 
 
-subroutine polynomial_matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, polynomial, npoly, isdf_in, ncv, sqrtR, &
+subroutine polynomial_matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, polynomial, npoly, isdf_in, sqrtR, &
                                             blksz, nmrep, gvec &
 #ifdef DCU
                                             , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
@@ -475,7 +474,7 @@ subroutine polynomial_matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, polynomial, npol
   include 'mpif.h'
 #endif
 
-  integer, intent(in) :: ncv_loc, npoly, blksz, ncv, nmrep
+  integer, intent(in) :: ncv_loc, npoly, blksz, nmrep
   type(ISDF), intent(in) :: isdf_in
   real(dp), intent(in) :: polynomial(npoly + 1), &
                           sqrtR(ncv_loc)
@@ -523,7 +522,7 @@ subroutine polynomial_matvec_isdf_lowcomsym(vec, Hvec, ncv_loc, polynomial, npol
 
   Hvec_old = vec
   do k = 1, npoly
-    call matvec_isdf_lowcomsym(Hvec_old, Hvec, ncv_loc, isdf_in, ncv, sqrtR, .false., &
+    call matvec_isdf_lowcomsym(Hvec_old, Hvec, ncv_loc, isdf_in, sqrtR, .false., &
                                blksz, nmrep, gvec &
 #ifdef DCU
                                , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
