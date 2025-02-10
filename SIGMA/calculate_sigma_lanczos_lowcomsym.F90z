@@ -6,10 +6,9 @@
 ! Author: Weiwei Gao @ Dalian Univ. of Tech.
 !
 !---------------------------------------------------------------
-subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
-                                              sig_en, dft_code, gvec, kpt, qpt, k_c, k_p, sig_in, &
-                                              sig, q_p, nolda, tamm_d, writeqp, snorm, cohsex, &
-                                              ecuts, sig_cut, max_sig, isdf_in, doisdf, opt)
+subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gvec, kpt, qpt, k_c, k_p, sig_in, sig, &
+                                              q_p, nolda, tamm_d, writeqp, snorm, cohsex, ecuts, sig_cut, max_sig, &
+                                              isdf_in, doisdf, opt)
 
   use typedefs
   use mpi_module
@@ -75,19 +74,20 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
   integer :: ii, jj, irp, iq, ik, jk, isp, isig, info, neig_qp, ien, ic, iv, icv, jn, m1, inode, &
              myn_intp_start, myn_intp_end, myn_intp_r, jnend, npoly, ncond, nval, jnblock
   real(dp) :: tsec(2), rtmp, deltae, emin, emax, en0
-  real(dp), allocatable :: polynomial(:), Pvec(:, :), tmp_Cmtrx(:, :), &
-                           tmp_CvecM(:, :), tmp_poly(:), sqrtR(:), tmp_Cvec(:, :), tmparray(:, :)
+  real(dp), allocatable :: polynomial(:), Pvec(:, :), tmp_Cmtrx(:, :), tmp_CvecM(:, :), tmp_poly(:), sqrtR(:), &
+                           tmp_Cvec(:, :), tmparray(:, :)
   integer, allocatable :: iord(:) !, cvpair(:,:)
   integer, parameter :: it_scf = 0
   real(dp), parameter :: qpmix = 1.d0
   complex(dp), allocatable :: zz(:), ezz(:, :), sigma_corr(:), sigma_corr_tmp(:, :)
 
   ! -------- temporary arrays for lanczos iterations --------
-  integer :: irep, kk, blksz, iblk, cvstart, jc, jv, jvrep, jcrep, istart, ivstart, icstart, &
-             lncond, lnval, m1_rep, maxnblks, nmrep, ibnd, lrp1, lrp2, nx, nx_select, n_intp_r, icend
-  integer, allocatable :: blks(:, :, :), tmp_lrep(:, :), tmp_lvrep(:, :), &
-                          tmp_lcrep(:, :), nvblks(:), nblks(:), ncblks(:), tmp_count(:)
+  integer :: irep, kk, blksz, iblk, cvstart, jc, jv, jvrep, jcrep, istart, ivstart, icstart, lncond, lnval, m1_rep, &
+             maxnblks, nmrep, ibnd, lrp1, lrp2, nx, nx_select, n_intp_r, icend
+  integer, allocatable :: blks(:, :, :), tmp_lrep(:, :), tmp_lvrep(:, :), tmp_lcrep(:, :), nvblks(:), nblks(:), &
+                          ncblks(:), tmp_count(:)
   real(dp) :: pnorm2(opt%jnblock), pnorm(opt%jnblock), fit_error, max_fit_error
+  real(dp) :: occ ! eta_n in the paper, 1 for occupied and -1 for empty
   !real(dp) :: MC_vec(w_grp%myn_intp_r, opt%jnblock), &
   !  CMC_vec(w_grp%ldncv, opt%jnblock), &
   !  tmp_vec(isdf_in%n_intp_r, opt%jnblock)
@@ -102,9 +102,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
   real(dp), parameter :: d_one = 1.d0, d_zero = 0.d0
   type(c_ptr) :: d_PsiV, d_PsiC, d_Cmtrx, d_cvec, d_pvec, d_lcrep
   type(c_ptr) :: handle = c_null_ptr
-  integer(kind(HIPBLAS_OP_N)), parameter :: &
-    transt = HIPBLAS_OP_T, &
-    transn = HIPBLAS_OP_N
+  integer(kind(HIPBLAS_OP_N)), parameter :: transt = HIPBLAS_OP_T, transn = HIPBLAS_OP_N
   !integer :: ndevs, mydevice
   integer(c_size_t), parameter :: Bytes_double = 8
   integer(c_size_t) :: Nbytes
@@ -114,8 +112,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
   integer :: istat, vstep, voffset, v_incr_end, v_incr
   integer :: ndevs, mydev
   type(cublasHandle) :: handle
-  real(dp), device, dimension(:, :), allocatable :: d_PsiV, d_PsiC, d_Cmtrx, &
-                                                    d_cvec, d_pvec
+  real(dp), device, dimension(:, :), allocatable :: d_PsiV, d_PsiC, d_Cmtrx, d_cvec, d_pvec
   integer, device, dimension(:), allocatable :: d_lcrep
   integer(kind=cuda_stream_kind) :: streamid
 #endif
@@ -186,9 +183,9 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
     do isp = 1, nspin
       jk = sig(isp, ik)%indxk
       call timacc(6, 1, tsec)
-      if (sig_in%xc == XC_GW .or. sig_in%xc == XC_HF .or. &
-          sig_in%xc == XC_B3LYP) &
+      if (sig_in%xc == XC_GW .or. sig_in%xc == XC_HF .or. sig_in%xc == XC_B3LYP) then
         call Zfock_exchange(gvec, kpt, sig(isp, ik), isp, jk)
+      end if
       call timacc(6, 2, tsec)
     end do ! isp
   end do ! ik
@@ -271,8 +268,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
         end do ! nx
         deallocate (tmp_poly)
       end if
-      if (peinf%master) print *, "Use ", nx_select, &
-        " points to fit polynomial. Relative error: ", fit_error
+      if (peinf%master) print *, "Use ", nx_select, " points to fit polynomial. Relative error: ", fit_error
       !if (peinf%master) print *, "polynomial ", polynomial(1:(npoly+1))
     end if ! tamm_d
     call MPI_BCAST(polynomial, npoly + 1, MPI_DOUBLE, peinf%masterid, peinf%comm, ii)
@@ -396,10 +392,8 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
     isdf_in%mync_sym = 0
     isdf_in%mynv_sym = 0
     do irep = 1, gvec%syms%ntrans
-      isdf_in%mync_sym(irep) = isdf_in%lcrep_bound(irep, 2) &
-                               - isdf_in%lcrep_bound(irep, 1) + 1
-      isdf_in%mynv_sym(irep) = isdf_in%lvrep_bound(irep, 2) &
-                               - isdf_in%lvrep_bound(irep, 1) + 1
+      isdf_in%mync_sym(irep) = isdf_in%lcrep_bound(irep, 2) - isdf_in%lcrep_bound(irep, 1) + 1
+      isdf_in%mynv_sym(irep) = isdf_in%lvrep_bound(irep, 2) - isdf_in%lvrep_bound(irep, 1) + 1
     end do ! irep
     do irep = 1, gvec%syms%ntrans
 
@@ -418,8 +412,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
 
       end do ! lrp1
     end do ! irep
-    call MPI_ALLREDUCE(isdf_in%myncv_sym, tmp_count, gvec%syms%ntrans, &
-                       MPI_INTEGER, MPI_SUM, peinf%comm, info)
+    call MPI_ALLREDUCE(isdf_in%myncv_sym, tmp_count, gvec%syms%ntrans, MPI_INTEGER, MPI_SUM, peinf%comm, info)
     !do ipe = 0, peinf%npes-1
     !  if (peinf%inode .eq. ipe) then
     !    print *, " inode ", peinf%inode
@@ -459,9 +452,8 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
     vstep = 12000**2/isdf_in%maxmync_sym/isdf_in%n_intp_r
     if (vstep <= 0) vstep = 1
     if (vstep > isdf_in%maxmynv_sym) vstep = isdf_in%maxmynv_sym
-    if (peinf%master) print *, " vstep ", vstep, " maxmync_sym ", &
-      isdf_in%maxmync_sym, " n_intp_r ", isdf_in%n_intp_r, " maxmynv_sym ", &
-      isdf_in%maxmynv_sym
+    if (peinf%master) print *, " vstep ", vstep, " maxmync_sym ", isdf_in%maxmync_sym, " n_intp_r ", &
+        isdf_in%n_intp_r, " maxmynv_sym ", isdf_in%maxmynv_sym
     allocate (tmparray(vstep*isdf_in%maxmync_sym, jnblock))
 #else
     allocate (tmparray(isdf_in%maxmync_sym, jnblock))
@@ -475,12 +467,9 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
     call hipCheck(hipMalloc(d_pvec, sizeof(tmparray))) ! mync, jnblock
     call hipCheck(hipMalloc(d_lcrep, sizeof(isdf_in%lcrep)))
     ! copy PsiV_intp_bl, PsiC_intp_bl and vec to device
-    call hipCheck(hipMemcpy(d_PsiV, c_loc(isdf_in%PsiV_intp_bl), &
-                            sizeof(isdf_in%PsiV_intp_bl), hipMemcpyHostToDevice))
-    call hipCheck(hipMemcpy(d_PsiC, c_loc(isdf_in%PsiC_intp_bl), &
-                            sizeof(isdf_in%PsiC_intp_bl), hipMemcpyHostToDevice))
-    call hipCheck(hipMemcpy(d_lcrep, c_loc(isdf_in%lcrep), &
-                            sizeof(isdf_in%lcrep), hipMemcpyHostToDevice))
+    call hipCheck(hipMemcpy(d_PsiV, c_loc(isdf_in%PsiV_intp_bl), sizeof(isdf_in%PsiV_intp_bl), hipMemcpyHostToDevice))
+    call hipCheck(hipMemcpy(d_PsiC, c_loc(isdf_in%PsiC_intp_bl), sizeof(isdf_in%PsiC_intp_bl), hipMemcpyHostToDevice))
+    call hipCheck(hipMemcpy(d_lcrep, c_loc(isdf_in%lcrep), sizeof(isdf_in%lcrep), hipMemcpyHostToDevice))
 #elif defined _CUDA
     allocate (d_PsiV, source=isdf_in%PsiV_intp_bl(:, :, 1, 1))
     allocate (d_PsiC, source=isdf_in%PsiC_intp_bl(:, :, 1, 1))
@@ -579,9 +568,8 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
             do iblk = 1, nblks(irep)
               if (peinf%master) then
                 write (6, '(/,a)') repeat('-', 65)
-                write (*, '(6(a,i0))') " ik = ", ik, "/", nkpt, "   isp = ", isp, "/", nspin, &
-                  "   isig = ", isig, "/", sig_in%ndiag
-                write (*, '(4(a,i0))') " irep = ", irep, "/", gvec%syms%ntrans, "   iblk = ", iblk, "/",  nblks(irep)
+                write (6, '(10(a,i0))') " ik: ", ik, "/", nkpt, "   isp: ", isp, "/", nspin, "   isig: ", isig, &
+                  "/", sig_in%ndiag, "   irep: ", irep, "/", gvec%syms%ntrans, "   iblk: ", iblk, "/",  nblks(irep)
               end if
               ! ----------------------------------------------------------------
               ! prepare vector |P_mn>
@@ -612,8 +600,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
                   isdf_in%Psi_intp_loc(1:myn_intp_r, jk, 1, 1)
               end do ! kk
               !if (w_grp%npes .gt. 1) then
-              call MPI_ALLREDUCE(MPI_IN_PLACE, tmp_Cvec, &
-                                 isdf_in%n_intp_r*blksz, MPI_DOUBLE, MPI_SUM, peinf%comm, info)
+              call MPI_ALLREDUCE(MPI_IN_PLACE, tmp_Cvec, isdf_in%n_intp_r*blksz, MPI_DOUBLE, MPI_SUM, peinf%comm, info)
               !endif
               !if (w_grp%master) print *, "tmp_Cvec", tmp_Cvec(1:10, 1), "nmrep", nmrep
               ! Compute tmp_CvecM(1:n_intp_loc)
@@ -627,10 +614,8 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
                          isdf_in%Mmtrx_loc(1, 1, 1, 1, 1, 1, nmrep), myn_intp_r, tmp_Cvec, &
                          isdf_in%n_intp_r, 0.d0, tmp_CvecM, myn_intp_r)
               tmp_Cvec = 0.d0
-              tmp_Cvec(myn_intp_start:myn_intp_end, 1:blksz) = &
-                tmp_CvecM(1:myn_intp_r, 1:blksz)
-              call MPI_ALLREDUCE(MPI_IN_PLACE, tmp_Cvec, &
-                                 isdf_in%n_intp_r*blksz, MPI_DOUBLE, MPI_SUM, peinf%comm, info)
+              tmp_Cvec(myn_intp_start:myn_intp_end, 1:blksz) = tmp_CvecM(1:myn_intp_r, 1:blksz)
+              call MPI_ALLREDUCE(MPI_IN_PLACE, tmp_Cvec, isdf_in%n_intp_r*blksz, MPI_DOUBLE, MPI_SUM, peinf%comm, info)
               !if (peinf%master) print *, "  tmp_CvecM(:, 1) ", tmp_Cvec(1:10, 1)
               !if (peinf%master) print *, "  tmp_CvecM(:, 1) ", tmp_Cvec(1:10, 2)
               ! Pvec stores the icv_start to icv_end elements of the global_Pvec
@@ -642,8 +627,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
               v_incr = 0
 #endif
               do jvrep = 1, gvec%syms%ntrans
-                do iv = isdf_in%lvrep_bound(jvrep, 1), &
-                  isdf_in%lvrep_bound(jvrep, 2)
+                do iv = isdf_in%lvrep_bound(jvrep, 1), isdf_in%lvrep_bound(jvrep, 2)
                   jv = isdf_in%lvrep(iv)
 #ifdef _CUDA
                   if (v_incr == 0) then
@@ -662,18 +646,15 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
                   Nbytes = isdf_in%n_intp_r*blksz*Bytes_double
                   call hipCheck(hipMemcpy(d_cvec, c_loc(tmp_Cvec), Nbytes,
                   hipMemcpyHostToDevice))
-                  call hadamard_prod_mat_sym(d_PsiV, d_PsiC, d_Cmtrx, d_lcrep, &
-                                             isdf_in%n_intp_r, jv - 1, isdf_in%mynv, isdf_in%mync, &
-                                             isdf_in%maxmync_sym, isdf_in%lcrep_bound(jcrep, 1),
-                  isdf_in%lcrep_bound(jcrep, 2))
-                  call hipblasCheck(hipblasDgemm(handle, transt, transn, &
-                                                 isdf_in%mync_sym(jcrep), blksz, isdf_in%n_intp_r, d_one, &
-                                                 d_Cmtrx, isdf_in%n_intp_r, d_cvec, isdf_in%n_intp_r, &
-                                                 d_zero, d_pvec, isdf_in%maxmync_sym))
+                  call hadamard_prod_mat_sym(d_PsiV, d_PsiC, d_Cmtrx, d_lcrep, isdf_in%n_intp_r, jv - 1, isdf_in%mynv, &
+                                             isdf_in%mync, isdf_in%maxmync_sym, isdf_in%lcrep_bound(jcrep, 1), &
+                                             isdf_in%lcrep_bound(jcrep, 2))
+                  call hipblasCheck(hipblasDgemm(handle, transt, transn, isdf_in%mync_sym(jcrep), blksz, &
+                                                 isdf_in%n_intp_r, d_one, d_Cmtrx, isdf_in%n_intp_r, d_cvec, &
+                                                 isdf_in%n_intp_r, d_zero, d_pvec, isdf_in%maxmync_sym))
                   call hipCheck(hipDeviceSynchronize())
                   Nbytes = isdf_in%maxmync_sym*blksz*Bytes_double
-                  call hipCheck(hipMemcpy(c_loc(tmparray), d_pvec, Nbytes, &
-                                          hipMemcpyDeviceToHost))
+                  call hipCheck(hipMemcpy(c_loc(tmparray), d_pvec, Nbytes, hipMemcpyDeviceToHost))
 #elif defined _CUDA
                   d_cvec = tmp_Cvec
                   icstart = isdf_in%lcrep_bound(jcrep, 1)
@@ -683,15 +664,12 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
 !$cuf kernel do
                   do ic = icstart, icend
                     jc = d_lcrep(ic)
-                    d_Cmtrx(voffset + ic - icstart + 1, 1:n_intp_r) = &
-                      d_PsiC(1:n_intp_r, jc)*d_PsiV(1:n_intp_r, jv)
+                    d_Cmtrx(voffset + ic - icstart + 1, 1:n_intp_r) = d_PsiC(1:n_intp_r, jc)*d_PsiV(1:n_intp_r, jv)
                   end do ! ic
 
                   if (v_incr == v_incr_end) then
-                    call cublasdgemm('N', 'N', &
-                                     v_incr_end*isdf_in%mync_sym(jcrep), blksz, n_intp_r, &
-                                     1.d0, d_Cmtrx, vstep*isdf_in%maxmync_sym, d_Cvec, &
-                                     isdf_in%n_intp_r, 0.d0, d_pvec, &
+                    call cublasdgemm('N', 'N', v_incr_end*isdf_in%mync_sym(jcrep), blksz, n_intp_r, 1.d0, d_Cmtrx, &
+                                     vstep*isdf_in%maxmync_sym, d_Cvec, isdf_in%n_intp_r, 0.d0, d_pvec, &
                                      vstep*isdf_in%maxmync_sym)
                     v_incr = 0
                     tmparray = d_pvec
@@ -701,18 +679,14 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
                   end if
                   istat = cudaDeviceSynchronize()
 #else
-                  do ic = isdf_in%lcrep_bound(jcrep, 1), &
-                    isdf_in%lcrep_bound(jcrep, 2)
+                  do ic = isdf_in%lcrep_bound(jcrep, 1), isdf_in%lcrep_bound(jcrep, 2)
                     jc = isdf_in%lcrep(ic)
-                    tmp_Cmtrx(ic - isdf_in%lcrep_bound(jcrep, 1) + 1, &
-                              1:isdf_in%n_intp_r) = &
+                    tmp_Cmtrx(ic - isdf_in%lcrep_bound(jcrep, 1) + 1, 1:isdf_in%n_intp_r) = &
                       isdf_in%PsiC_intp_bl(1:isdf_in%n_intp_r, jc, 1, 1)* &
                       isdf_in%PsiV_intp_bl(1:isdf_in%n_intp_r, jv, 1, 1)
                   end do ! ic loop
-                  call dgemm('N', 'N', isdf_in%mync_sym(jcrep), blksz, &
-                             isdf_in%n_intp_r, 1.d0, tmp_Cmtrx, isdf_in%maxmync_sym, &
-                             tmp_Cvec, isdf_in%n_intp_r, 0.d0, tmparray, &
-                             isdf_in%maxmync_sym)
+                  call dgemm('N', 'N', isdf_in%mync_sym(jcrep), blksz, isdf_in%n_intp_r, 1.d0, tmp_Cmtrx, &
+                             isdf_in%maxmync_sym, tmp_Cvec, isdf_in%n_intp_r, 0.d0, tmparray, isdf_in%maxmync_sym)
 #endif
 
 #ifndef _CUDA
@@ -745,17 +719,16 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
                   Pvec(1:isdf_in%myncv_sym(nmrep), kk) = &
                     Pvec(1:isdf_in%myncv_sym(nmrep), kk)*sqrtR(1:isdf_in%myncv_sym(nmrep))
                 end if
-                pnorm2(kk) = ddot(isdf_in%myncv_sym(nmrep), Pvec(1, kk), 1, &
-                                  Pvec(1, kk), 1)
+                pnorm2(kk) = ddot(isdf_in%myncv_sym(nmrep), Pvec(1, kk), 1, Pvec(1, kk), 1)
               end do ! kk
-              call MPI_ALLREDUCE(MPI_IN_PLACE, pnorm2, blksz, MPI_DOUBLE, &
-                                 MPI_SUM, peinf%comm, info)
+              call MPI_ALLREDUCE(MPI_IN_PLACE, pnorm2, blksz, MPI_DOUBLE, MPI_SUM, peinf%comm, info)
               do kk = 1, blksz
                 pnorm(kk) = sqrt(pnorm2(kk))
               end do ! kk
               call stopwatch(peinf%master, " Finished preparing Pvec ")
               !if (w_grp%master) print *, "pnorm**2 ", pnorm2(1:blksz)
               !stop
+
               if (blks(iblk, 3, irep) == 1) then ! occupied states
 
                 do kk = 1, blksz
@@ -766,8 +739,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
                 ! call lanczos_spectra to compute <Pvec| 1/(ezz-H_aux) |Pvec>
                 call lanczos_spectra_isdf_lowcomsym(Pvec, pnorm, isdf_in%myncv_sym(nmrep), ezz, sig_in%nen + 1, &
                                                     opt%lanczos_niter, isdf_in, sqrtR, polynomial, npoly, &
-                                                    sigma_corr_tmp, tamm_d, &
-                                                    blksz, nmrep, gvec &
+                                                    sigma_corr_tmp, tamm_d, blksz, nmrep, gvec &
 #ifdef DCU
                                                     , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
                                                     handle &
@@ -791,8 +763,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
 #ifdef DEBUG
                   if (peinf%master) then
                     if (tamm_d) then
-                      print *, isdf_in%lrep(jn + kk - 1), "incr ", &
-                        -sigma_corr_tmp(2, kk)*2.0**0.5*pnorm2(kk)
+                      print *, isdf_in%lrep(jn + kk - 1), "incr ", -sigma_corr_tmp(2, kk)*2.0**0.5*pnorm2(kk)
                       do ien = 1, sig_in%nen
                         write (dbgunit, '(i7,3x,i7,3x,i7,3x,e15.5,3x,e15.5)') &
                           m1, isdf_in%lrep(jn + kk - 1), ien, real(zz(ien)), &
@@ -800,8 +771,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
                       end do ! ien
                     else
                       print *, isdf_in%lrep(jn + kk - 1), "incr ", &
-                        (sigma_corr_tmp(sig_in%nen + 1, kk) - sigma_corr_tmp(2, kk))* &
-                          2.0*pnorm2(kk)/ezz(2, kk)
+                        (sigma_corr_tmp(sig_in%nen + 1, kk) - sigma_corr_tmp(2, kk))*2.0*pnorm2(kk)/ezz(2, kk)
                       do ien = 1, sig_in%nen
                         write (dbgunit, '(i7,3x,i7,3x,i7,3x,e15.5,3x,e15.5)') &
                           m1, isdf_in%lrep(jn + kk - 1), ien, real(zz(ien)), &
@@ -823,8 +793,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
                 ! call lanczos_spectra to compute <Pvec| 1/(ezz-H_aux) |Pvec>
                 call lanczos_spectra_isdf_lowcomsym(Pvec, pnorm, isdf_in%myncv_sym(nmrep), ezz, sig_in%nen + 1, &
                                                     opt%lanczos_niter, isdf_in, sqrtR, polynomial, npoly, &
-                                                    sigma_corr_tmp, tamm_d, &
-                                                    blksz, nmrep, gvec &
+                                                    sigma_corr_tmp, tamm_d, blksz, nmrep, gvec &
 #ifdef DCU
                                                     , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, &
                                                     d_cvec, d_lcrep, handle &
@@ -847,8 +816,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
 #ifdef DEBUG
                   if (peinf%master) then
                     if (tamm_d) then
-                      print *, isdf_in%lrep(jn + kk - 1), "incr ", &
-                        sigma_corr_tmp(2, kk)*2.0**0.5*pnorm2(kk)
+                      print *, isdf_in%lrep(jn + kk - 1), "incr ", sigma_corr_tmp(2, kk)*2.0**0.5*pnorm2(kk)
                       do ien = 1, sig_in%nen
                         write (dbgunit, '(i7,3x,i7,3x,i7,3x,e15.5,3x,e15.5)') &
                           m1, isdf_in%lrep(jn + kk - 1), ien, real(zz(ien)), &
@@ -856,8 +824,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
                       end do ! ien
                     else
                       print *, isdf_in%lrep(jn + kk - 1), "incr ", &
-                        (sigma_corr_tmp(sig_in%nen + 1, kk) - sigma_corr_tmp(2, kk))* &
-                          2.0*pnorm2(kk)/ezz(2, kk)
+                        (sigma_corr_tmp(sig_in%nen + 1, kk) - sigma_corr_tmp(2, kk))*2.0*pnorm2(kk)/ezz(2, kk)
                       do ien = 1, sig_in%nen
                         write (dbgunit, '(i7,3x,i7,3x,i7,3x,e15.5,3x,e15.5)') &
                           m1, isdf_in%lrep(jn + kk - 1), ien, real(zz(ien)), &
@@ -882,16 +849,13 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
             write (6, '(a)') repeat('-', 65)
             print *, "sigma_corr", sig_in%map(sig_in%diag(isig))
             do ien = 1, sig_in%nen
-              write (6, '(a,i7,f15.6,f15.6,f15.6)') " #sigma_c ", ien, &
-                ryd*(deltae*(ien - 1) + en0), real(sigma_corr(ien))*ryd, &
-                aimag(sigma_corr(ien))*ryd
+              write (6, '(a,i7,f15.6,f15.6,f15.6)') " #sigma_c ", ien, ryd*(deltae*(ien - 1) + en0), &
+                  real(sigma_corr(ien))*ryd, aimag(sigma_corr(ien))*ryd
             end do ! ien
             print *, "E_qp(E)", sig_in%map(sig_in%diag(isig))
             do ien = 1, sig_in%nen
-              write (6, '(a,i7,f15.6,f15.6)') " #E_qp ", ien, &
-                ryd*(deltae*(ien - 1) + en0), &
-                (kpt%wfn(1, 1)%e1(m1) + real(sig(1, 1)%xdiag(isig) &
-                                             + sigma_corr(ien) - sig(1, 1)%vxcdiag(isig)))*ryd
+              write (6, '(a,i7,f15.6,f15.6)') " #E_qp ", ien, ryd*(deltae*(ien - 1) + en0), &
+                (kpt%wfn(1, 1)%e1(m1) + real(sig(1, 1)%xdiag(isig) + sigma_corr(ien) - sig(1, 1)%vxcdiag(isig)))*ryd
             end do ! ien
           end if ! peinf%master
           do ien = 1, sig_in%nen
@@ -948,8 +912,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
   if (peinf%master) close (dbgunit)
 #endif
 
-  call stopwatch(r_grp%master, &
-                 ' All matrix elements calculated. Start printout')
+  call stopwatch(r_grp%master, ' All matrix elements calculated. Start printout')
 
   if (peinf%master .and. sig_in%xc == XC_GW) then
     open (12, file='hmat_qp_nostatic', form='formatted')
@@ -1035,37 +998,30 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, &
       !
       if (gvec%per > 0) then
         if (nspin == 1) then
-          write (file_name, '(a,i3.3,a,i4.4)') 'sigma_nostatic_', ik, '_', &
-            it_scf
+          write (file_name, '(a,i3.3,a,i4.4)') 'sigma_nostatic_', ik, '_', it_scf
         else
           if (isp == 1) then
-            write (file_name, '(a,i3.3,a,i4.4)') 'sigma_nostatic_up_', ik, &
-              '_', it_scf
+            write (file_name, '(a,i3.3,a,i4.4)') 'sigma_nostatic_up_', ik, '_', it_scf
           else
-            write (file_name, '(a,i3.3,a,i4.4)') 'sigma_nostatic_down_', ik, &
-              '_', it_scf
+            write (file_name, '(a,i3.3,a,i4.4)') 'sigma_nostatic_down_', ik, '_', it_scf
           end if
         end if
       else
         if (nspin == 1) then
-          write (file_name, '(a,i3.3,a,i4.4)') 'sigma_nostatic_', ik, '_', &
-            it_scf
+          write (file_name, '(a,i3.3,a,i4.4)') 'sigma_nostatic_', ik, '_', it_scf
         else
           if (isp == 1) then
-            write (file_name, '(a,i3.3,a,i4.4)') 'sigma_nostatic_up_', ik, &
-              '_', it_scf
+            write (file_name, '(a,i3.3,a,i4.4)') 'sigma_nostatic_up_', ik, '_', it_scf
           else
-            write (file_name, '(a,i3.3,a,i4.4)') 'sigma_nostatic_down_', ik, &
-              '_', it_scf
+            write (file_name, '(a,i3.3,a,i4.4)') 'sigma_nostatic_down_', ik, '_', it_scf
           end if
         end if
       end if
       !
       ! Print self-energy tables without static correction.
       !
-      call printsigma(gvec%syms%ntrans, sig_in, sig(isp, ik), kpt%wfn(isp, jk), &
-                      q_p(1:gvec%syms%ntrans, isp, ik), 12, isp, ik, iord, qpmix, rtmp, &
-                      file_name)
+      call printsigma(gvec%syms%ntrans, sig_in, sig(isp, ik), kpt%wfn(isp, jk), q_p(1:gvec%syms%ntrans, isp, ik), 12, &
+                      isp, ik, iord, qpmix, rtmp, file_name)
 
       deallocate (iord)
     end do ! isp
