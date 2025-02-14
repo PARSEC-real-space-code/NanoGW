@@ -254,7 +254,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
         emin = (kpt%wfn(1, 1)%e1(nval + 1) - kpt%wfn(1, 1)%e1(nval))**2.0/1.25d0
         emax = (kpt%wfn(1, 1)%e1(isdf_in%maxicc) - kpt%wfn(1, 1)%e1(1))**2.0*1.25d0
         print *, "emin = ", emin, " emax = ", emax
-        !call polyfit_sqrt(emin, emax, npoly, 20, peinf%inode, tmp_poly, .False.)
+        ! call polyfit_sqrt(emin, emax, npoly, 20, peinf%inode, tmp_poly, .False.)
         ! search for best polynomial fitting
         max_fit_error = 1.d3
         do nx = 20, 300, 20
@@ -525,10 +525,10 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
         blks(nblks(irep), 3, irep) = 0
       end if
       if (w_grp%master) then
-        print *, " ncblks nvblks ", ncblks(irep), nvblks(irep)
-        print *, " idx   blks "
+        write (*, "(3(A, I0))") " irep = ", irep, "  nvblks = ", nvblks(irep), "  ncblks = ", ncblks(irep)
+        write (*, *) "  idx   blks "
         do kk = 1, nblks(irep)
-          print *, kk, blks(kk, 1:3, irep)
+          write (*, *) kk, blks(kk, 1:3, irep)
         end do ! kk
       end if
     end do ! irep
@@ -567,8 +567,8 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
             end do ! jvrep loop
             do iblk = 1, nblks(irep)
               if (peinf%master) then
-                write (6, '(/,a)') repeat('-', 65)
-                write (6, '(10(a,i0))') " ik: ", ik, "/", nkpt, "   isp: ", isp, "/", nspin, "   isig: ", isig, &
+                write (6, "(/, A)") repeat('-', 65)
+                write (6, "(10(A, I0))") " ik: ", ik, "/", nkpt, "   isp: ", isp, "/", nspin, "   isig: ", isig, &
                   "/", sig_in%ndiag, "   irep: ", irep, "/", gvec%syms%ntrans, "   iblk: ", iblk, "/",  nblks(irep)
               end if
               ! ----------------------------------------------------------------
@@ -591,7 +591,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
               jn = blks(iblk, 1, irep) + isdf_in%lrep_bound(irep, 1) - 1
               jnend = blks(iblk, 2, irep) + isdf_in%lrep_bound(irep, 1) - 1
               blksz = jnend - jn + 1
-              call stopwatch(peinf%master, " prepare Pvec ")
+              call stopwatch(peinf%master, " Initializing Pvec")
               tmp_Cvec = 0.d0
               do kk = 1, blksz
                 jk = isdf_in%lrep(jn + kk - 1)
@@ -644,8 +644,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
                   end do ! jcrep
 #ifdef DCU
                   Nbytes = isdf_in%n_intp_r*blksz*Bytes_double
-                  call hipCheck(hipMemcpy(d_cvec, c_loc(tmp_Cvec), Nbytes,
-                  hipMemcpyHostToDevice))
+                  call hipCheck(hipMemcpy(d_cvec, c_loc(tmp_Cvec), Nbytes, hipMemcpyHostToDevice))
                   call hadamard_prod_mat_sym(d_PsiV, d_PsiC, d_Cmtrx, d_lcrep, isdf_in%n_intp_r, jv - 1, isdf_in%mynv, &
                                              isdf_in%mync, isdf_in%maxmync_sym, isdf_in%lcrep_bound(jcrep, 1), &
                                              isdf_in%lcrep_bound(jcrep, 2))
@@ -725,137 +724,67 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
               do kk = 1, blksz
                 pnorm(kk) = sqrt(pnorm2(kk))
               end do ! kk
-              call stopwatch(peinf%master, " Finished preparing Pvec ")
-              !if (w_grp%master) print *, "pnorm**2 ", pnorm2(1:blksz)
-              !stop
 
+              call stopwatch(peinf%master, " Running Lanczos solver")
               if (blks(iblk, 3, irep) == 1) then ! occupied states
-
-                do kk = 1, blksz
-                  jk = isdf_in%lrep(jn + kk - 1)
-                  ezz(1:sig_in%nen, kk) = -zz(1:sig_in%nen) + kpt%wfn(isp, ik)%e1(jk) + cmplx(0.d0, 1.d0)*ecuts
-                end do ! kk
-                ezz(sig_in%nen + 1, 1:blksz) = cmplx(0.d0, 0.d0)
-                ! call lanczos_spectra to compute <Pvec| 1/(ezz-H_aux) |Pvec>
-                call lanczos_spectra_isdf_lowcomsym(Pvec, pnorm, isdf_in%myncv_sym(nmrep), ezz, sig_in%nen + 1, &
-                                                    opt%lanczos_niter, isdf_in, sqrtR, polynomial, npoly, &
-                                                    sigma_corr_tmp, tamm_d, blksz, nmrep, gvec &
-#ifdef DCU
-                                                    , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
-                                                    handle &
-#elif defined _CUDA
-                                                    , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
-                                                    vstep, tmp_Cvec, streamid &
-#endif
-                                                    )
-                do kk = 1, blksz
-                  if (tamm_d) then
-                    ! TODO: Check if sqrt(2) factor is correct in sigma_corr adjustment
-                    sigma_corr(1:sig_in%nen) = sigma_corr(1:sig_in%nen) - &
-                                               sigma_corr_tmp(1:sig_in%nen, kk)*2.0**0.5*pnorm2(kk)
-                  else
-                    sigma_corr(1:sig_in%nen) = sigma_corr(1:sig_in%nen) + &
-                                               (sigma_corr_tmp(sig_in%nen + 1, kk) &
-                                                - sigma_corr_tmp(1:sig_in%nen, kk)) &
-                                               *2.0*pnorm2(kk)/ezz(1:sig_in%nen, kk)
-                  end if
-
-#ifdef DEBUG
-                  if (peinf%master) then
-                    if (tamm_d) then
-                      print *, isdf_in%lrep(jn + kk - 1), "incr ", -sigma_corr_tmp(2, kk)*2.0**0.5*pnorm2(kk)
-                      do ien = 1, sig_in%nen
-                        write (dbgunit, '(i7,3x,i7,3x,i7,3x,e15.5,3x,e15.5)') &
-                          m1, isdf_in%lrep(jn + kk - 1), ien, real(zz(ien)), &
-                          real(-sigma_corr_tmp(ien, kk))*2.0**0.5*pnorm2(kk)*ryd
-                      end do ! ien
-                    else
-                      print *, isdf_in%lrep(jn + kk - 1), "incr ", &
-                        (sigma_corr_tmp(sig_in%nen + 1, kk) - sigma_corr_tmp(2, kk))*2.0*pnorm2(kk)/ezz(2, kk)
-                      do ien = 1, sig_in%nen
-                        write (dbgunit, '(i7,3x,i7,3x,i7,3x,e15.5,3x,e15.5)') &
-                          m1, isdf_in%lrep(jn + kk - 1), ien, real(zz(ien)), &
-                          real((sigma_corr_tmp(sig_in%nen + 1, kk) - sigma_corr_tmp(ien, kk))* &
-                            2.0*pnorm2(kk)/ezz(ien, kk))*ryd
-                      end do ! ien
-                    end if
-                  end if
-#endif
-                end do ! kk
-
-              else ! for unoccupied states
-
-                do kk = 1, blksz
-                  jk = isdf_in%lrep(jn + kk - 1)
-                  ezz(1:sig_in%nen, kk) = zz(1:sig_in%nen) - kpt%wfn(isp, ik)%e1(jk) + cmplx(0.d0, 1.d0)*ecuts
-                end do ! kk
-                ezz(sig_in%nen + 1, 1:blksz) = cmplx(0.d0, 0.d0)
-                ! call lanczos_spectra to compute <Pvec| 1/(ezz-H_aux) |Pvec>
-                call lanczos_spectra_isdf_lowcomsym(Pvec, pnorm, isdf_in%myncv_sym(nmrep), ezz, sig_in%nen + 1, &
-                                                    opt%lanczos_niter, isdf_in, sqrtR, polynomial, npoly, &
-                                                    sigma_corr_tmp, tamm_d, blksz, nmrep, gvec &
-#ifdef DCU
-                                                    , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, &
-                                                    d_cvec, d_lcrep, handle &
-#elif defined _CUDA
-                                                    , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, &
-                                                    d_cvec, d_lcrep, vstep, tmp_Cvec, streamid &
-#endif
-                                                    )
-                do kk = 1, blksz
-                  if (tamm_d) then
-                    ! TODO: Check if sqrt(2) factor is correct in sigma_corr adjustment
-                    sigma_corr(1:sig_in%nen) = sigma_corr(1:sig_in%nen) + &
-                                               sigma_corr_tmp(1:sig_in%nen, kk)*2.0**0.5*pnorm2(kk)
-                  else
-                    sigma_corr(1:sig_in%nen) = sigma_corr(1:sig_in%nen) - &
-                                               (sigma_corr_tmp(sig_in%nen + 1, kk) &
-                                                - sigma_corr_tmp(1:sig_in%nen, kk)) &
-                                                *2.0*pnorm2(kk)/ezz(1:sig_in%nen, kk)
-                  end if
-#ifdef DEBUG
-                  if (peinf%master) then
-                    if (tamm_d) then
-                      print *, isdf_in%lrep(jn + kk - 1), "incr ", sigma_corr_tmp(2, kk)*2.0**0.5*pnorm2(kk)
-                      do ien = 1, sig_in%nen
-                        write (dbgunit, '(i7,3x,i7,3x,i7,3x,e15.5,3x,e15.5)') &
-                          m1, isdf_in%lrep(jn + kk - 1), ien, real(zz(ien)), &
-                          real(sigma_corr_tmp(ien, kk))*2.0**0.5*pnorm2(kk)*ryd
-                      end do ! ien
-                    else
-                      print *, isdf_in%lrep(jn + kk - 1), "incr ", &
-                        (sigma_corr_tmp(sig_in%nen + 1, kk) - sigma_corr_tmp(2, kk))*2.0*pnorm2(kk)/ezz(2, kk)
-                      do ien = 1, sig_in%nen
-                        write (dbgunit, '(i7,3x,i7,3x,i7,3x,e15.5,3x,e15.5)') &
-                          m1, isdf_in%lrep(jn + kk - 1), ien, real(zz(ien)), &
-                          real((sigma_corr_tmp(sig_in%nen + 1, kk) - sigma_corr_tmp(ien, kk))* &
-                            2.0*pnorm2(kk)/ezz(ien, kk))*ryd
-                      end do ! ien
-                    end if
-                  end if
-#endif
-                end do ! kk
+                occ = 1.d0
+              else ! unoccupied states
+                occ = -1.d0
               end if
 
-              call stopwatch(peinf%master, ' summation over bands ')
+              do kk = 1, blksz
+                jk = isdf_in%lrep(jn + kk - 1)
+                ezz(1:sig_in%nen, kk) = (-zz(1:sig_in%nen) + kpt%wfn(isp, ik)%e1(jk)) * occ + cmplx(0.d0, 1.d0)*ecuts
+              end do ! kk
+              ezz(sig_in%nen + 1, 1:blksz) = cmplx(0.d0, 0.d0)
 
+              ! compute <Pvec| 1/(ezz-H_aux) |Pvec>
+              call lanczos_spectra_isdf_lowcomsym(Pvec, pnorm, isdf_in%myncv_sym(nmrep), ezz, sig_in%nen + 1, &
+                                                  opt%lanczos_niter, isdf_in, sqrtR, polynomial, npoly, &
+                                                  sigma_corr_tmp, tamm_d, blksz, nmrep, gvec &
+#ifdef DCU
+                                                  , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
+                                                  handle &
+#elif defined _CUDA
+                                                  , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
+                                                  vstep, tmp_Cvec, streamid &
+#endif
+                                                  )
+
+              call stopwatch(peinf%master, " Summing over bands")
+              do kk = 1, blksz
+                if (tamm_d) then
+                  ! TODO: Check if factor 2 is correct in sigma_corr adjustment
+                  sigma_corr_tmp(1:sig_in%nen, kk) = -sigma_corr_tmp(1:sig_in%nen, kk)*occ*2.0*pnorm2(kk)
+                else
+                  sigma_corr_tmp(1:sig_in%nen, kk) = (sigma_corr_tmp(sig_in%nen + 1, kk) &
+                                                      -sigma_corr_tmp(1:sig_in%nen, kk)) &
+                                                     *occ*2.0*pnorm2(kk)/ezz(1:sig_in%nen, kk)
+                end if
+                ! TODO: Check if factor 2 is correct in sigma_corr adjustment
+                sigma_corr(1:sig_in%nen) = sigma_corr(1:sig_in%nen) + sigma_corr_tmp(1:sig_in%nen, kk)
+#ifdef DEBUG
+                if (peinf%master) then
+                  print *, isdf_in%lrep(jn + kk - 1), "incr ", sigma_corr_tmp(2, kk)
+                  do ien = 1, sig_in%nen
+                    write (dbgunit, '(i7,3x,i7,3x,i7,3x,e15.5,3x,e15.5)') &
+                      m1, isdf_in%lrep(jn + kk - 1), ien, real(zz(ien)), real(sigma_corr_tmp(ien, kk))*ryd
+                  end do ! ien
+                end if
+#endif
+              end do ! kk
             end do ! iblk
-
             deallocate (Pvec)
-
           end do ! irep
 
           if (peinf%master) then
-            write (6, '(a)') repeat('-', 65)
-            print *, "sigma_corr", sig_in%map(sig_in%diag(isig))
+            write (*, "(/, A)") repeat('-', 65)
+            write (*, "(A, I0)") " iband = ", sig_in%map(sig_in%diag(isig))
+            write (*, "(A)") "     iE       E      sigma_c(re) sigma_c(im)   E_qp(E)  # in (eV)"
             do ien = 1, sig_in%nen
-              write (6, '(a,i7,f15.6,f15.6,f15.6)') " #sigma_c ", ien, ryd*(deltae*(ien - 1) + en0), &
-                  real(sigma_corr(ien))*ryd, aimag(sigma_corr(ien))*ryd
-            end do ! ien
-            print *, "E_qp(E)", sig_in%map(sig_in%diag(isig))
-            do ien = 1, sig_in%nen
-              write (6, '(a,i7,f15.6,f15.6)') " #E_qp ", ien, ryd*(deltae*(ien - 1) + en0), &
-                (kpt%wfn(1, 1)%e1(m1) + real(sig(1, 1)%xdiag(isig) + sigma_corr(ien) - sig(1, 1)%vxcdiag(isig)))*ryd
+              write (6, "(I7, 4F12.6)") ien, ryd*(deltae*(ien-1)+en0), &
+                real(sigma_corr(ien))*ryd, aimag(sigma_corr(ien))*ryd, &
+                (kpt%wfn(1, 1)%e1(m1)+real(sig(1, 1)%xdiag(isig)+sigma_corr(ien)-sig(1, 1)%vxcdiag(isig)))*ryd
             end do ! ien
           end if ! peinf%master
           do ien = 1, sig_in%nen
@@ -867,6 +796,8 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
         end do ! isig
       end do ! isp
     end do ! ik
+    deallocate (sigma_corr_tmp)
+    deallocate (sigma_corr)
     deallocate (zz, ezz)
     deallocate (tmp_Cmtrx)
     deallocate (tmp_Cvec)

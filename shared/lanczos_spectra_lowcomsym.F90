@@ -5,9 +5,8 @@
 !  <vec| 1/(z-H) |vec>
 !
 ! ncv_loc = isdf_in%ncv_sym(nmrep)
-subroutine lanczos_spectra_isdf_lowcomsym(v0, v0_norm, ncv_loc, zz, nz, niter, isdf_in, &
-                                          sqrtR, polynomial, npoly, spectra, tamm_d, &
-                                          blksz, nmrep, gvec &
+subroutine lanczos_spectra_isdf_lowcomsym(v0, v0_norm, ncv_loc, zz, nz, niter, isdf_in, sqrtR, polynomial, npoly, &
+                                          spectra, tamm_d, blksz, nmrep, gvec &
 #ifdef DCU
                                           , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
                                           hipblasHandle &
@@ -33,8 +32,7 @@ subroutine lanczos_spectra_isdf_lowcomsym(v0, v0_norm, ncv_loc, zz, nz, niter, i
   integer, intent(in) :: ncv_loc, niter, nz, npoly, blksz, nmrep
   complex(dp), intent(in) :: zz(nz, blksz)
   type(ISDF), intent(in) :: isdf_in
-  real(dp), intent(in) :: v0(ncv_loc, blksz), polynomial(npoly + 1), &
-                          v0_norm(blksz), sqrtR(ncv_loc)
+  real(dp), intent(in) :: v0(ncv_loc, blksz), polynomial(npoly + 1), v0_norm(blksz), sqrtR(ncv_loc)
   type(gspace), intent(in) :: gvec
   logical, intent(in) :: tamm_d
   complex(dp), intent(out):: spectra(nz, blksz)
@@ -42,12 +40,10 @@ subroutine lanczos_spectra_isdf_lowcomsym(v0, v0_norm, ncv_loc, zz, nz, niter, i
   !  CMC_vec(ncv_loc, blksz), tmp_vec(isdf_in%n_intp_r, blksz)
 
 #ifdef DCU
-  type(c_ptr), intent(inout) :: d_PsiV, d_PsiC, d_Cmtrx, d_cvec, &
-                                d_pvec, d_lcrep
+  type(c_ptr), intent(inout) :: d_PsiV, d_PsiC, d_Cmtrx, d_cvec, d_pvec, d_lcrep
   type(c_ptr), intent(in) :: hipblasHandle
 #elif defined _CUDA
-  real(dp), device, intent(in) :: d_PsiV(isdf_in%n_intp_r, *), &
-                                  d_PsiC(isdf_in%n_intp_r, *)
+  real(dp), device, intent(in) :: d_PsiV(isdf_in%n_intp_r, *), d_PsiC(isdf_in%n_intp_r, *)
   real(dp), device, intent(inout) :: d_Cmtrx(isdf_in%maxmync_sym*vstep, isdf_in%n_intp_r), &
                                      d_cvec(isdf_in%n_intp_r, blksz), &
                                      d_pvec(isdf_in%maxmync_sym*vstep, blksz)
@@ -109,15 +105,13 @@ subroutine lanczos_spectra_isdf_lowcomsym(v0, v0_norm, ncv_loc, zz, nz, niter, i
   do ii = 1, blksz
     a_elmt(1, ii) = ddot(ncv_loc, wvec(1, ii), 1, vec(1, ii), 1)
     !if (peinf%master) print *, "before allreduce a_elmt ", a_elmt(1,2)
-    call mpi_allreduce(MPI_IN_PLACE, a_elmt(1, ii), 1, &
-                       MPI_DOUBLE, MPI_SUM, peinf%comm, info)
+    call mpi_allreduce(MPI_IN_PLACE, a_elmt(1, ii), 1, MPI_DOUBLE, MPI_SUM, peinf%comm, info)
     !if (peinf%master) print *, "after allreduce a_elmt ", a_elmt(1,2)
     ! wvec = wvec - a_elmt(1) * vec
     call daxpy(ncv_loc, -a_elmt(1, ii), vec(1, ii), 1, wvec(1, ii), 1)
     b_elmt(2, ii) = ddot(ncv_loc, wvec(1, ii), 1, wvec(1, ii), 1)
     !if (peinf%master) print *, "before allreduce b_elmt ", b_elmt(2,2)
-    call mpi_allreduce(MPI_IN_PLACE, b_elmt(2, ii), 1, &
-                       MPI_DOUBLE, MPI_SUM, peinf%comm, info)
+    call mpi_allreduce(MPI_IN_PLACE, b_elmt(2, ii), 1, MPI_DOUBLE, MPI_SUM, peinf%comm, info)
     !if (peinf%master) print *, "before allreduce b_elmt ", b_elmt(2,2)
     b_elmt(2, ii) = sqrt(b_elmt(2, ii))
   end do ! ii
@@ -161,13 +155,11 @@ subroutine lanczos_spectra_isdf_lowcomsym(v0, v0_norm, ncv_loc, zz, nz, niter, i
     !call stopwatch(peinf%master,'mpi_allreduce k start')
     do ii = 1, blksz
       a_elmt(k, ii) = ddot(ncv_loc, wvec(1, ii), 1, vec(1, ii), 1)
-      call mpi_allreduce(MPI_IN_PLACE, a_elmt(k, ii), 1, &
-                         MPI_DOUBLE, MPI_SUM, peinf%comm, info)
+      call mpi_allreduce(MPI_IN_PLACE, a_elmt(k, ii), 1, MPI_DOUBLE, MPI_SUM, peinf%comm, info)
       if (k + 1 <= niter) then
         call daxpy(ncv_loc, -a_elmt(k, ii), vec(1, ii), 1, wvec(1, ii), 1)
         b_elmt(k + 1, ii) = ddot(ncv_loc, wvec(1, ii), 1, wvec(1, ii), 1)
-        call mpi_allreduce(MPI_IN_PLACE, b_elmt(k + 1, ii), 1, &
-                           MPI_DOUBLE, MPI_SUM, peinf%comm, info)
+        call mpi_allreduce(MPI_IN_PLACE, b_elmt(k + 1, ii), 1, MPI_DOUBLE, MPI_SUM, peinf%comm, info)
         b_elmt(k + 1, ii) = sqrt(b_elmt(k + 1, ii))
       end if
     end do ! ii loop

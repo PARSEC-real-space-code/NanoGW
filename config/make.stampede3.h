@@ -7,7 +7,7 @@
 #  2) impi/21.11   4) cmake/3.28.1    6) TACC
 #
 FCPP    = /usr/bin/cpp -P -traditional-cpp
-CPPOPT  = -DUSEFFTW3 -DMPI -DINTEL # -DDEBUG
+CPPOPT  = -DUSEFFTW3 -DMPI -DINTEL  # -DDEBUG
 
 EXT     = .mpi
 
