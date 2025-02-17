@@ -72,7 +72,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
 
   logical :: staticcorr
   integer :: ii, jj, irp, iq, ik, jk, isp, isig, info, neig_qp, ien, ic, iv, icv, jn, m1, inode, &
-             myn_intp_start, myn_intp_end, myn_intp_r, jnend, npoly, ncond, nval, jnblock
+             myn_intp_start, myn_intp_end, myn_intp_r, npoly, ncond, nval, jnblock
   real(dp) :: tsec(2), rtmp, deltae, emin, emax, en0
   real(dp), allocatable :: polynomial(:), Pvec(:, :), tmp_Cmtrx(:, :), tmp_CvecM(:, :), tmp_poly(:), sqrtR(:), &
                            tmp_Cvec(:, :), tmparray(:, :)
@@ -82,12 +82,12 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
   complex(dp), allocatable :: zz(:), ezz(:, :), sigma_corr(:), sigma_corr_tmp(:, :)
 
   ! -------- temporary arrays for lanczos iterations --------
-  integer :: irep, kk, blksz, iblk, cvstart, jc, jv, jvrep, jcrep, istart, ivstart, icstart, lncond, lnval, m1_rep, &
+  integer :: irep, kk, blksz, iblk, cvstart, jc, jv, jvrep, jcrep, istart, ivstart, icstart, ln, lnval, m1_rep, &
              maxnblks, nmrep, ibnd, lrp1, lrp2, nx, nx_select, n_intp_r, icend
-  integer, allocatable :: blks(:, :, :), tmp_lrep(:, :), tmp_lvrep(:, :), tmp_lcrep(:, :), nvblks(:), nblks(:), &
-                          ncblks(:), tmp_count(:)
+  integer, allocatable :: blks(:, :, :), tmp_lrep(:, :), tmp_lvrep(:, :), tmp_lcrep(:, :), nblks(:), tmp_count(:), &
+                          occ(:, :)
   real(dp) :: pnorm2(opt%jnblock), pnorm(opt%jnblock), fit_error, max_fit_error
-  real(dp) :: occ ! eta_n in the paper, 1 for occupied and -1 for empty
+  real(dp), allocatable :: eta(:)  ! eta_n in the paper, 1 for occupied and -1 for empty, (ib)
   !real(dp) :: MC_vec(w_grp%myn_intp_r, opt%jnblock), &
   !  CMC_vec(w_grp%ldncv, opt%jnblock), &
   !  tmp_vec(isdf_in%n_intp_r, opt%jnblock)
@@ -214,8 +214,8 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
 #endif
 
   if (sig_in%xc == XC_GW) then
-    ! deallocate unused arrays
 
+    ! deallocate unused arrays
     do iq = 1, qpt%nk
       do irp = 1, gvec%syms%ntrans
         !deallocate(k_p(irp,iq)%col)
@@ -447,6 +447,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
     allocate (tmp_CvecM(myn_intp_r, jnblock))
     allocate (sqrtR(isdf_in%maxmyncv_sym))
     allocate (tmp_Cmtrx(isdf_in%maxmync_sym, isdf_in%n_intp_r))
+    allocate (eta(jnblock))
 
 #ifdef _CUDA
     vstep = 12000**2/isdf_in%maxmync_sym/isdf_in%n_intp_r
@@ -479,56 +480,37 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
     allocate (d_pvec(isdf_in%maxmync_sym*vstep, jnblock))
 #endif
 
-    allocate (nvblks(gvec%syms%ntrans))
-    allocate (ncblks(gvec%syms%ntrans))
     allocate (nblks(gvec%syms%ntrans))
     do irep = 1, gvec%syms%ntrans
-      lnval = isdf_in%lrep_bound(irep, 3) - isdf_in%lrep_bound(irep, 1) + 1
-      nvblks(irep) = lnval/jnblock
-      if (mod(lnval, jnblock) > 0) nvblks(irep) = nvblks(irep) + 1
-      lncond = isdf_in%lrep_bound(irep, 2) - isdf_in%lrep_bound(irep, 3)
-      ncblks(irep) = lncond/jnblock
-      if (mod(lncond, jnblock) > 0) ncblks(irep) = ncblks(irep) + 1
-      !print *, ncblks
-      nblks(irep) = ncblks(irep) + nvblks(irep)
+      ln = isdf_in%lrep_bound(irep, 2) - isdf_in%lrep_bound(irep, 1) + 1
+      nblks(irep) = (ln-1)/jnblock+1  ! ceiling division
     end do ! irep
     maxnblks = maxval(nblks)
-    allocate (blks(maxnblks, 3, irep))
+
+    allocate (occ(maxnblks, gvec%syms%ntrans))
+    allocate (blks(maxnblks, 2, gvec%syms%ntrans))
+    occ = 0
     blks = 0
     ! blks(kk, 1, irep) : start index of isdf_in%lrep
     ! blks(kk, 2, irep) : end index of isdf_in%lrep
     do irep = 1, gvec%syms%ntrans
+      ln = isdf_in%lrep_bound(irep, 2) - isdf_in%lrep_bound(irep, 1) + 1
       lnval = isdf_in%lrep_bound(irep, 3) - isdf_in%lrep_bound(irep, 1) + 1
-      lncond = isdf_in%lrep_bound(irep, 2) - isdf_in%lrep_bound(irep, 3)
-      if (nvblks(irep) >= 1) then
-        do kk = 1, lnval/jnblock
-          blks(kk, 1, irep) = (kk - 1)*jnblock + 1
-          blks(kk, 2, irep) = kk*jnblock
-          blks(kk, 3, irep) = 1
-        end do ! kk
+      do iblk = 1, nblks(irep)
+        blks(iblk, 1, irep) = (iblk-1)*jnblock + 1
+        blks(iblk, 2, irep) = iblk*jnblock
+      end do
+      blks(nblks(irep), 2, irep) = ln
+      occ(1:lnval/jnblock, irep) = jnblock
+      if (lnval/jnblock < nblks(irep)) then
+        occ(lnval/jnblock+1, irep) = lnval-lnval/jnblock*jnblock
       end if
-      if (mod(lnval, jnblock) > 0) then
-        blks(nvblks(irep), 1, irep) = (nvblks(irep) - 1)*jnblock + 1
-        blks(nvblks(irep), 2, irep) = lnval
-        blks(nvblks(irep), 3, irep) = 1
-      end if
-      if (ncblks(irep) >= 1) then
-        do kk = 1, lncond/jnblock
-          blks(nvblks(irep) + kk, 1, irep) = lnval + (kk - 1)*jnblock + 1
-          blks(nvblks(irep) + kk, 2, irep) = lnval + kk*jnblock
-          blks(nvblks(irep) + kk, 3, irep) = 0
-        end do ! kk
-      end if
-      if (mod(lncond, jnblock) > 0) then
-        blks(nblks(irep), 1, irep) = lnval + (ncblks(irep) - 1)*jnblock + 1
-        blks(nblks(irep), 2, irep) = lnval + lncond
-        blks(nblks(irep), 3, irep) = 0
-      end if
+
       if (w_grp%master) then
-        write (*, "(3(A, I0))") " irep = ", irep, "  nvblks = ", nvblks(irep), "  ncblks = ", ncblks(irep)
-        write (*, *) "  idx   blks "
+        write (*, "(2(A, I0))") " irep = ", irep, "  nblks = ", nblks(irep)
+        write (*, "(A)") "   idx     blks     occ"
         do kk = 1, nblks(irep)
-          write (*, *) kk, blks(kk, 1:3, irep)
+          write (*, "(4I6)") kk, blks(kk, 1:2, irep), occ(kk, irep)
         end do ! kk
       end if
     end do ! irep
@@ -565,6 +547,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
                 end do ! ic
               end do ! iv loop
             end do ! jvrep loop
+
             do iblk = 1, nblks(irep)
               if (peinf%master) then
                 write (6, "(/, A)") repeat('-', 65)
@@ -589,8 +572,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
               ! m1 is the index of states which GW energy is calculated
               ! jn is sum over bands
               jn = blks(iblk, 1, irep) + isdf_in%lrep_bound(irep, 1) - 1
-              jnend = blks(iblk, 2, irep) + isdf_in%lrep_bound(irep, 1) - 1
-              blksz = jnend - jn + 1
+              blksz = blks(iblk, 2, irep) - blks(iblk, 1, irep) + 1
               call stopwatch(peinf%master, " Initializing Pvec")
               tmp_Cvec = 0.d0
               do kk = 1, blksz
@@ -726,15 +708,13 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
               end do ! kk
 
               call stopwatch(peinf%master, " Running Lanczos solver")
-              if (blks(iblk, 3, irep) == 1) then ! occupied states
-                occ = 1.d0
-              else ! unoccupied states
-                occ = -1.d0
-              end if
+              ! set eta for occupied and unoccupied states
+              eta = -1.d0
+              eta(1:occ(iblk, irep)) = 1.d0
 
               do kk = 1, blksz
                 jk = isdf_in%lrep(jn + kk - 1)
-                ezz(1:sig_in%nen, kk) = (-zz(1:sig_in%nen) + kpt%wfn(isp, ik)%e1(jk)) * occ + cmplx(0.d0, 1.d0)*ecuts
+                ezz(1:sig_in%nen, kk) = (-zz(1:sig_in%nen)+kpt%wfn(isp, ik)%e1(jk))*eta(kk) + cmplx(0.d0, 1.d0)*ecuts
               end do ! kk
               ezz(sig_in%nen + 1, 1:blksz) = cmplx(0.d0, 0.d0)
 
@@ -754,14 +734,13 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
               call stopwatch(peinf%master, " Summing over bands")
               do kk = 1, blksz
                 if (tamm_d) then
-                  ! TODO: Check if factor 2 is correct in sigma_corr adjustment
-                  sigma_corr_tmp(1:sig_in%nen, kk) = -sigma_corr_tmp(1:sig_in%nen, kk)*occ*2.0*pnorm2(kk)
+                  ! TODO: Check if factor sqrt(2) is correct in sigma_corr adjustment
+                  sigma_corr_tmp(1:sig_in%nen, kk) = -sigma_corr_tmp(1:sig_in%nen, kk)*eta(kk)*2.0**0.5*pnorm2(kk)
                 else
                   sigma_corr_tmp(1:sig_in%nen, kk) = (sigma_corr_tmp(sig_in%nen + 1, kk) &
                                                       -sigma_corr_tmp(1:sig_in%nen, kk)) &
-                                                     *occ*2.0*pnorm2(kk)/ezz(1:sig_in%nen, kk)
+                                                     *eta(kk)*2.0*pnorm2(kk)/ezz(1:sig_in%nen, kk)
                 end if
-                ! TODO: Check if factor 2 is correct in sigma_corr adjustment
                 sigma_corr(1:sig_in%nen) = sigma_corr(1:sig_in%nen) + sigma_corr_tmp(1:sig_in%nen, kk)
 #ifdef DEBUG
                 if (peinf%master) then
@@ -803,6 +782,9 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
     deallocate (tmp_Cvec)
     deallocate (tmp_CvecM)
     deallocate (sqrtR)
+    deallocate (eta)
+    deallocate (occ)
+    deallocate (blks)
     !deallocate (MC_vec)
     !deallocate (CMC_vec)
     !deallocate (tmp_vec)

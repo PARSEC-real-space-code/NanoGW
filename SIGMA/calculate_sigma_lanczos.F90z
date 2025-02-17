@@ -6,11 +6,9 @@
 ! Author: Weiwei Gao @ Dalian Univ. of Tech.
 !
 !---------------------------------------------------------------
-subroutine Zcalculate_sigma_lanczos(nspin, nkpt, &
-                                    sig_en, dft_code, gvec, kpt, qpt, k_c, k_p, sig_in, &
-                                    sig, q_p, nolda, tamm_d, writeqp, snorm, cohsex, lstop, &
-                                    ecuts, sig_cut, max_sig, &
-                                    isdf_in, doisdf, opt)
+subroutine Zcalculate_sigma_lanczos(nspin, nkpt, sig_en, dft_code, gvec, kpt, qpt, k_c, k_p, sig_in, sig, q_p, nolda, &
+                                    tamm_d, writeqp, snorm, cohsex, lstop, ecuts, sig_cut, max_sig, isdf_in, doisdf, &
+                                    opt)
 
   use typedefs
   use mpi_module
@@ -62,21 +60,15 @@ subroutine Zcalculate_sigma_lanczos(nspin, nkpt, &
   character(len=100) :: file_name
 
   logical :: staticcorr
-  integer :: ii, jj, irp, jrp, iq, ik, jk, isp, isig, &
-             info, chkpt, neig_qp, ien, n_intp_loc, ic, iv, icv, &
-             icv_start, icv_end, intp_start, intp_end, ij, incr, &
-             jn, m1, ncv, ncv_loc, iprocs, nval
+  integer :: ii, jj, irp, jrp, iq, ik, jk, isp, isig, info, chkpt, neig_qp, ien, n_intp_loc, ic, iv, icv, &
+             icv_start, icv_end, intp_start, intp_end, ij, incr, jn, m1, ncv, ncv_loc, iprocs, nval
   integer, parameter :: npoly = 6
-  real(dp) :: tsec(2), xsum, rtmp, epsinv, deltae, emin, &
-              emax, en0, pnorm2, res, fit_error
-  real(dp), allocatable :: polynomial(:), Pvec(:), &
-                           tmp_Cmtrx(:, :), tmp_Cvec(:), tmp_CvecM(:), tmp_poly(:), &
-                           sqrtR(:)
+  real(dp) :: tsec(2), xsum, rtmp, epsinv, deltae, emin, emax, en0, pnorm2, res, fit_error
+  real(dp), allocatable :: polynomial(:), Pvec(:), tmp_Cmtrx(:, :), tmp_Cvec(:), tmp_CvecM(:), tmp_poly(:), sqrtR(:)
   integer, allocatable :: iord(:), cvpair(:, :)
   integer, parameter :: it_scf = 0, niter = 15
   real(dp), parameter :: qpmix = 1.d0
-  complex(dp), allocatable :: zz(:), ezz(:), sigma_corr(:), &
-                              sigma_corr_tmp(:)
+  complex(dp), allocatable :: zz(:), ezz(:), sigma_corr(:), sigma_corr_tmp(:)
   real(dp), external :: ddot
 
   if (peinf%master) print *, "ecuts ", ecuts
@@ -124,8 +116,7 @@ subroutine Zcalculate_sigma_lanczos(nspin, nkpt, &
     do isp = 1, nspin
       jk = sig(isp, ik)%indxk
       call timacc(6, 1, tsec)
-      if (sig_in%xc == XC_GW .or. sig_in%xc == XC_HF .or. &
-          sig_in%xc == XC_B3LYP) &
+      if (sig_in%xc == XC_GW .or. sig_in%xc == XC_HF .or. sig_in%xc == XC_B3LYP) &
         call Zfock_exchange(gvec, kpt, sig(isp, ik), isp, jk)
       call timacc(6, 2, tsec)
     end do
@@ -143,10 +134,8 @@ subroutine Zcalculate_sigma_lanczos(nspin, nkpt, &
     ! fit a polynomial
     nval = sum(kpt%wfn(1, 1)%occ0) ! only works for systems with a gap
     if (peinf%master) then
-      emin = (kpt%wfn(1, 1)%e1(nval + 1) - &
-              kpt%wfn(1, 1)%e1(nval))**2.0/1.25d0
-      emax = (kpt%wfn(1, 1)%e1(isdf_in%maxicc) - &
-              kpt%wfn(1, 1)%e1(1))**2.0*1.25d0
+      emin = (kpt%wfn(1, 1)%e1(nval + 1) - kpt%wfn(1, 1)%e1(nval))**2.0/1.25d0
+      emax = (kpt%wfn(1, 1)%e1(isdf_in%maxicc) - kpt%wfn(1, 1)%e1(1))**2.0*1.25d0
       print *, "emin = ", emin, " emax = ", emax
       call polyfit_sqrt(emin, emax, npoly, 20, peinf%inode, tmp_poly, fit_error, .true.)
     end if
@@ -199,15 +188,10 @@ subroutine Zcalculate_sigma_lanczos(nspin, nkpt, &
     allocate (tmp_CvecM(n_intp_loc))
     allocate (sqrtR(ncv_loc))
     ! check local indices
-    if (peinf%master) print *, &
-      " icv_start  icv_end ", &
-      " intp_start  intp_end ", &
-      " ncv_loc  n_intp_loc "
+    if (peinf%master) print *, " icv_start  icv_end  intp_start  intp_end  ncv_loc  n_intp_loc "
     do iprocs = 0, peinf%npes - 1
       if (peinf%inode == iprocs) then
-        print *, icv_start, icv_end, &
-          intp_start, intp_end, &
-          ncv_loc, n_intp_loc
+        print *, icv_start, icv_end, intp_start, intp_end, ncv_loc, n_intp_loc
       end if
       call MPI_Barrier(peinf%comm, info)
     end do
@@ -271,13 +255,11 @@ subroutine Zcalculate_sigma_lanczos(nspin, nkpt, &
           ! = tmp_Cvec(1, n_intp_r) @ Mmtrx(1:n_intp_r, intp_start:intp_end)
           ! or
           ! = Mmtrx(intp_start:intp_end, 1:n_intp_r) @ tmp_Cvec(n_intp_r)
-          call dgemv('N', n_intp_loc, isdf_in%n_intp_r, 1.d0, &
-                     isdf_in%Mmtrx(intp_start, 1, 1, 1, 1, 1, 1), isdf_in%n_intp_r, &
-                     tmp_Cvec, 1, 0.d0, tmp_CvecM, 1)
+          call dgemv('N', n_intp_loc, isdf_in%n_intp_r, 1.d0, isdf_in%Mmtrx(intp_start, 1, 1, 1, 1, 1, 1), &
+                     isdf_in%n_intp_r, tmp_Cvec, 1, 0.d0, tmp_CvecM, 1)
           tmp_Cvec(1:isdf_in%n_intp_r) = 0.d0
           tmp_Cvec(intp_start:intp_end) = tmp_CvecM(1:n_intp_loc)
-          call mpi_allreduce(MPI_IN_PLACE, tmp_Cvec, isdf_in%n_intp_r, &
-                             MPI_DOUBLE, MPI_SUM, peinf%comm, info)
+          call mpi_allreduce(MPI_IN_PLACE, tmp_Cvec, isdf_in%n_intp_r, MPI_DOUBLE, MPI_SUM, peinf%comm, info)
           if (peinf%master) print *, " inode ", w_grp%inode, "Mmtrx @ tmp_Cvec ", tmp_Cvec(1:10)
           ! Pvec stores the icv_start to icv_end elements of the global_Pvec
           ! compute Pvec(1:ncv_loc) = tmp_Cvec(1:isdf_in%n_intp_r)*tmp_Cmtrx(1:isdf_in%n_intp_r, 1:ncv_loc)
@@ -299,34 +281,28 @@ subroutine Zcalculate_sigma_lanczos(nspin, nkpt, &
           !endif
           Pvec(1:ncv_loc) = Pvec(1:ncv_loc)*sqrtR(1:ncv_loc)
           pnorm2 = ddot(ncv_loc, Pvec, 1, Pvec, 1)
-          call mpi_allreduce(MPI_IN_PLACE, pnorm2, 1, MPI_DOUBLE, &
-                             MPI_SUM, peinf%comm, info)
+          call mpi_allreduce(MPI_IN_PLACE, pnorm2, 1, MPI_DOUBLE, MPI_SUM, peinf%comm, info)
           if (peinf%master) print *, "pnorm**2 ", pnorm2
           !stop
           if (jn <= nval) then ! occupied states
-            ezz(1:sig_in%nen) = &
-              -(zz(1:sig_in%nen) - kpt%wfn(isp, ik)%e1(jn)) &
-              + cmplx(0.d0, 1.d0)*ecuts
+            ezz(1:sig_in%nen) = -(zz(1:sig_in%nen) - kpt%wfn(isp, ik)%e1(jn)) + cmplx(0.d0, 1.d0)*ecuts
             ezz(sig_in%nen + 1) = cmplx(0.d0, 0.d0)
             ! call lanczos_spectra to compute <Pvec| 1/(ezz-H_aux) |Pvec>
-            call lanczos_spectra_isdf(Pvec, sqrt(pnorm2), ncv_loc, ezz, sig_in%nen + 1, &
-                                      niter, isdf_in, kpt%wfn(isp, ik), tmp_Cmtrx, sqrtR, &
-                                      polynomial, npoly, sigma_corr_tmp)
+            call lanczos_spectra_isdf(Pvec, sqrt(pnorm2), ncv_loc, ezz, sig_in%nen + 1, niter, isdf_in, &
+                                      kpt%wfn(isp, ik), tmp_Cmtrx, sqrtR, polynomial, npoly, sigma_corr_tmp)
             sigma_corr(1:sig_in%nen) = sigma_corr(1:sig_in%nen) + 2.0*pnorm2/(-ezz(1:sig_in%nen))* &
                                        (-sigma_corr_tmp(sig_in%nen + 1) + sigma_corr_tmp(1:sig_in%nen))
 #ifdef DEBUG
-            if (peinf%master) print *, "incr ", 2.0*pnorm2*(-sigma_corr_tmp(sig_in%nen + 1) + sigma_corr_tmp(2))/(-ezz(2))
+            if (peinf%master) print *, "incr ", 2.0*pnorm2* &
+              (-sigma_corr_tmp(sig_in%nen + 1) + sigma_corr_tmp(2))/(-ezz(2))
 #endif
             ! stop
           else ! for unoccupied states
-            ezz(1:sig_in%nen) = &
-              (zz(1:sig_in%nen) - kpt%wfn(isp, ik)%e1(jn)) &
-              + cmplx(0.d0, 1.d0)*ecuts
+            ezz(1:sig_in%nen) = (zz(1:sig_in%nen) - kpt%wfn(isp, ik)%e1(jn)) + cmplx(0.d0, 1.d0)*ecuts
             ezz(sig_in%nen + 1) = cmplx(0.d0, 0.d0)
             ! call lanczos_spectra to compute <Pvec| 1/(ezz-H_aux) |Pvec>
-            call lanczos_spectra_isdf(Pvec, sqrt(pnorm2), ncv_loc, ezz, sig_in%nen + 1, &
-                                      niter, isdf_in, kpt%wfn(isp, ik), tmp_Cmtrx, sqrtR, &
-                                      polynomial, npoly, sigma_corr_tmp)
+            call lanczos_spectra_isdf(Pvec, sqrt(pnorm2), ncv_loc, ezz, sig_in%nen + 1, niter, isdf_in, &
+                                      kpt%wfn(isp, ik), tmp_Cmtrx, sqrtR, polynomial, npoly, sigma_corr_tmp)
             sigma_corr(1:sig_in%nen) = sigma_corr(1:sig_in%nen) + 2.0*pnorm2/ezz(1:sig_in%nen)* &
                                        (-sigma_corr_tmp(sig_in%nen + 1) + sigma_corr_tmp(1:sig_in%nen))
 #ifdef DEBUG
@@ -365,8 +341,7 @@ subroutine Zcalculate_sigma_lanczos(nspin, nkpt, &
 
 23 continue
 
-  call stopwatch(r_grp%master, &
-                 ' All matrix elements calculated. Start printout')
+  call stopwatch(r_grp%master, ' All matrix elements calculated. Start printout')
 
   if (peinf%master .and. sig_in%xc == XC_GW) then
     open (12, file='hmat_qp_nostatic', form='formatted')
@@ -473,8 +448,7 @@ subroutine Zcalculate_sigma_lanczos(nspin, nkpt, &
       !
       ! Print self-energy tables without static correction.
       !
-      call printsigma(gvec%syms%ntrans, sig_in, sig(isp, ik), &
-                      kpt%wfn(isp, jk), q_p(1:gvec%syms%ntrans, isp, ik), 12, &
+      call printsigma(gvec%syms%ntrans, sig_in, sig(isp, ik), kpt%wfn(isp, jk), q_p(1:gvec%syms%ntrans, isp, ik), 12, &
                       isp, ik, iord, qpmix, rtmp, file_name)
 
       deallocate (iord)
@@ -485,8 +459,7 @@ subroutine Zcalculate_sigma_lanczos(nspin, nkpt, &
     close (12)
   end if
 #ifdef MPI
-  call MPI_BCAST(max_sig, 1, MPI_DOUBLE_PRECISION, &
-                 peinf%masterid, peinf%comm, info)
+  call MPI_BCAST(max_sig, 1, MPI_DOUBLE_PRECISION, peinf%masterid, peinf%comm, info)
 #endif
 
   !-------------------------------------------------------------------

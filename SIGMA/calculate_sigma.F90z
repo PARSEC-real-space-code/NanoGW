@@ -8,11 +8,9 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !---------------------------------------------------------------
-subroutine Zcalculate_sigma(nspin, nkpt, n_it, it_scf, nr_buff, static_type, &
-                            sig_en, dft_code, chkpt_in, gvec, kpt, qpt, k_c, k_p, pol, sig_in, &
-                            sig, q_p, nolda, tamm_d, writeqp, snorm, cohsex, hqp_sym, lstop, &
-                            ecuts, qpmix, sig_cut, max_sig, &
-                            isdf_in, doisdf, opt)
+subroutine Zcalculate_sigma(nspin, nkpt, n_it, it_scf, nr_buff, static_type, sig_en, dft_code, chkpt_in, gvec, kpt, &
+                            qpt, k_c, k_p, pol, sig_in, sig, q_p, nolda, tamm_d, writeqp, snorm, cohsex, hqp_sym, &
+                            lstop, ecuts, qpmix, sig_cut, max_sig, isdf_in, doisdf, opt)
 
   use typedefs
   use mpi_module
@@ -75,8 +73,7 @@ subroutine Zcalculate_sigma(nspin, nkpt, n_it, it_scf, nr_buff, static_type, &
 
   integer, parameter :: pol_unit = 51  ! unit for pol_diag.dat file
   logical :: staticcorr
-  integer :: ii, jj, irp, jrp, iq, ik, jk, isp, isig, &
-             info, chkpt, neig_qp
+  integer :: ii, jj, irp, jrp, iq, ik, jk, isp, isig, info, chkpt, neig_qp
   real(dp) :: tsec(2), xsum, rtmp, epsinv
   integer, allocatable :: iord(:)
 
@@ -95,9 +92,8 @@ subroutine Zcalculate_sigma(nspin, nkpt, n_it, it_scf, nr_buff, static_type, &
     !             sigma.chkp.dat).
     !
     chkpt = chkpt_in
-    call Zcalculate_tdlda(gvec, kpt, qpt, k_p, pol, nspin, chkpt, &
-                          tamm_d, nolda, .false., .false., .false., .false., xsum, epsinv, &
-                          isdf_in, opt)
+    call Zcalculate_tdlda(gvec, kpt, qpt, k_p, pol, nspin, chkpt, tamm_d, nolda, .false., .false., .false., .false., &
+                          xsum, epsinv, isdf_in, opt)
     !
     ! Rescale sum rule.
     if (.not. snorm) xsum = one
@@ -227,13 +223,11 @@ subroutine Zcalculate_sigma(nspin, nkpt, n_it, it_scf, nr_buff, static_type, &
       do isp = 1, nspin
         jk = sig(isp, ik)%indxk
         call timacc(6, 1, tsec)
-        if (sig_in%xc == XC_GW .or. sig_in%xc == XC_HF .or. &
-            sig_in%xc == XC_B3LYP) &
+        if (sig_in%xc == XC_GW .or. sig_in%xc == XC_HF .or. sig_in%xc == XC_B3LYP) &
           call Zfock_exchange(gvec, kpt, sig(isp, ik), isp, jk)
         if (sig_in%xc == XC_B3LYP .or. sig_in%xc == XC_LDA_CA .or. &
             sig_in%xc == XC_GGA_PBE .or. sig_in%xc == XC_GGA_BLYP) &
-          call Zmodel_exchange(gvec, kpt, sig(isp, ik), nspin, isp, jk, &
-                               sig_in%xc, gvec%syms%ntrans)
+          call Zmodel_exchange(gvec, kpt, sig(isp, ik), nspin, isp, jk, sig_in%xc, gvec%syms%ntrans)
         call timacc(6, 2, tsec)
       end do
     end do
@@ -258,21 +252,21 @@ subroutine Zcalculate_sigma(nspin, nkpt, n_it, it_scf, nr_buff, static_type, &
     end if
 
     ! Debug: WG
-!     if (peinf%master .and. doisdf) then
-!        ! print out Mmtrx and Psi_intp
-!        write(6,*) "mu  nu Mmtrx(mu,nu) : "
-!        do ii = 1, isdf_in%n_intp_r
-!          do jj = 1, isdf_in%n_intp_r
-!            write(6,*) ii,jj,isdf_in%Mmtrx(ii, jj, 1, 1, 1, 1, 1)
-!          enddo
-!        enddo
-!        write(6,*) "iband mu Psi_intp(iband, mu)"
-!        do ii = 1, isdf_in%maxicc
-!          do jj = 1, isdf_in%n_intp_r
-!            write(6,*) ii, jj, isdf_in%Psi_intp(jj, ii, 1, 1)
-!          enddo
-!        enddo
-!     endif
+    ! if (peinf%master .and. doisdf) then
+    !    ! print out Mmtrx and Psi_intp
+    !    write(6,*) "mu  nu Mmtrx(mu,nu) : "
+    !    do ii = 1, isdf_in%n_intp_r
+    !      do jj = 1, isdf_in%n_intp_r
+    !        write(6,*) ii,jj,isdf_in%Mmtrx(ii, jj, 1, 1, 1, 1, 1)
+    !      enddo
+    !    enddo
+    !    write(6,*) "iband mu Psi_intp(iband, mu)"
+    !    do ii = 1, isdf_in%maxicc
+    !      do jj = 1, isdf_in%n_intp_r
+    !        write(6,*) ii, jj, isdf_in%Psi_intp(jj, ii, 1, 1)
+    !      enddo
+    !    enddo
+    ! endif
     ! Debug: WG
 
     do iq = 1, qpt%nk
@@ -280,10 +274,8 @@ subroutine Zcalculate_sigma(nspin, nkpt, n_it, it_scf, nr_buff, static_type, &
       do jrp = 1, gvec%syms%ntrans/r_grp%num
         irp = r_grp%g_rep(jrp)
         if ((chkpt - (qpt%nk + iq)*gvec%syms%ntrans >= irp)) cycle
-        call Zgw_correlation(gvec, kpt, qpt, k_c(irp, iq), pol(irp, iq), &
-                             sig_in, sig, nspin, nkpt, irp, &
-                             pol_unit, k_p(irp, iq)%nn, qpt%nk, iq, sig_en, nolda, xsum, &
-                             isdf_in, opt)
+        call Zgw_correlation(gvec, kpt, qpt, k_c(irp, iq), pol(irp, iq), sig_in, sig, nspin, nkpt, irp, pol_unit, &
+                             k_p(irp, iq)%nn, qpt%nk, iq, sig_en, nolda, xsum, isdf_in, opt)
       end do
       call stopwatch(peinf%master, "after call gw_correlation")
 #ifdef MPI
@@ -398,8 +390,7 @@ subroutine Zcalculate_sigma(nspin, nkpt, n_it, it_scf, nr_buff, static_type, &
     end do
   end if
 
-  call stopwatch(r_grp%master, &
-                 ' All matrix elements calculated. Start printout')
+  call stopwatch(r_grp%master, ' All matrix elements calculated. Start printout')
 
   if (peinf%master .and. sig_in%xc == XC_GW) then
     open (12, file='hmat_qp_nostatic', form='formatted')
@@ -532,9 +523,8 @@ subroutine Zcalculate_sigma(nspin, nkpt, n_it, it_scf, nr_buff, static_type, &
         !
         ! Print self-energy tables without static correction.
         !
-        call printsigma(gvec%syms%ntrans, sig_in, sig(isp, ik), &
-                        kpt%wfn(isp, jk), q_p(1:gvec%syms%ntrans, isp, ik), 12, &
-                        isp, ik, iord, qpmix, rtmp, file_name)
+        call printsigma(gvec%syms%ntrans, sig_in, sig(isp, ik), kpt%wfn(isp, jk), q_p(1:gvec%syms%ntrans, isp, ik), &
+                        12, isp, ik, iord, qpmix, rtmp, file_name)
         !
         ! Update and print self-energy with static correction.
         !
@@ -579,9 +569,8 @@ subroutine Zcalculate_sigma(nspin, nkpt, n_it, it_scf, nr_buff, static_type, &
               end if
             end if
           end if
-          call printsigma(gvec%syms%ntrans, sig_in, sig(isp, ik), &
-                          kpt%wfn(isp, jk), q_p(1:gvec%syms%ntrans, isp, ik), 15, &
-                          isp, ik, iord, qpmix, max_sig, file_name)
+          call printsigma(gvec%syms%ntrans, sig_in, sig(isp, ik), kpt%wfn(isp, jk), q_p(1:gvec%syms%ntrans, isp, ik), &
+                          15, isp, ik, iord, qpmix, max_sig, file_name)
         end if
       end if
       deallocate (iord)
@@ -593,8 +582,7 @@ subroutine Zcalculate_sigma(nspin, nkpt, n_it, it_scf, nr_buff, static_type, &
     if (staticcorr) close (15)
   end if
 #ifdef MPI
-  call MPI_BCAST(max_sig, 1, MPI_DOUBLE_PRECISION, &
-                 peinf%masterid, peinf%comm, info)
+  call MPI_BCAST(max_sig, 1, MPI_DOUBLE_PRECISION, peinf%masterid, peinf%comm, info)
 #endif
 
   !-------------------------------------------------------------------
@@ -611,8 +599,7 @@ subroutine Zcalculate_sigma(nspin, nkpt, n_it, it_scf, nr_buff, static_type, &
       if (sig_in%xc == XC_GW) then
         deallocate (kpt%wfn(isp, jk)%mapd)
         deallocate (kpt%wfn(isp, jk)%Zdipole)
-        call Zget_dipole(gvec, kpt%wfn(isp, jk), jk, kpt%fk(1, jk), &
-                         kpt%wfn(isp, jk)%occ0)
+        call Zget_dipole(gvec, kpt%wfn(isp, jk), jk, kpt%fk(1, jk), kpt%wfn(isp, jk)%occ0)
       end if
     end do
 
@@ -638,40 +625,30 @@ subroutine Zcalculate_sigma(nspin, nkpt, n_it, it_scf, nr_buff, static_type, &
     do iq = 1, qpt%nk
       do irp = 1, gvec%syms%ntrans
         if (pol(irp, iq)%n_up > 0) &
-          call inverse_map(kpt%wfn(1, 1)%nstate, kpt%wfn(1, 1)%cmapi, &
-                           2*pol(irp, iq)%n_up, pol(irp, iq)%tr)
+          call inverse_map(kpt%wfn(1, 1)%nstate, kpt%wfn(1, 1)%cmapi, 2*pol(irp, iq)%n_up, pol(irp, iq)%tr)
         if (k_p(irp, iq)%ncol_up > 0) &
-          call inverse_map(kpt%wfn(1, 1)%nstate, kpt%wfn(1, 1)%cmapi, &
-                           2*k_p(irp, iq)%ncol_up, k_p(irp, iq)%col)
+          call inverse_map(kpt%wfn(1, 1)%nstate, kpt%wfn(1, 1)%cmapi, 2*k_p(irp, iq)%ncol_up, k_p(irp, iq)%col)
         if (k_p(irp, iq)%nrow_up > 0) &
-          call inverse_map(kpt%wfn(1, 1)%nstate, kpt%wfn(1, 1)%cmapi, &
-                           2*k_p(irp, iq)%nrow_up, k_p(irp, iq)%row)
+          call inverse_map(kpt%wfn(1, 1)%nstate, kpt%wfn(1, 1)%cmapi, 2*k_p(irp, iq)%nrow_up, k_p(irp, iq)%row)
         if (k_c(irp, iq)%ncol_up > 0) &
-          call inverse_map(kpt%wfn(1, 1)%nstate, kpt%wfn(1, 1)%cmapi, &
-                           2*k_c(irp, iq)%ncol_up, k_c(irp, iq)%col)
+          call inverse_map(kpt%wfn(1, 1)%nstate, kpt%wfn(1, 1)%cmapi, 2*k_c(irp, iq)%ncol_up, k_c(irp, iq)%col)
         if (k_c(irp, iq)%nrow_up > 0) &
-          call inverse_map(kpt%wfn(1, 1)%nstate, kpt%wfn(1, 1)%cmapi, &
-                           2*k_c(irp, iq)%nrow_up, k_c(irp, iq)%row)
+          call inverse_map(kpt%wfn(1, 1)%nstate, kpt%wfn(1, 1)%cmapi, 2*k_c(irp, iq)%nrow_up, k_c(irp, iq)%row)
         if (nspin == 2) then
           if (pol(irp, iq)%ntr - pol(irp, iq)%n_up > 0) &
-            call inverse_map(kpt%wfn(2, 1)%nstate, kpt%wfn(2, 1)%cmapi, &
-                             2*(pol(irp, iq)%ntr - pol(irp, iq)%n_up), &
+            call inverse_map(kpt%wfn(2, 1)%nstate, kpt%wfn(2, 1)%cmapi, 2*(pol(irp, iq)%ntr - pol(irp, iq)%n_up), &
                              pol(irp, iq)%tr(1, pol(irp, iq)%n_up + 1))
           if (k_p(irp, iq)%nrow - k_p(irp, iq)%nrow_up > 0) &
-            call inverse_map(kpt%wfn(2, 1)%nstate, kpt%wfn(2, 1)%cmapi, &
-                             2*(k_p(irp, iq)%nrow - k_p(irp, iq)%nrow_up), &
+            call inverse_map(kpt%wfn(2, 1)%nstate, kpt%wfn(2, 1)%cmapi, 2*(k_p(irp, iq)%nrow - k_p(irp, iq)%nrow_up), &
                              k_p(irp, iq)%row(1, k_p(irp, iq)%nrow_up + 1))
           if (k_p(irp, iq)%ncol - k_p(irp, iq)%ncol_up > 0) &
-            call inverse_map(kpt%wfn(2, 1)%nstate, kpt%wfn(2, 1)%cmapi, &
-                             2*(k_p(irp, iq)%ncol - k_p(irp, iq)%ncol_up), &
+            call inverse_map(kpt%wfn(2, 1)%nstate, kpt%wfn(2, 1)%cmapi, 2*(k_p(irp, iq)%ncol - k_p(irp, iq)%ncol_up), &
                              k_p(irp, iq)%col(1, k_p(irp, iq)%ncol_up + 1))
           if (k_c(irp, iq)%nrow - k_c(irp, iq)%nrow_up > 0) &
-            call inverse_map(kpt%wfn(2, 1)%nstate, kpt%wfn(2, 1)%cmapi, &
-                             2*(k_c(irp, iq)%nrow - k_c(irp, iq)%nrow_up), &
+            call inverse_map(kpt%wfn(2, 1)%nstate, kpt%wfn(2, 1)%cmapi, 2*(k_c(irp, iq)%nrow - k_c(irp, iq)%nrow_up), &
                              k_c(irp, iq)%row(1, k_c(irp, iq)%nrow_up + 1))
           if (k_c(irp, iq)%ncol - k_c(irp, iq)%ncol_up > 0) &
-            call inverse_map(kpt%wfn(2, 1)%nstate, kpt%wfn(2, 1)%cmapi, &
-                             2*(k_c(irp, iq)%ncol - k_c(irp, iq)%ncol_up), &
+            call inverse_map(kpt%wfn(2, 1)%nstate, kpt%wfn(2, 1)%cmapi, 2*(k_c(irp, iq)%ncol - k_c(irp, iq)%ncol_up), &
                              k_c(irp, iq)%col(1, k_c(irp, iq)%ncol_up + 1))
         end if
       end do
@@ -681,8 +658,7 @@ subroutine Zcalculate_sigma(nspin, nkpt, n_it, it_scf, nr_buff, static_type, &
 #ifdef MPI
   call MPI_BARRIER(peinf%comm, info)
 #endif
-  if (peinf%master) write (6, '(/,a,i5,a,f10.5,/)') ' Iteration ', &
-    it_scf, '. Maximum potential (eV) = ', max_sig
+  if (peinf%master) write (6, '(/,a,i5,a,f10.5,/)') ' Iteration ', it_scf, '. Maximum potential (eV) = ', max_sig
 
 end subroutine Zcalculate_sigma
 !===================================================================
