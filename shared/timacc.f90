@@ -50,8 +50,7 @@ subroutine timacc(n, option, tottim)
   ! Does n have valid value ?
   !
   if (n < 1 .or. n > MTIM) then
-    write (lastwords, '(a,i6,a,i8)') ' timacc: dim mtim=', MTIM, &
-      ' but input n= ', n
+    write (lastwords, '(a,i6,a,i8)') ' timacc: dim mtim=', MTIM, ' but input n= ', n
     call die(lastwords)
   end if
 
@@ -60,8 +59,7 @@ subroutine timacc(n, option, tottim)
   !
   call cpu_time(cpu)
   call date_and_time(VALUES=values)
-  wall = ((values(3)*24.0d0 + values(5))*60.0d0 + values(6))*60.0d0 &
-         + values(7) + values(8)*0.001d0
+  wall = ((values(3)*24.0d0 + values(5))*60.0d0 + values(6))*60.0d0 + values(7) + values(8)*0.001d0
 
   select case (option)
   case (1)

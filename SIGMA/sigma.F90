@@ -740,8 +740,7 @@ program sigma
              isdf_in%lessmemory == 3 .or. &
              isdf_in%lessmemory == 4) then
       if (peinf%master) print *, " call isdf_parallel_sym_UltraLowMem"
-      call isdf_parallel_sym_UltraLowMem(gvec, pol_in, kpt, nspin, isdf_in, &
-                                         kflag, opt, verbose)
+      call isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, verbose)
       if (peinf%master) print *, " done isdf"
       do kk = 91, 92
         jj = 3
@@ -1133,43 +1132,49 @@ program sigma
   ! Time accounting.
   !
   ii = 13
-  ik = 33-13
+  ik = 39-13
   allocate (routnam(ii + ik))
   allocate (timerlist(ii + ik))
-  routnam(1) = 'SETUP_S'; timerlist(1) = 2
-  routnam(2) = 'KERNEL'; timerlist(2) = 3
-  routnam(3) = 'DIAG_POL'; timerlist(3) = 4
-  routnam(4) = 'WPOL_0'; timerlist(4) = 5
-  routnam(5) = 'EXCHANGE'; timerlist(5) = 6
-  routnam(6) = 'POTENTIAL'; timerlist(6) = 7
-  routnam(7) = 'CORRELATION'; timerlist(7) = 8
-  routnam(8) = 'VERTEX'; timerlist(8) = 9
-  routnam(9) = 'ROTATE'; timerlist(9) = 10
-  routnam(10) = 'CVT'; timerlist(10) = 51
-  routnam(11) = 'ISDF'; timerlist(11) = 52
-  routnam(12) = 'VXC'; timerlist(12) = 55
-  routnam(13) = 'LANCZOS'; timerlist(13) = 56
+  routnam(1) = "SETUP_S"; timerlist(1) = 2
+  routnam(2) = "KERNEL"; timerlist(2) = 3
+  routnam(3) = "DIAG_POL"; timerlist(3) = 4
+  routnam(4) = "WPOL_0"; timerlist(4) = 5
+  routnam(5) = "EXCHANGE"; timerlist(5) = 6
+  routnam(6) = "POTENTIAL"; timerlist(6) = 7
+  routnam(7) = "CORRELATION"; timerlist(7) = 8
+  routnam(8) = "VERTEX"; timerlist(8) = 9
+  routnam(9) = "ROTATE"; timerlist(9) = 10
+  routnam(10) = "CVT"; timerlist(10) = 51
+  routnam(11) = "ISDF"; timerlist(11) = 52
+  routnam(12) = "VXC"; timerlist(12) = 55
+  routnam(13) = "LANCZOS"; timerlist(13) = 56
 
-  routnam(14) = 'POISSON_FFT'; timerlist(14) = 11
-  routnam(15) = 'EIGENSOLVER'; timerlist(15) = 12
-  routnam(16) = 'INTEGRATION'; timerlist(16) = 13
-  routnam(17) = 'Calc intp vectors'; timerlist(17) = 53
-  routnam(18) = 'Calc <zeta|K|zeta>'; timerlist(18) = 54
-  routnam(19) = '(in cvt step1)'; timerlist(19) = 61
-  routnam(20) = '(in cvt step2)'; timerlist(20) = 62
-  routnam(21) = 'k_integrate_isdf'; timerlist(21) = 63
-  routnam(22) = 'kernel k_print'; timerlist(22) = 64
-  routnam(23) = 'k_int_isdf 1'; timerlist(23) = 65
-  routnam(24) = 'k_int_isdf 2'; timerlist(24) = 66
-  routnam(25) = 'k_int_isdf 3'; timerlist(25) = 67
-  routnam(26) = 'Lanczos_matvec'; timerlist(26) = 58
-  routnam(27) = 'Lanczos_poly'; timerlist(27) = 57
-  routnam(28) = 'matvec: sqR@vec'; timerlist(28) = 68
-  routnam(29) = 'matvec: Hadamard'; timerlist(29) = 69
-  routnam(30) = 'matvec: C@vec'; timerlist(30) = 71
-  routnam(31) = 'matvec: M@vec'; timerlist(31) = 72
-  routnam(32) = 'matvec: mpi'; timerlist(32) = 70
-  routnam(33) = 'matvec: vec_final'; timerlist(33) = 73
+  routnam(14) = "POISSON_FFT"; timerlist(14) = 11
+  routnam(15) = "EIGENSOLVER"; timerlist(15) = 12
+  routnam(16) = "INTEGRATION"; timerlist(16) = 13
+  routnam(17) = "Calc intp vectors"; timerlist(17) = 53
+  routnam(18) = "Calc <zeta|K|zeta>"; timerlist(18) = 54
+  routnam(19) = "(in cvt step1)"; timerlist(19) = 61
+  routnam(20) = "(in cvt step2)"; timerlist(20) = 62
+  routnam(21) = "k_integrate_isdf"; timerlist(21) = 63
+  routnam(22) = "kernel k_print"; timerlist(22) = 64
+  routnam(23) = "k_int_isdf 1"; timerlist(23) = 65
+  routnam(24) = "k_int_isdf 2"; timerlist(24) = 66
+  routnam(25) = "k_int_isdf 3"; timerlist(25) = 67
+  routnam(26) = "ISDF_P & Q"; timerlist(26) = 53
+  routnam(27) = "ISDF_dgemm1"; timerlist(27) = 78
+  routnam(28) = "ISDF_Hadamard"; timerlist(28) = 80
+  routnam(29) = "ISDF_Mmtrx"; timerlist(29) = 54
+  routnam(30) = "ISDF_dgemm2"; timerlist(30) = 77
+  routnam(31) = "ISDF_dpoisson"; timerlist(31) = 79
+  routnam(32) = "Lanczos_matvec"; timerlist(32) = 58
+  routnam(33) = "Lanczos_poly"; timerlist(33) = 57
+  routnam(34) = "matvec_sqR@vec"; timerlist(34) = 68
+  routnam(35) = "matvec_Hadamard"; timerlist(35) = 69
+  routnam(36) = "matvec_C@vec"; timerlist(36) = 71
+  routnam(37) = "matvec_M@vec"; timerlist(37) = 72
+  routnam(38) = "matvec_mpi"; timerlist(38) = 70
+  routnam(39) = "matvec_vec_final"; timerlist(39) = 73
 
 #ifdef HIPMAGMA
   !if (opt%linear_algebra .eq. 2 .or. opt%eigsolver .eq. 2) then
