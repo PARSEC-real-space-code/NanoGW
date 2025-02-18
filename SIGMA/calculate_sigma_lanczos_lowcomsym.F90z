@@ -506,7 +506,6 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
         occ(lnval/jnblock+1, irep) = lnval-lnval/jnblock*jnblock
       end if
 
-      write (*, *)
       if (w_grp%master) then
         write (*, "(A)") repeat('-', 65)
         write (*, "(2(A, I0))") " irep: ", irep, "/", gvec%syms%ntrans
