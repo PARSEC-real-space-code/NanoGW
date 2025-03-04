@@ -293,6 +293,14 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
     !  k_p(1,1)%col(1:2, mycv_start:mycv_end)
     ! local number of interpolation points
     ! prepare indices for symmetry representations
+    if (peinf%master) then
+      write (*, "(A, F0.2, A)") "  tmp_lrep: ", 1.d0 * kpt%wfn(1, 1)%nmem * gvec%syms%ntrans / 2**17, " MB"
+      write (*, "(A, F0.2, A)") "  tmp_lvrep: ", 1.d0 * isdf_in%mynv * gvec%syms%ntrans / 2**17, " MB"
+      write (*, "(A, F0.2, A)") "  tmp_lcrep: ", 1.d0 * isdf_in%mync * gvec%syms%ntrans / 2**17, " MB"
+      write (*, "(A, F0.2, A)") "  isdf_in%lrep: ", 1.d0 * kpt%wfn(1, 1)%nmem / 2**17, " MB"
+      write (*, "(A, F0.2, A)") "  isdf_in%lvrep: ", 1.d0 * isdf_in%mynv / 2**17, " MB"
+      write (*, "(A, F0.2, A)") "  isdf_in%lcrep: ", 1.d0 * isdf_in%mync / 2**17, " MB"
+    end if
     allocate (tmp_lrep(kpt%wfn(1, 1)%nmem, gvec%syms%ntrans))
     allocate (tmp_lvrep(isdf_in%mynv, gvec%syms%ntrans))
     allocate (tmp_lcrep(isdf_in%mync, gvec%syms%ntrans))
@@ -351,7 +359,6 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
     ! isdf_in%lcrep( lcrep_bound(1,irp):lvrep_bound(2,irp) ): 
     !   the index of states of representation irp, PsiC_intp_bl(n_intp_r, mync)
     do irp = 1, gvec%syms%ntrans
-
       if (irp == 1) then
         istart = 0
         ivstart = 0
@@ -383,11 +390,9 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
     deallocate (tmp_lrep)
     deallocate (tmp_lvrep)
     deallocate (tmp_lcrep)
-    allocate (isdf_in%ncv_sym(gvec%syms%ntrans))
     allocate (isdf_in%myncv_sym(gvec%syms%ntrans))
     allocate (isdf_in%mync_sym(gvec%syms%ntrans))
     allocate (isdf_in%mynv_sym(gvec%syms%ntrans))
-    isdf_in%ncv_sym = 0
     isdf_in%myncv_sym = 0
     isdf_in%mync_sym = 0
     isdf_in%mynv_sym = 0
@@ -404,9 +409,6 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
         isdf_in%myncv_sym(irep) = isdf_in%myncv_sym(irep) + &
                                   (isdf_in%lvrep_bound(lrp1, 2) - isdf_in%lvrep_bound(lrp1, 1) + 1)* &
                                   (isdf_in%lcrep_bound(lrp2, 2) - isdf_in%lcrep_bound(lrp2, 1) + 1)
-        isdf_in%ncv_sym(irep) = isdf_in%ncv_sym(irep) + &
-                                (isdf_in%lrep_bound(lrp1, 3) - isdf_in%lrep_bound(lrp1, 1) + 1)* &
-                                (isdf_in%lrep_bound(lrp2, 2) - isdf_in%lrep_bound(lrp2, 3))
         ! lrep_bound(:,2) largest empty state index
         ! lrep_bound(:,3) largest occupied state index
 
@@ -432,14 +434,6 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
     !  endif
     !  call MPI_BARRIER(peinf%comm, info)
     !enddo ! ipe
-    !if (peinf%master) then
-    !do irep = 1, gvec%syms%ntrans
-    !  if(tmp_count(irep) .ne. isdf_in%ncv_sym(irep)) then
-    !    print *, irep, " tmp_count ", tmp_count(irep), &
-    !      " ncv_sym ", isdf_in%ncv_sym(irep)
-    !  endif
-    !enddo
-    !endif
     isdf_in%maxmyncv_sym = maxval(isdf_in%myncv_sym)
     isdf_in%maxmync_sym = maxval(isdf_in%mync_sym)
     isdf_in%maxmynv_sym = maxval(isdf_in%mynv_sym)
@@ -515,6 +509,12 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
         end do ! kk
       end if
     end do ! irep
+
+
+    if (w_grp%master) then
+      write (*, "(/, A)") repeat('-', 65)
+      call stopwatch(peinf%master, "Starting Sigma loop")
+    end if
     allocate (sigma_corr_tmp(sig_in%nen + 1, jnblock))
     allocate (sigma_corr(sig_in%nen))
     deltae = sig_in%deltae/(sig_in%nen - 1) ! in rydberg
@@ -551,7 +551,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
 
             do iblk = 1, nblks(irep)
               if (peinf%master) then
-                write (6, "(/, A)") repeat('-', 65)
+                write (6, "(A)") repeat('-', 65)
                 write (6, "(10(A, I0))") " ik: ", ik, "/", nkpt, "   isp: ", isp, "/", nspin, "   isig: ", isig, &
                   "/", sig_in%ndiag, "   irep: ", irep, "/", gvec%syms%ntrans, "   iblk: ", iblk, "/",  nblks(irep)
               end if
@@ -758,14 +758,15 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
           end do ! irep
 
           if (peinf%master) then
-            write (*, "(/, A)") repeat('-', 65)
+            write (*, "(A)") repeat('-', 65)
             write (*, "(A, I0)") " iband = ", sig_in%map(sig_in%diag(isig))
             write (*, "(A)") "     iE       E      sigma_c(re) sigma_c(im)   E_qp(E)  # in (eV)"
             do ien = 1, sig_in%nen
-              write (6, "(I7, 4F12.6)") ien, ryd*(deltae*(ien-1)+en0), &
+              write (*, "(I7, 4F12.6)") ien, ryd*(deltae*(ien-1)+en0), &
                 real(sigma_corr(ien))*ryd, aimag(sigma_corr(ien))*ryd, &
                 (kpt%wfn(1, 1)%e1(m1)+real(sig(1, 1)%xdiag(isig)+sigma_corr(ien)-sig(1, 1)%vxcdiag(isig)))*ryd
             end do ! ien
+            write (*, *)
           end if ! peinf%master
           do ien = 1, sig_in%nen
             sig(isp, ik)%scdiag(ien, isig) = real(sigma_corr(ien))

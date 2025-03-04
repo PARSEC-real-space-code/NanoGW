@@ -105,8 +105,7 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
   ! Q(gvec%mydim, n_intp_r, nspin, kpt%nk)
   ! Cmtrx(n_intp_r, Nc*Nv, nspin, kpt%nk)
   ! Issue need to be addressed: if there are N wfn_grp, does it mean these matrix need to be
-  ! calculated by all processors at the same time, or can we distribute the workload
-  ! later ??
+  ! calculated by all processors at the same time, or can we distribute the workload later ??
   !
   real(dp), allocatable :: P(:, :, :), P_intp(:, :, :), &   ! P on reduced domain
                            Q(:, :, :), Q_intp(:, :, :), &   ! Q on reduced domain
@@ -211,6 +210,10 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
   !ALLOCATE( inv_ivlist(isdf_in%maxivv, nspin, kpt%nk, gvec%syms%ntrans) ) 
   ! For now, only deal with confined system. So we assume kpt%nk=1, and there is no dependence on k here
   !ALLOCATE( inv_iclist(isdf_in%maxicc, nspin, kpt%nk, gvec%syms%ntrans) )
+  if (w_grp%master) then
+    write (*, "(A)") " Allocate matrices"
+    write (*, "(A, F0.2, A)") "  tmp_array: ", 1.d0 * w_grp%mydim * isdf_in%n_intp_r / 2**17, " MB"
+  end if
   allocate (tmp_array(w_grp%mydim, isdf_in%n_intp_r))
   ! inv_ivlist(:) maps the real index of valence states
   !   to the index of valence states used in the calculation
@@ -247,7 +250,7 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
   if (kflag < 2) then
     call dinitialize_FFT(w_grp%inode, fft_box)
     call dcreate_coul_0D(gvec%bdot, qkt, fft_box)
-    if (w_grp%master) write (6, *) " finished creating FFT plans and coul_0D"
+    if (w_grp%master) write (*, *) " finished creating FFT plans and coul_0D"
   end if
   !
   ! Calculate LDA kernel
@@ -267,7 +270,7 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
     call fxc_get(xc_lda, nspin, w_grp%mydim, kflag, fxc)
     call xc_end(xc_lda)
     !
-    write (6, *) "inode: ", w_grp%inode, ": finished initializing xc functional"
+    write (*, *) "inode: ", w_grp%inode, ": finished initializing xc functional"
   end if
   !
   ! create dataspace and dataset here
@@ -277,12 +280,12 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
   data_dims(2) = n_intp_r
   ! create dataspace
 #ifdef DEBUG
-  if (w_grp%master) write (6, *) "Create dataspace: dspace_zeta"
+  if (w_grp%master) write (*, *) "Create dataspace: dspace_zeta"
 #endif
   call h5screate_simple_f(rank, data_dims, dspace_zeta, h5err)
   ! create dataspace for vc_zeta
 #ifdef DEBUG
-  if (w_grp%master) write (6, *) "Create dataspace: dspace_vczeta"
+  if (w_grp%master) write (*, *) "Create dataspace: dspace_vczeta"
 #endif
   call h5screate_simple_f(rank, data_dims, dspace_vczeta, h5err)
   ! create hdf5 datasets for zeta and V_c*zeta for each spin and
@@ -369,17 +372,23 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
   end if
 
   ! assume kpt%wfn(isp,ikp)%nmem is the same for all isp and ikp
+  if (w_grp%master) then
+    write (*, "(A)") " Allocate matrices"
+    write (*, "(A, F0.2, A)") "  tmp_Psi_intp_loc: ", 1.d0 * ldn_intp_r * kpt%wfn(1, 1)%nmem / 2**17, " MB"
+    write (*, "(A, F0.2, A)") "  tmp_Mmtrx_loc: ", 1.d0 * ldn_intp_r * n_intp_r / 2**17, " MB"
+  end if
   allocate (tmp_Psi_intp_loc(ldn_intp_r, kpt%wfn(1, 1)%nmem))
   allocate (tmp_Mmtrx_loc(ldn_intp_r, n_intp_r))
   tmp_Mmtrx_loc = 0.d0
+
+  !
+  ! compute zeta functions (interpolation vectors)
+  !
   do ikp = 1, kpt%nk
-#ifdef DEBUG
-    if (w_grp%master) write (6, *) " ikp = ", ikp
-#endif
-    !
-    ! compute zeta functions (interpolation vectors)
-    !
     do isp = 1, nspin
+#ifdef DEBUG
+      if (w_grp%master) write (*, "(4(A, I0))") "  ikp: ", ikp, "/", kpt%nk, "  isp: ", isp, "/", nspin
+#endif
       ! construct isdf%Psi_intp_loc
       call stopwatch(peinf%master, "Start distribute_intp_pts")
       call distribute_intp_pts(kpt%wfn(isp, ikp), isdf_in, gvec%syms%ntrans, isp, ikp)
@@ -394,6 +403,16 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
       !  call MPI_BARRIER(w_grp%comm, info)
       !enddo
 
+      if (w_grp%master) then
+        write (*, "(A)") " Allocate matrices"
+        write (*, "(A, F0.2, A)") "  P: ", 1.d0 * n_intp_r * w_grp%mydim * gvec%syms%ntrans / 2**17, " MB"
+        write (*, "(A, F0.2, A)") "  Q: ", 1.d0 * n_intp_r * w_grp%mydim * gvec%syms%ntrans / 2**17, " MB"
+        write (*, "(A, F0.2, A)") "  P_intp: ", 1.d0 * n_intp_r * myn_intp_r * gvec%syms%ntrans / 2**17, " MB"
+        write (*, "(A, F0.2, A)") "  Q_intp: ", 1.d0 * n_intp_r * myn_intp_r * gvec%syms%ntrans / 2**17, " MB"
+        write (*, "(A, F0.2, A)") "  Amtrx: ", 1.d0 * n_intp_r * myn_intp_r * gvec%syms%ntrans / 2**17, " MB"
+        write (*, "(A, F0.2, A)") "  Bmtrx: ", 1.d0 * n_intp_r * w_grp%mydim / 2**17, " MB"
+        write (*, "(A, F0.2, A)") "  Xmtrx: ", 1.d0 * w_grp%mydim * n_intp_r / 2**17, " MB"
+      end if
       allocate (P(n_intp_r, w_grp%mydim, gvec%syms%ntrans))
       allocate (Q(n_intp_r, w_grp%mydim, gvec%syms%ntrans))
       allocate (P_intp(n_intp_r, myn_intp_r, gvec%syms%ntrans))
@@ -491,7 +510,7 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
           end do  ! ic
           call timacc(78, 2, tsec)
 
-        end do
+        end do ! ipe
 
 #ifdef DEBUG
         !if ( .true. .and. w_grp%master ) then
@@ -512,6 +531,10 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
 
       ! Calculate zeta(r,n_intp_r,jrp) for all representations
       do jrp = 1, gvec%syms%ntrans/r_grp%num
+        if (w_grp%master) then
+          write (*, "(A)") repeat('-', 65)
+          write (*, "(2(A, I0))") "  jrp: ", jrp, "/", gvec%syms%ntrans/r_grp%num
+        end if
         irp = r_grp%g_rep(jrp)
         Bmtrx = zero
         Xmtrx = zero
@@ -546,7 +569,7 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
           !  Xmtrx(n_intp_r, w_grp%mydim)         intermediate variable, store zeta^T
           ! ---------------------
           !
-          ! calculate A = P_intp.Q_intp (Note: This is an element-wise multipliation)
+          ! calculate A = P_intp * Q_intp (Note: This is an element-wise multipliation)
           !
           Amtrx(1:n_intp_r, 1:myn_intp_r, irp) = Amtrx(1:n_intp_r, 1:myn_intp_r, irp) + &
                                                  P_intp(1:n_intp_r, 1:myn_intp_r, lrp1)* &
@@ -583,7 +606,6 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
         !  n_intp_r, einfo)
         ! Use Scalapack to solve the linear system
         call MPI_BARRIER(w_grp%comm, errinfo)
-        if (w_grp%master) print *, " jrp ", jrp
         if (use_old_code) then
           ndim_ipiv = numroc(n_intp_r, w_grp%ldn_intp_r, myrow_1d, desca_1d(RSRC_), nprow_1d) + desca_1d(MB_)
           print *, "ndim_ipiv ", ndim_ipiv
@@ -962,19 +984,18 @@ subroutine distribute_intp_pts(wfn, isdf_in, ntrans, isp, ikp)
   ioff2(w_grp%inode) = w_grp%offset + w_grp%mydim
   call MPI_ALLREDUCE(MPI_IN_PLACE, ioff1, w_grp%npes, MPI_INTEGER, MPI_SUM, w_grp%comm, mpi_err)
   call MPI_ALLREDUCE(MPI_IN_PLACE, ioff2, w_grp%npes, MPI_INTEGER, MPI_SUM, w_grp%comm, mpi_err)
-  !if (w_grp%master) then
-  !  print *, " ioff1 ", ioff1(0:w_grp%npes-1)
-  !  print *, " ioff2 ", ioff2(0:w_grp%npes-1)
-  !endif
+  ! if (w_grp%master) then
+  !   print *, " ioff1 ", ioff1(0:w_grp%npes-1)
+  !   print *, " ioff2 ", ioff2(0:w_grp%npes-1)
+  ! endif
   inode_dest = 0 ! Start from the first proc
-  !print *, "w_grp%ldn_intp_r", w_grp%ldn_intp_r
-  !print *
+  ! print *, "w_grp%ldn_intp_r", w_grp%ldn_intp_r
+  ! print *
   do ipt = 1, isdf_in%n_intp_r
-    !if (ipt.eq.1)  print *, " w_grp%n_intp_end(inode_dest) ", &
-    !  w_grp%n_intp_end(inode_dest)
+    ! if (ipt == 1)  print *, " w_grp%n_intp_end(inode_dest) ", w_grp%n_intp_end(inode_dest)
     if (ipt > w_grp%n_intp_end(inode_dest)) then
       inode_dest = inode_dest + 1 ! update the destination proc
-    end if !
+    end if
     ! determine whether this interpolation point
     ! is located in the current process
     iptf = isdf_in%intp_r(ipt)

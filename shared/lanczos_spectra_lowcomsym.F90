@@ -4,7 +4,6 @@
 !
 !  <vec| 1/(z-H) |vec>
 !
-! ncv_loc = isdf_in%ncv_sym(nmrep)
 subroutine lanczos_spectra_isdf_lowcomsym(v0, v0_norm, ncv_loc, zz, nz, niter, isdf_in, sqrtR, polynomial, npoly, &
                                           spectra, tamm_d, blksz, nmrep, gvec &
 #ifdef DCU

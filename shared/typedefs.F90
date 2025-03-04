@@ -68,7 +68,7 @@ module typedefs
     ! PsiC_intp_bl
     integer, pointer :: lvrep(:), lvrep_bound(:, :), &
                         lcrep(:), lcrep_bound(:, :)
-    integer, pointer :: ncv_sym(:), myncv_sym(:), mync_sym(:), mynv_sym(:)
+    integer, pointer :: myncv_sym(:), mync_sym(:), mynv_sym(:)
     integer :: maxmync_sym, maxmynv_sym, maxmyncv_sym
   end type ISDF
   !
