@@ -1,24 +1,22 @@
 #include "../shared/mycomplex.h"
 
 subroutine Zredistribute_Psi_loc(isdf_in, nval, ncond)
-  !
+
   use typedefs
   use mpi_module
   implicit none
 #ifdef MPI
   include 'mpif.h'
 #endif
-  !
+
   integer, intent(in) :: nval, ncond
   type(ISDF), intent(inout) :: isdf_in
-  integer :: ldn_intp_r, mpistatus(MPI_STATUS_SIZE), &
-             xvgrp, xcgrp, myvgrp, mycgrp, mynv, mync, ii, &
-             ldv, ldc, myvstart, myvend, mycstart, mycend, &
-             xvgrp_c, igrp, icgrp, &
-             ivgrp, ipe, send_node, recv_node, tag, mpi_err, &
+  integer :: ldn_intp_r, mpistatus(MPI_STATUS_SIZE), xvgrp, xcgrp, myvgrp, mycgrp, mynv, mync, ii, ldv, ldc, &
+             myvstart, myvend, mycstart, mycend, xvgrp_c, igrp, icgrp, ivgrp, ipe, send_node, recv_node, tag, mpi_err, &
              incr, res, i1, i2, j1, j2
   SCALAR, allocatable :: tmparray(:)
-  !
+  integer, allocatable :: vstart(:), cstart(:), vend(:), cend(:)
+
   ldn_intp_r = w_grp%ldn_intp_r
   xvgrp = int(sqrt(real(w_grp%npes*nval/ncond) + 1e-6))
   if (xvgrp <= 1) then
@@ -42,8 +40,7 @@ subroutine Zredistribute_Psi_loc(isdf_in, nval, ncond)
       call die(" xcgrp * xvgrp \= w_grp%npes ")
     end if
   end if
-  if (peinf%master) print *, " xcgrp = ", xcgrp, " xvgrp = ", xvgrp, &
-    " w_grp%npes ", w_grp%npes
+  if (peinf%master) print *, " xcgrp = ", xcgrp, " xvgrp = ", xvgrp, " w_grp%npes ", w_grp%npes
   ! An example of distributing 24 process to 4 vgrp and 6 cgrp
   !___|__0___1___2___3____ xvgrp = 4
   ! 0 |  0   1   2   3   |
@@ -62,10 +59,10 @@ subroutine Zredistribute_Psi_loc(isdf_in, nval, ncond)
   !    print *, " w_grp%inode ", w_grp%inode, myvgrp, mycgrp
   !  endif
   !enddo
-  allocate (isdf_in%vstart(0:(xvgrp - 1)))
-  allocate (isdf_in%vend(0:(xvgrp - 1)))
-  allocate (isdf_in%cstart(0:(xcgrp - 1)))
-  allocate (isdf_in%cend(0:(xcgrp - 1)))
+  allocate (vstart(0:(xvgrp - 1)))
+  allocate (vend(0:(xvgrp - 1)))
+  allocate (cstart(0:(xcgrp - 1)))
+  allocate (cend(0:(xcgrp - 1)))
   !
   ! distribute nval to xvgrp
   incr = nval/xvgrp
@@ -77,16 +74,16 @@ subroutine Zredistribute_Psi_loc(isdf_in, nval, ncond)
   end if
   do igrp = 0, xvgrp - 1
     if (igrp < res) then
-      isdf_in%vstart(igrp) = igrp*(incr + 1) + 1
-      isdf_in%vend(igrp) = igrp*(incr + 1) + incr + 1
+      vstart(igrp) = igrp*(incr + 1) + 1
+      vend(igrp) = igrp*(incr + 1) + incr + 1
     else
-      isdf_in%vstart(igrp) = res*(incr + 1) + (igrp - res)*incr + 1
-      isdf_in%vend(igrp) = res*(incr + 1) + (igrp - res)*incr + incr
+      vstart(igrp) = res*(incr + 1) + (igrp - res)*incr + 1
+      vend(igrp) = res*(incr + 1) + (igrp - res)*incr + incr
     end if
   end do
-  myvstart = isdf_in%vstart(myvgrp)
-  myvend = isdf_in%vend(myvgrp)
-  mynv = isdf_in%vend(myvgrp) - isdf_in%vstart(myvgrp) + 1
+  myvstart = vstart(myvgrp)
+  myvend = vend(myvgrp)
+  mynv = vend(myvgrp) - vstart(myvgrp) + 1
   ! distribute ncond to xcgrp
   incr = ncond/xcgrp
   res = mod(ncond, xcgrp)
@@ -97,16 +94,16 @@ subroutine Zredistribute_Psi_loc(isdf_in, nval, ncond)
   end if
   do igrp = 0, xcgrp - 1
     if (igrp < res) then
-      isdf_in%cstart(igrp) = igrp*(incr + 1) + 1
-      isdf_in%cend(igrp) = igrp*(incr + 1) + incr + 1
+      cstart(igrp) = igrp*(incr + 1) + 1
+      cend(igrp) = igrp*(incr + 1) + incr + 1
     else
-      isdf_in%cstart(igrp) = res*(incr + 1) + (igrp - res)*incr + 1
-      isdf_in%cend(igrp) = res*(incr + 1) + (igrp - res)*incr + incr
+      cstart(igrp) = res*(incr + 1) + (igrp - res)*incr + 1
+      cend(igrp) = res*(incr + 1) + (igrp - res)*incr + incr
     end if
   end do
-  mycstart = isdf_in%cstart(mycgrp)
-  mycend = isdf_in%cend(mycgrp)
-  mync = isdf_in%cend(mycgrp) - isdf_in%cstart(mycgrp) + 1
+  mycstart = cstart(mycgrp)
+  mycend = cend(mycgrp)
+  mync = cend(mycgrp) - cstart(mycgrp) + 1
   !do ii = 0, 30
   !  if (ii .gt. w_grp%npes-1) exit
   !  if (w_grp%inode .eq. ii) then
@@ -127,8 +124,8 @@ subroutine Zredistribute_Psi_loc(isdf_in, nval, ncond)
     j2 = w_grp%n_intp_end(ipe)
     !if (w_grp%master) print *, " ipe ", ipe, " j1 ", j1, " j2 ", j2
     do ivgrp = 0, xvgrp - 1
-      i1 = isdf_in%vstart(ivgrp)
-      i2 = isdf_in%vend(ivgrp)
+      i1 = vstart(ivgrp)
+      i2 = vend(ivgrp)
       !if (w_grp%master) print *, " i1 ", i1, " i2 ", i2
       do icgrp = 0, xcgrp - 1
         recv_node = icgrp*xvgrp + ivgrp
@@ -165,21 +162,21 @@ subroutine Zredistribute_Psi_loc(isdf_in, nval, ncond)
     end do ! ivgrp
   end do ! ipe
   deallocate (tmparray)
-!  if (w_grp%master) print *, " finish redistribut PsiV_intp_bl "
-!  do ipe = 0, w_grp%npes-1
-!  if (w_grp%inode .eq. ipe) then
-!    print *, "PsiV_intp_bl ", ipe
-!    call printmatrix(isdf_in%PsiV_intp_bl(1,1,1,1), isdf_in%n_intp_r, mynv, 6)
-!  endif
-!  call mpi_barrier(w_grp%comm, mpi_err)
-!  enddo
-!  do ipe = 0, w_grp%npes-1
-!  if (w_grp%inode .eq. ipe) then
-!    print *, "Psi_intp_loc", ipe
-!    call printmatrix(isdf_in%Psi_intp_loc(1,1,1,1), w_grp%myn_intp_r, nval, 6)
-!  endif
-!  call mpi_barrier(w_grp%comm, mpi_err)
-!  enddo
+  ! if (w_grp%master) print *, " finish redistribut PsiV_intp_bl "
+  ! do ipe = 0, w_grp%npes-1
+  ! if (w_grp%inode .eq. ipe) then
+  !   print *, "PsiV_intp_bl ", ipe
+  !   call printmatrix(isdf_in%PsiV_intp_bl(1,1,1,1), isdf_in%n_intp_r, mynv, 6)
+  ! endif
+  ! call mpi_barrier(w_grp%comm, mpi_err)
+  ! enddo
+  ! do ipe = 0, w_grp%npes-1
+  ! if (w_grp%inode .eq. ipe) then
+  !   print *, "Psi_intp_loc", ipe
+  !   call printmatrix(isdf_in%Psi_intp_loc(1,1,1,1), w_grp%myn_intp_r, nval, 6)
+  ! endif
+  ! call mpi_barrier(w_grp%comm, mpi_err)
+  ! enddo
 
   allocate (tmparray(ldn_intp_r*ldc))
   do ipe = 0, w_grp%npes - 1
@@ -188,8 +185,8 @@ subroutine Zredistribute_Psi_loc(isdf_in, nval, ncond)
     j2 = w_grp%n_intp_end(ipe)
     !if (w_grp%master) print *, " ipe ", ipe, " j1 ", j1, " j2 ", j2
     do icgrp = 0, xcgrp - 1
-      i1 = isdf_in%cstart(icgrp)
-      i2 = isdf_in%cend(icgrp)
+      i1 = cstart(icgrp)
+      i2 = cend(icgrp)
       !if (w_grp%master) print *, " i1 ", i1, " i2 ", i2
       do ivgrp = 0, xvgrp - 1
         recv_node = icgrp*xvgrp + ivgrp
@@ -198,15 +195,12 @@ subroutine Zredistribute_Psi_loc(isdf_in, nval, ncond)
         if (send_node /= recv_node) then
           !print *, " inode ", w_grp%inode, " comm "
           if (w_grp%inode == send_node) then
-            call mpi_send(isdf_in%Psi_intp_loc(1, nval + i1, 1, 1), &
-                          (j2 - j1 + 1)*(i2 - i1 + 1), &
-                          MPI_DOUBLE_SCALAR, recv_node, tag, &
-                          w_grp%comm, mpi_err)
+            call mpi_send(isdf_in%Psi_intp_loc(1, nval + i1, 1, 1), (j2 - j1 + 1)*(i2 - i1 + 1), MPI_DOUBLE_SCALAR, &
+                          recv_node, tag, w_grp%comm, mpi_err)
           end if
           if (w_grp%inode == recv_node) then
-            call mpi_recv(tmparray, (j2 - j1 + 1)*(i2 - i1 + 1), &
-                          MPI_DOUBLE_SCALAR, send_node, tag, &
-                          w_grp%comm, mpistatus, mpi_err)
+            call mpi_recv(tmparray, (j2 - j1 + 1)*(i2 - i1 + 1), MPI_DOUBLE_SCALAR, send_node, tag, w_grp%comm, &
+                          mpistatus, mpi_err)
             isdf_in%PsiC_intp_bl(j1:j2, 1:(i2 - i1 + 1), 1, 1) = &
               reshape(tmparray(1:(j2 - j1 + 1)*(i2 - i1 + 1)), (/j2 - j1 + 1, i2 - i1 + 1/))
           end if
@@ -226,6 +220,10 @@ subroutine Zredistribute_Psi_loc(isdf_in, nval, ncond)
     end do ! ivgrp
   end do ! ipe
   deallocate (tmparray)
+  deallocate (vstart)
+  deallocate (cstart)
+  deallocate (vend)
+  deallocate (cend)
   !if (w_grp%master) print *, " finish redistribut PsiC_intp_bl "
   !do ipe = 0, w_grp%npes-1
   !if (w_grp%inode .eq. ipe) then

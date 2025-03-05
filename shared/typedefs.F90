@@ -56,8 +56,7 @@ module typedefs
     real(dp), pointer :: PsiC_intp_bl(:, :, :, :), PsiV_intp_bl(:, :, :, :)
     integer :: xvgrp, xcgrp, myvgrp, mycgrp, mynv, mync, &
                ldv, ldc, myvstart, myvend, mycstart, mycend
-    integer, pointer :: vstart(:), cstart(:), &
-                        vend(:), cend(:)
+
     ! We assume nkp = nspin = 1 for now, kp and spin indices
     ! are needed later
     !
@@ -69,7 +68,7 @@ module typedefs
     ! PsiC_intp_bl
     integer, pointer :: lvrep(:), lvrep_bound(:, :), &
                         lcrep(:), lcrep_bound(:, :)
-    integer, pointer :: ncv_sym(:), myncv_sym(:), mync_sym(:), mynv_sym(:)
+    integer, pointer :: myncv_sym(:), mync_sym(:), mynv_sym(:)
     integer :: maxmync_sym, maxmynv_sym, maxmyncv_sym
   end type ISDF
   !

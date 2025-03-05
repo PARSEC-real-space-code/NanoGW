@@ -26,8 +26,7 @@ subroutine stopwatch(verbose, label)
 
   if (verbose) then
     call cpu_time(this_time)
-    write (6, '(a,f11.2,a,a)') ' ELAPSED TIME = ', &
-      this_time - start_time, ' s. ', label(1:len_trim(label))
+    write (6, "(A, F0.3, A, A)") " [ ", this_time - start_time, " s ] ", label(1:len_trim(label))
     call flush (6)
   end if
 
