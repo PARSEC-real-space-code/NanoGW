@@ -10,9 +10,8 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine input_g(pol_in, qpt, tdldacut, nbuff, lcache, wgr_npes, &
-                   nolda, tamm_d, rgr_num, dft_code, doisdf, n_intp, intp_type, isdf_type, &
-                   lessmemory, fastselect, eigsolver, linear_algebra, nbl, verbose)
+subroutine input_g(pol_in, qpt, tdldacut, nbuff, lcache, wgr_npes, nolda, tamm_d, rgr_num, dft_code, doisdf, n_intp, &
+                   intp_type, isdf_type, lessmemory, fastselect, eigsolver, linear_algebra, nbl, verbose)
 
   use typedefs
   use esdf
@@ -93,6 +92,8 @@ subroutine input_g(pol_in, qpt, tdldacut, nbuff, lcache, wgr_npes, &
   intp_type = esdf_integer('intp_type', 1)
 
   isdf_type = esdf_integer('isdf_type', 1)
+
+  nbl = esdf_integer('nbl', 32)
 
   ! new eigensolver
   strflag = esdf_reduce(esdf_string('eigsolver', 'scalapack_new'))

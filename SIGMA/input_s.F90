@@ -9,7 +9,7 @@
 !-------------------------------------------------------------------
 subroutine input_s(sig, kpt_sig, snorm, writeqp, readvxc, readocc, cohsex, &
                    nooffd, hqp_sym, n_it, chkpt, static_type, sig_en, &
-                   max_conv, xbuff, ecuts, qpmix, sig_cut, nbl, lanczos_npoly, &
+                   max_conv, xbuff, ecuts, qpmix, sig_cut, lanczos_npoly, &
                    lanczos_niter, jnblock, verbose)
 
   use typedefs
@@ -39,8 +39,8 @@ subroutine input_s(sig, kpt_sig, snorm, writeqp, readvxc, readocc, cohsex, &
     static_type, &! type of static correction
     lanczos_npoly, &
     lanczos_niter, &
-    jnblock, &
-    nbl
+    jnblock
+
   real(dp), intent(out) :: &
     max_conv, &   ! tolerance in convergence test, during self-consistency
     xbuff, &      ! size of buffer arrays in wpol0
@@ -87,7 +87,6 @@ subroutine input_s(sig, kpt_sig, snorm, writeqp, readvxc, readocc, cohsex, &
 
   n_it = esdf_integer('number_iterations', 0)
 
-  nbl = esdf_integer('nbl', 32)
   lanczos_npoly = esdf_integer('lanczos_npoly', 12)
   lanczos_niter = esdf_integer('lanczos_niter', 9)
   jnblock = esdf_integer('jnblock', 400)

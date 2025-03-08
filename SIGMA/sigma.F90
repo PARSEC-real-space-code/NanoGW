@@ -90,12 +90,10 @@ program sigma
 
   character(len=40), allocatable :: routnam(:)
 
-  logical :: nolda, tamm_d, snorm, writeqp, readvxc, readocc, cohsex, nooffd, &
-             init_gr, hqp_sym, lstop
-  integer :: ii, irp, iq, ik, nmap, nspin, nbuff, lcache, isp, it_scf, &
-             chkpt_in, n_it, nr_buff, static_type, sig_en, nkpt, dft_code
-  real(dp) :: tsec(2), mem1, mem2, mem3, xsum, xmax, rtmp, tdldacut, max_sig, &
-              max_conv, xbuff, ecuts, qpmix, sig_cut
+  logical :: nolda, tamm_d, snorm, writeqp, readvxc, readocc, cohsex, nooffd, init_gr, hqp_sym, lstop
+  integer :: ii, irp, iq, ik, nmap, nspin, nbuff, lcache, isp, it_scf, chkpt_in, n_it, nr_buff, static_type, sig_en, &
+             nkpt, dft_code
+  real(dp) :: tsec(2), mem1, mem2, mem3, xsum, xmax, rtmp, tdldacut, max_sig, max_conv, xbuff, ecuts, qpmix, sig_cut
   logical, allocatable :: wmap(:)
 
   ! W Gao ISDF method
@@ -106,11 +104,9 @@ program sigma
   ! ncv(1) correspond to spin up, and ncv(2) correspond to spin down.
   ! Assumption: for different kpts, the number of states with the same
   !  spin are the same
-  integer :: n_intp, n_intp_r, maxnc, maxnv, ic, iv, ij, maxncv, ihomo, ikp, &
-             intp_type, isdf_type, kflag, maxicc, maxivv, maxsig, ipt, virp, cirp, &
-             vcirp, vvirp, ccirp, ivv, ivt, ict, icc, jrp, jj, mv, mc, n_dummy, &
-             igrid, jgrid, incr, ipe, res, pdgesv_nbl2d, lanczos_npoly, &
-             lanczos_niter, kk, jnblock
+  integer :: n_intp, n_intp_r, maxnc, maxnv, ic, iv, ij, maxncv, ihomo, ikp, intp_type, isdf_type, kflag, &
+             maxicc, maxivv, maxsig, ipt, virp, cirp, vcirp, vvirp, ccirp, ivv, ivt, ict, icc, jrp, jj, mv, mc, &
+             n_dummy, igrid, jgrid, incr, ipe, res, kk
   ! cvt.f90
   integer, allocatable :: intp(:), pairmap(:, :, :, :, :), invpairmap(:, :, :, :, :), &
                           nc(:, :, :), nv(:, :, :), ncv(:, :, :), ivlist(:, :, :, :), iclist(:, :, :, :), &
@@ -155,30 +151,23 @@ program sigma
   !-------------------------------------------------------------------
   ! Read input parameters from nanogw.in.
   !
-  call input_g(pol_in, qpt, tdldacut, nbuff, lcache, w_grp%npes, nolda, &
-               tamm_d, r_grp%num, dft_code, doisdf, n_intp, intp_type, isdf_type, &
-               isdf_in%lessmemory, isdf_in%fastselect, opt%eigsolver, &
-               opt%linear_algebra, opt%pdgesv_nbl2d, .false.)
-  if (peinf%master) print *, " input_g done"
-  if (opt%linear_algebra == 2 .or. opt%eigsolver == 2) then
+  call input_g(pol_in, qpt, tdldacut, nbuff, lcache, w_grp%npes, nolda, tamm_d, r_grp%num, dft_code, doisdf, n_intp, &
+               intp_type, isdf_type, isdf_in%lessmemory, isdf_in%fastselect, opt%eigsolver, opt%linear_algebra, &
+               opt%pdgesv_nbl2d, .false.)
+  if (peinf%master) write (*, *) " input_g done"
+
 #ifndef HIPMAGMA
-    print *, "Not compiled with '-DHIPMAGMA', use cpu for eigsolver and ", &
-      "linear algebra !!"
+  if (opt%linear_algebra == 2 .or. opt%eigsolver == 2) then
+    write (*, *) "Not compiled with '-DHIPMAGMA', use cpu for eigsolver and linear algebra !!"
     opt%linear_algebra = 1
     opt%eigsolver = 1
-#endif
   end if
+#endif
 
-  call MPI_BARRIER(peinf%comm, info)
-  call input_s(sig_in, kpt_sig, snorm, writeqp, readvxc, readocc, cohsex, &
-               nooffd, hqp_sym, n_it, chkpt_in, static_type, sig_en, max_conv, xbuff, &
-               ecuts, qpmix, sig_cut, pdgesv_nbl2d, lanczos_npoly, lanczos_niter, &
-               jnblock, .false.)
-  call MPI_BARRIER(peinf%comm, info)
-  opt%pdgesv_nbl2d = pdgesv_nbl2d ! Defaul is 32, see input_s.F90
-  opt%lanczos_npoly = lanczos_npoly
-  opt%lanczos_niter = lanczos_niter
-  opt%jnblock = jnblock
+  call input_s(sig_in, kpt_sig, snorm, writeqp, readvxc, readocc, cohsex, nooffd, hqp_sym, n_it, chkpt_in, &
+               static_type, sig_en, max_conv, xbuff, ecuts, qpmix, sig_cut, opt%lanczos_npoly, &
+               opt%lanczos_niter, opt%jnblock, .false.)
+  if (peinf%master) write (*, *) " input_s done"
 
   !-------------------------------------------------------------------
   ! Determine the set of wavefunctions to read: if n-th wavefunction is
@@ -229,8 +218,7 @@ program sigma
     end if
     !write(6,*) " 2 nmap = ", nmap
     !write(6,*) pol_in(1)%ncond,pol_in(1)%nval,pol_in(2)%ncond,pol_in(2)%nval
-    if (min(pol_in(1)%ncond, pol_in(1)%nval, pol_in(2)%ncond, pol_in(2)%nval, &
-            sig_in%nmax_c, sig_in%nmap) < 0) then
+    if (min(pol_in(1)%ncond, pol_in(1)%nval, pol_in(2)%ncond, pol_in(2)%nval, sig_in%nmax_c, sig_in%nmap) < 0) then
       deallocate (wmap)
       allocate (wmap(1))
       nmap = 0
@@ -863,14 +851,12 @@ program sigma
     !
     ! Estimate memory usage.
     !
-    mem1 = sum(kpt%wfn(:, :)%nmem)*two/real(nspin, dp)* &
-           real(nspin*gvec%nr, dp)/two/131072.d0/real(w_grp%npes, dp)
-    if (kpt%lcplx) mem1 = mem1*two
+    mem1 = sum(kpt%wfn(:, :)%nmem) * real(gvec%nr, dp) / 131072.d0 / real(w_grp%npes, dp)
+    if (kpt%lcplx) mem1 = mem1 * two
     write (6, '(a,f10.2,a)') ' Memory needed to store wavefunctions : ', mem1, ' MB/proc.'
-    mem1 = real(5*gvec%nr, dp)/131072.d0
-    if (kpt%lcplx) mem1 = mem1*two
-    write (6, '(a,f10.2,a)') ' Memory needed to calculate kernel matrix elements : ', &
-      mem1, ' MB/proc.'
+    mem1 = real(5*gvec%nr, dp) / 131072.d0
+    if (kpt%lcplx) mem1 = mem1 * two
+    write (6, '(a,f10.2,a)') ' Memory needed to calculate kernel matrix elements : ', mem1, ' MB/proc.'
     if (sig_in%xc == XC_GW) then
       ! For diagonalization, we store 4 matrices: hamiltonian/eigenvectors,
       ! temporary array (in eigensolver), and kernel.
@@ -884,8 +870,7 @@ program sigma
       end do
       mem1 = xmax/1024.d0*3.d0/128.d0/r_grp%npes
       if (r_grp%npes > 1) mem1 = mem1*four/three
-      ! For self-energy calculation, we store eigenvectors, 2 potential
-      ! matrices, and 2 kernel matrices.
+      ! For self-energy calculation, we store eigenvectors, 2 potential matrices, and 2 kernel matrices.
       xmax = 0
       do iq = 1, qpt%nk
         do irp = 1, gvec%syms%ntrans
