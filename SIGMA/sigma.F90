@@ -398,8 +398,7 @@ program sigma
       jgrid = (igrid - 1)/gvec%syms%ntrans + 1
       rho_at_intp_r(ipt) = kpt%rho(jgrid, 1)
 #ifdef DEBUG
-      if (peinf%master) write (rho_intp_dbg, '(i7,i7,f30.23)') ipt, &
-        intp_r_tmp(ipt), kpt%rho(jgrid, 1)
+      if (peinf%master) write (rho_intp_dbg, '(i7,i7,f30.23)') ipt, intp_r_tmp(ipt), kpt%rho(jgrid, 1)
 #endif
     end do
     call quicksort(n_intp_r, rho_at_intp_r, sort_idx)
@@ -407,25 +406,21 @@ program sigma
     ! Note: if there are a few points having the same rho, then
     !       we pick up the last point of these duplicated points.
 #ifdef DEBUG
-    if (peinf%master) write (rho_intp_dbg, *) &
-      "# rho at interpolation points (sorted) "
+    if (peinf%master) write (rho_intp_dbg, *) "# rho at interpolation points (sorted) "
 #endif
     do ipt = 1, n_intp_r - 1
-      if (abs(rho_at_intp_r(sort_idx(ipt)) - rho_at_intp_r(sort_idx(ipt + 1))) &
-          < 1.0e-14) then
+      if (abs(rho_at_intp_r(sort_idx(ipt)) - rho_at_intp_r(sort_idx(ipt + 1))) < 1.0e-14) then
         not_duplicate(sort_idx(ipt)) = .false.
 #ifdef DEBUG
         if (peinf%master) write (rho_intp_dbg, '(i7,i7,f30.23,a)') &
-          sort_idx(ipt), intp_r_tmp(sort_idx(ipt)), &
-          rho_at_intp_r(sort_idx(ipt)), 'F'
+          sort_idx(ipt), intp_r_tmp(sort_idx(ipt)), rho_at_intp_r(sort_idx(ipt)), 'F'
 #endif
       else
         not_duplicate(sort_idx(ipt)) = .true.
         n_dummy = n_dummy + 1
 #ifdef DEBUG
         if (peinf%master) write (rho_intp_dbg, '(i7,i7,f30.23,a)') &
-          sort_idx(ipt), intp_r_tmp(sort_idx(ipt)), &
-          rho_at_intp_r(sort_idx(ipt)), 'T'
+          sort_idx(ipt), intp_r_tmp(sort_idx(ipt)), rho_at_intp_r(sort_idx(ipt)), 'T'
 #endif
       end if
     end do
@@ -434,8 +429,7 @@ program sigma
     n_dummy = n_dummy + 1
 #ifdef DEBUG
     if (peinf%master) write (rho_intp_dbg, '(i7,i7,f30.23,a)') &
-      sort_idx(n_intp_r), intp_r_tmp(sort_idx(n_intp_r)), &
-      rho_at_intp_r(sort_idx(n_intp_r)), 'T'
+      sort_idx(n_intp_r), intp_r_tmp(sort_idx(n_intp_r)), rho_at_intp_r(sort_idx(n_intp_r)), 'T'
 #endif
     if (peinf%master) then
       print *, "Original n_intp_r =", n_intp_r
@@ -512,9 +506,8 @@ program sigma
         end do
         ncv(isp, ikp, 1:gvec%syms%ntrans) = icv(1:gvec%syms%ntrans)
 #ifdef DEBUG
-        !if(peinf%master) write(outdbg, *) " ncv ", &
+        !if(peinf%master) write(outdbg, *) " ncv ", (ncv(isp,ikp,ii), ii =1,gvec%syms%ntrans)
 #endif
-        !  (ncv(isp,ikp,ii), ii =1,gvec%syms%ntrans)
         if (mv > maxivv) maxivv = mv
         if (mc > maxicc) maxicc = mc
       end do ! isp
@@ -672,8 +665,7 @@ program sigma
       do isp = 1, nspin
         do ikp = 1, kpt%nk
           if (kpt%wfn(isp, ikp)%nmem /= kpt%wfn(1, 1)%nmem) then
-            write (6, '(a,i2,a,i5,a)') " kpt%wfn(", isp, ",", ikp, &
-              ")%nmem is not equal to kpt%wfn(1,1)%nmem."
+            write (6, '(a,i2,a,i5,a)') " kpt%wfn(", isp, ",", ikp, ")%nmem is not equal to kpt%wfn(1,1)%nmem."
             print *, " Can't allocate isdf_in%Psi_intp "
           end if
         end do ! ikp
@@ -968,8 +960,7 @@ program sigma
     w_grp%ncv = k_p(1, 1)%ncol
     if (isdf_in%lessmemory == 4) then
       ! do nothing
-      !w_grp%ncv_start, w_grp%ncv_end, ldncv will be defined in
-      ! calculate_sigma_lanczos_lowcomm_new
+      ! w_grp%ncv_start, w_grp%ncv_end, ldncv will be defined in calculate_sigma_lanczos_lowcomm_new
     else ! isdf_in%lessmemory .ne. 4
       incr = w_grp%ncv/w_grp%npes
       res = mod(w_grp%ncv, w_grp%npes)
@@ -978,7 +969,7 @@ program sigma
       else
         w_grp%ldncv = incr
       end if
-      !print *, "incr ", incr, " res ", res
+      ! print *, "incr ", incr, " res ", res
       do ipe = 0, peinf%npes - 1
         if (ipe < res) then
           w_grp%ncv_start(ipe) = ipe*(incr + 1) + 1
@@ -998,45 +989,38 @@ program sigma
   end if
   do it_scf = 0, n_it
     if (kpt%lcplx) then
-      call zcalculate_sigma(nspin, kpt_sig%nk, n_it, it_scf, nr_buff, &
-                            static_type, sig_en, dft_code, chkpt_in, gvec, kpt, qpt, k_c, k_p, &
-                            pol, sig_in, sig, q_p, nolda, tamm_d, writeqp, snorm, cohsex, &
-                            hqp_sym, lstop, ecuts, qpmix, sig_cut, max_sig, isdf_in, doisdf, opt)
+      call zcalculate_sigma(nspin, kpt_sig%nk, n_it, it_scf, nr_buff, static_type, sig_en, dft_code, chkpt_in, gvec, &
+                            kpt, qpt, k_c, k_p, pol, sig_in, sig, q_p, nolda, tamm_d, writeqp, snorm, cohsex, hqp_sym, &
+                            lstop, ecuts, qpmix, sig_cut, max_sig, isdf_in, doisdf, opt)
     else
       if (sig_in%lanczos) then
         if (isdf_in%lessmemory == 2) then
           if (peinf%master) print *, "call calculate_sigma_lanczos_UltraLowMem"
-          call dcalculate_sigma_lanczos_UltraLowMem(nspin, kpt_sig%nk, &
-                                                    sig_en, dft_code, gvec, kpt, qpt, k_c, k_p, sig_in, sig, q_p, &
-                                                    nolda, tamm_d, writeqp, snorm, cohsex, lstop, ecuts, sig_cut, &
-                                                    max_sig, isdf_in, doisdf, opt)
+          call dcalculate_sigma_lanczos_UltraLowMem(nspin, kpt_sig%nk, sig_en, dft_code, gvec, kpt, qpt, k_c, k_p, &
+                                                    sig_in, sig, q_p, nolda, tamm_d, writeqp, snorm, cohsex, lstop, &
+                                                    ecuts, sig_cut, max_sig, isdf_in, doisdf, opt)
         else if (isdf_in%lessmemory == 3) then
           if (peinf%master) print *, "call calculate_sigma_lanczos_BLOCK "
-          call dcalculate_sigma_lanczos_BLOCK(nspin, kpt_sig%nk, sig_en, &
-                                              dft_code, gvec, kpt, qpt, k_c, k_p, sig_in, sig, q_p, nolda, &
-                                              tamm_d, writeqp, snorm, cohsex, ecuts, sig_cut, max_sig, &
-                                              isdf_in, doisdf, opt)
+          call dcalculate_sigma_lanczos_BLOCK(nspin, kpt_sig%nk, sig_en, dft_code, gvec, kpt, qpt, k_c, k_p, sig_in, &
+                                              sig, q_p, nolda, tamm_d, writeqp, snorm, cohsex, ecuts, sig_cut, &
+                                              max_sig, isdf_in, doisdf, opt)
           lstop = .true.
         else if (isdf_in%lessmemory == 4) then
           if (peinf%master) print *, "call calculate_sigma_lanczos_lowcomsym "
-          call dcalculate_sigma_lanczos_lowcomsym(nspin, kpt_sig%nk, &
-                                                  sig_en, dft_code, gvec, kpt, qpt, k_c, k_p, sig_in, sig, q_p, &
-                                                  nolda, tamm_d, writeqp, snorm, cohsex, ecuts, sig_cut, &
-                                                  max_sig, isdf_in, doisdf, opt)
+          call dcalculate_sigma_lanczos_lowcomsym(nspin, kpt_sig%nk, sig_en, dft_code, gvec, kpt, qpt, k_c, k_p, &
+                                                  sig_in, sig, q_p, nolda, tamm_d, writeqp, snorm, cohsex, ecuts, &
+                                                  sig_cut, max_sig, isdf_in, doisdf, opt)
           lstop = .true.
         else
           if (peinf%master) print *, "call calculate_sigma_lanczos"
-          call dcalculate_sigma_lanczos(nspin, kpt_sig%nk, sig_en, dft_code, &
-                                        gvec, kpt, qpt, k_c, k_p, sig_in, sig, q_p, nolda, tamm_d, &
-                                        writeqp, snorm, cohsex, lstop, ecuts, sig_cut, max_sig, &
+          call dcalculate_sigma_lanczos(nspin, kpt_sig%nk, sig_en, dft_code, gvec, kpt, qpt, k_c, k_p, sig_in, sig, &
+                                        q_p, nolda, tamm_d, writeqp, snorm, cohsex, lstop, ecuts, sig_cut, max_sig, &
                                         isdf_in, doisdf, opt)
         end if
       else
-        call dcalculate_sigma(nspin, kpt_sig%nk, n_it, it_scf, nr_buff, &
-                              static_type, sig_en, dft_code, chkpt_in, gvec, kpt, qpt, k_c, &
-                              k_p, pol, sig_in, sig, q_p, nolda, tamm_d, writeqp, snorm, &
-                              cohsex, hqp_sym, lstop, ecuts, qpmix, sig_cut, max_sig, isdf_in, &
-                              doisdf, opt)
+        call dcalculate_sigma(nspin, kpt_sig%nk, n_it, it_scf, nr_buff, static_type, sig_en, dft_code, chkpt_in, gvec, &
+                              kpt, qpt, k_c, k_p, pol, sig_in, sig, q_p, nolda, tamm_d, writeqp, snorm, cohsex, &
+                              hqp_sym, lstop, ecuts, qpmix, sig_cut, max_sig, isdf_in, doisdf, opt)
       end if
     end if
 

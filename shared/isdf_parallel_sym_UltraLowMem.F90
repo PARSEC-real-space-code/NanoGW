@@ -1038,8 +1038,7 @@ subroutine distribute_intp_pts(wfn, isdf_in, ntrans, isp, ikp)
       jj = iptr - ioff1(inode_source) + 1
       if (inode_source == inode_dest) then
         ! w_grp%inode .eq. inode_dest
-        isdf_in%Psi_intp_loc(ipt - w_grp%n_intp_start(inode_dest) + 1, 1:wfn%nmem, isp, ikp) &
-          = wfn%dwf(jj, 1:wfn%nmem)
+        isdf_in%Psi_intp_loc(ipt - w_grp%n_intp_start(inode_dest) + 1, 1:wfn%nmem, isp, ikp) = wfn%dwf(jj, 1:wfn%nmem)
       else ! source and dest process are different
         dummy(1:wfn%nmem) = wfn%dwf(jj, 1:wfn%nmem)
         tag = ipt

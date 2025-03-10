@@ -744,7 +744,7 @@ subroutine parsec_wfn(gvec, kpt, nmap, nspin, wmap, init_gr)
 #endif
           call dcopy(w_grp%mydim, dwfn(w_grp%offset + 1), 1, kpt%wfn(isp, ikp)%dwf(1, icount), 1)
         end if
-      end do                     !ii (loop on states)
+      end do  ! ii (loop on states)
       if (peinf%master) then
         if (kpt%lcplx) then
           write (6, '(/,a,i10,2(a,i4))') ' Read wavefunctions for ', icount, ' levels, spin ', isp, ' k-point ', ikp
