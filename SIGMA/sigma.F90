@@ -752,94 +752,73 @@ program sigma
   !
   if (kpt%lcplx) tamm_d = .true.
   if (peinf%master) then
-    write (6, '(/,a,/,/,a,/,2a,/)') repeat('-', 65), &
-      ' Self-energy input data: ', ' ', repeat('-', 23)
+    write (*, '(/,A,/,/,A,/,2A,/)') repeat('-', 65), ' Self-energy input data: ', ' ', repeat('-', 23)
     if (sig_in%xc == XC_GW) then
-      write (6, '(2a)') ' Number of transitions per representation ', &
-        'in TDLDA polarizabillity:'
-      write (6, '(8i8)') ((pol(irp, iq)%ntr, irp=1, gvec%syms%ntrans), &
-                          iq=1, qpt%nk)
-      write (6, '(a,i10,/)') ' total = ', sum(pol(:, :)%ntr)
+      write (*, '(A)') ' Number of transitions per representation in TDLDA polarizabillity:'
+      write (*, '(8I8)') ((pol(irp, iq)%ntr, irp=1, gvec%syms%ntrans), iq=1, qpt%nk)
+      write (*, '(A,I10,/)') ' total = ', sum(pol(:, :)%ntr)
       if (tdldacut > zero) then
-        print *, 'Energy cutoff applied in TDLDA polarizability = ', &
-          tdldacut*ryd, ' eV'
+        write (*, *) 'Energy cutoff applied in TDLDA polarizability = ', tdldacut*ryd, ' eV'
       else
-        print *, 'No energy cutoff in TDLDA polarizability'
+        write (*, *) 'No energy cutoff in TDLDA polarizability'
       end if
-      if (nolda) write (6, '(/,a,/)') &
-        ' LDA kernel is not included in polarizability'
+      if (nolda) write (*, '(/,A,/)') ' LDA kernel is not included in polarizability'
       if (tamm_d) then
-        write (6, '(2a,/)') ' Calculating TDLDA ', &
-          'polarizability within the Tamm-Dancoff approximation.'
+        write (*, '(A,/)') ' Calculating TDLDA polarizability within the Tamm-Dancoff approximation.'
       else
-        write (6, '(2a,/)') ' Not using the Tamm-Dancoff ', &
-          'approximation in TDLDA polarizability.'
+        write (*, '(A,/)') ' Not using the Tamm-Dancoff approximation in TDLDA polarizability.'
       end if
       if (snorm) then
-        write (6, '(a,/)') ' Renormalizing Sum rule '
+        write (*, '(A,/)') ' Renormalizing Sum rule '
       else
-        write (6, '(a,/)') ' Sum rule not renormalized'
+        write (*, '(A,/)') ' Sum rule not renormalized'
       end if
-      write (6, '(2a,i5)') ' Order of highest LDA state included ', &
-        'in Green function = ', sig_in%nmax_c
-      write (6, '(2a,i5,/)') ' Order of highest LDA state included ', &
-        'in COHSEX approximation = ', sig_in%nmap
-      write (6, '(2a,g12.4,/)') ' Energy resolution in energy poles, ', &
-        'self-energy (eV) = ', ecuts*ryd
-      write (6, '(2a,f10.4,a,/)') ' Energy range used to calculate ', &
-        'self-energy  = ', sig_in%deltae*ryd, ' eV '
-      write (6, '(2a,i5,/)') ' Number of data points used to calculate ', &
-        'self-energy = ', sig_in%nen
+      write (*, '(A,I5)') ' Order of highest LDA state included in Green function = ', sig_in%nmax_c
+      write (*, '(A,I5,/)') ' Order of highest LDA state included in COHSEX approximation = ', sig_in%nmap
+      write (*, '(A,G12.4,/)') ' Energy resolution in energy poles, self-energy (eV) = ', ecuts*ryd
+      write (*, '(A,F10.4,A,/)') ' Energy range used to calculate self-energy  = ', sig_in%deltae*ryd, ' eV '
+      write (*, '(A,I5,/)') ' Number of data points used to calculate self-energy = ', sig_in%nen
       select case (sig_en)
       case (SIG_LEFT)
-        write (6, '(a,a,/)') ' Calculating < n_1 | Sigma | n_2 > at ', &
-          'the energy of orbital n_1'
+        write (*, '(a,/)') ' Calculating < n_1 | Sigma | n_2 > at the energy of orbital n_1'
       case (SIG_RIGHT)
-        write (6, '(a,a,/)') ' Calculating < n_1 | Sigma | n_2 > at ', &
-          'the energy of orbital n_2'
+        write (*, '(a,/)') ' Calculating < n_1 | Sigma | n_2 > at the energy of orbital n_2'
       case (SIG_AV)
-        write (6, '(a,a,/)') ' Calculating < n_1 | Sigma | n_2 > at ', &
-          'the average of energies E_1, E_2.'
+        write (*, '(a,/)') ' Calculating < n_1 | Sigma | n_2 > at the average of energies E_1, E_2.'
       end select
       if (nr_buff > 0) then
         xsum = sum(kpt%rho(1:gvec%nr, 1:nspin))*two/real(nspin, dp)
         rtmp = sum(kpt%rho(1:nr_buff, 1:nspin))*two/real(nspin, dp)
-        print *, 'Calculating W_pol in static limit with nr = ', nr_buff
-        print *, 'Fraction of electron density within nr = ', &
-          rtmp/xsum*1.d2, ' %'
+        write (*, *) 'Calculating W_pol in static limit with nr = ', nr_buff
+        write (*, *) 'Fraction of electron density within nr = ', rtmp/xsum*1.d2, ' %'
         xsum = real(nr_buff, dp)*real(sum(pol(:, :)%ntr))/65536.d0
-        write (6, '(a,f10.2,a,/)') ' Disk space used = ', xsum, ' MB'
+        write (*, '(A,F10.2,A,/)') ' Disk space used = ', xsum, ' MB'
       end if
-      if (cohsex) write (6, '(a,a,/)') ' Using the ', &
-        'COHSEX (static) approximation in self-energy.'
+      if (cohsex) write (*, '(a,/)') ' Using the COHSEX (static) approximation in self-energy.'
     else
       select case (sig_in%xc)
       case (XC_HF)
-        write (6, '(2a,/)') ' Using the ', &
-          'Hartree-Fock approximation in self-energy.'
+        write (*, '(A,/)') ' Using the Hartree-Fock approximation in self-energy.'
       case (XC_B3LYP)
-        write (6, '(2a,/)') ' Replacing ', &
-          'self-energy with the hybrid B3LYP functional.'
+        write (*, '(A,/)') ' Replacing self-energy with the hybrid B3LYP functional.'
       case (XC_LDA_CA)
-        write (6, '(2a,/)') ' Replacing ', &
-          'self-energy with the LDA CA-PZ functional.'
+        write (*, '(A,/)') ' Replacing self-energy with the LDA CA-PZ functional.'
       case (XC_GGA_PBE)
-        write (6, '(2a,/)') ' Replacing ', &
-          'self-energy with the GGA PBE functional.'
+        write (*, '(A,/)') ' Replacing self-energy with the GGA PBE functional.'
       case (XC_GGA_BLYP)
-        write (6, '(2a,/)') ' Replacing ', &
-          'self-energy with the GGA BLYP functional.'
+        write (*, '(A,/)') ' Replacing self-energy with the GGA BLYP functional.'
       end select
     end if
-    if (qpmix /= one) write (6, '(a,/,a,g12.4,/)') &
-      ' Mixing input and output (QP) wavefunctions.', &
-      ' Mixing parameter = ', qpmix
-    if (sig_cut > zero) write (6, '(a,f20.10,a,/)') &
-      ' Applying cut-off ', sig_cut, ' eV to self-energy.'
-    if (writeqp) write (6, '(a,/)') 'Printing out new wavefunctions.'
-    if (n_it > 0) write (6, '(a,i5,a,/,a,f10.5,a,/)') &
-      ' Performing ', n_it, ' SCGW iterations.', &
-      ' Maximum converged potential = ', max_conv, ' eV'
+    if (abs(qpmix - one) > 1.d-6) then
+      write (*, '(A)') ' Mixing input and output (QP) wavefunctions.'
+      write (*, '(A,G12.4,/)') ' Mixing parameter = ', qpmix
+    end if
+    if (sig_cut > zero) write (*, '(A,F20.10,A,/)') ' Applying cut-off ', sig_cut, ' eV to self-energy.'
+    if (writeqp) write (*, '(A,/)') 'Printing out new wavefunctions.'
+    if (n_it > 0) then
+      write (*, '(A,I5,A)') ' Performing ', n_it, ' SCGW iterations.'
+      write (*, '(A,F10.5,A,/)') ' Maximum converged potential = ', max_conv, ' eV'
+    end if
     !
     ! Estimate memory usage.
     !
