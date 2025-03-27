@@ -12,7 +12,7 @@
 #  subdirectory ./config
 #####################
 
-MACH ?= stampede3
+MACH ?= ubuntu_intel
 
 # Version date: must have exactly 28 characters!
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
