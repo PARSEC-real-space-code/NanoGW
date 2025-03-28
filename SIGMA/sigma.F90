@@ -148,6 +148,7 @@ program sigma
   dbg_filename = "kernel_dbg"//adjustl(dbg_filename)
   open (outdbg, file=dbg_filename, status='unknown', iostat=info)
 #endif
+
   !-------------------------------------------------------------------
   ! Read input parameters from nanogw.in.
   !
@@ -185,10 +186,9 @@ program sigma
     else
       allocate (wmap(1))
     end if
-  else
+  else  ! sig_in%xc == XC_GW
     !write(6,*) " 1 nmap = ", nmap
-    if (max(pol_in(1)%ncond, pol_in(1)%nval, pol_in(2)%ncond, pol_in(2)%nval, &
-            sig_in%nmax_c, sig_in%nmap) > 0) then
+    if (max(pol_in(1)%ncond, pol_in(1)%nval, pol_in(2)%ncond, pol_in(2)%nval, sig_in%nmax_c, sig_in%nmap) > 0) then
       ! print *, " sig_in%nmax_c = ", sig_in%nmax_c
       ! print *, " sig_in%nmap = ", sig_in%nmap
       nmap = max(sig_in%nmax_c, sig_in%nmap)
@@ -1080,7 +1080,7 @@ program sigma
   ! Time accounting.
   !
   ii = 13
-  ik = 39-13
+  ik = 37-13
   allocate (routnam(ii + ik))
   allocate (timerlist(ii + ik))
   routnam(1) = "SETUP_S"; timerlist(1) = 2
@@ -1100,29 +1100,27 @@ program sigma
   routnam(14) = "POISSON_FFT"; timerlist(14) = 11
   routnam(15) = "EIGENSOLVER"; timerlist(15) = 12
   routnam(16) = "INTEGRATION"; timerlist(16) = 13
-  routnam(17) = "Calc intp vectors"; timerlist(17) = 53
-  routnam(18) = "Calc <zeta|K|zeta>"; timerlist(18) = 54
-  routnam(19) = "(in cvt step1)"; timerlist(19) = 61
-  routnam(20) = "(in cvt step2)"; timerlist(20) = 62
-  routnam(21) = "k_integrate_isdf"; timerlist(21) = 63
-  routnam(22) = "kernel k_print"; timerlist(22) = 64
-  routnam(23) = "k_int_isdf 1"; timerlist(23) = 65
-  routnam(24) = "k_int_isdf 2"; timerlist(24) = 66
-  routnam(25) = "k_int_isdf 3"; timerlist(25) = 67
-  routnam(26) = "ISDF_P & Q"; timerlist(26) = 53
-  routnam(27) = "ISDF_dgemm1"; timerlist(27) = 78
-  routnam(28) = "ISDF_Hadamard"; timerlist(28) = 80
-  routnam(29) = "ISDF_Mmtrx"; timerlist(29) = 54
-  routnam(30) = "ISDF_dgemm2"; timerlist(30) = 77
-  routnam(31) = "ISDF_dpoisson"; timerlist(31) = 79
-  routnam(32) = "Lanczos_matvec"; timerlist(32) = 58
-  routnam(33) = "Lanczos_poly"; timerlist(33) = 57
-  routnam(34) = "matvec_sqR@vec"; timerlist(34) = 68
-  routnam(35) = "matvec_Hadamard"; timerlist(35) = 69
-  routnam(36) = "matvec_C@vec"; timerlist(36) = 71
-  routnam(37) = "matvec_M@vec"; timerlist(37) = 72
-  routnam(38) = "matvec_mpi"; timerlist(38) = 70
-  routnam(39) = "matvec_vec_final"; timerlist(39) = 73
+  routnam(17) = "CVT_step1"; timerlist(17) = 61
+  routnam(18) = "CVT_step2"; timerlist(18) = 62
+  routnam(19) = "k_integrate_isdf"; timerlist(19) = 63
+  routnam(20) = "kernel k_print"; timerlist(20) = 64
+  routnam(21) = "k_int_isdf 1"; timerlist(21) = 65
+  routnam(22) = "k_int_isdf 2"; timerlist(22) = 66
+  routnam(23) = "k_int_isdf 3"; timerlist(23) = 67
+  routnam(24) = "ISDF_intp_vectors"; timerlist(24) = 53
+  routnam(25) = "ISDF_dgemm1"; timerlist(25) = 78
+  routnam(26) = "ISDF_Hadamard"; timerlist(26) = 80
+  routnam(27) = "ISDF_<z|K|z>"; timerlist(27) = 54
+  routnam(28) = "ISDF_dgemm2"; timerlist(28) = 77
+  routnam(29) = "ISDF_dpoisson"; timerlist(29) = 79
+  routnam(30) = "Lanczos_matvec"; timerlist(30) = 58
+  routnam(31) = "Lanczos_poly"; timerlist(31) = 57
+  routnam(32) = "matvec_sqR@vec"; timerlist(32) = 68
+  routnam(33) = "matvec_Hadamard"; timerlist(33) = 69
+  routnam(34) = "matvec_C@vec"; timerlist(34) = 71
+  routnam(35) = "matvec_M@vec"; timerlist(35) = 72
+  routnam(36) = "matvec_mpi"; timerlist(36) = 70
+  routnam(37) = "matvec_vec_final"; timerlist(37) = 73
 
 #ifdef HIPMAGMA
   !if (opt%linear_algebra .eq. 2 .or. opt%eigsolver .eq. 2) then

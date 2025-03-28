@@ -141,42 +141,36 @@ subroutine input_g(pol_in, qpt, tdldacut, nbuff, lcache, wgr_npes, nolda, tamm_d
 
   if (esdf_block('tdlda_valence', nlines)) then
     if (pol_in(1)%nval < 0) pol_in(1)%nval = 0
-    call esdf_parse_block('tdlda_valence', &
-                          nlines, pol_in(1)%nval, maxdata, vmap(1, 1))
+    call esdf_parse_block('tdlda_valence', nlines, pol_in(1)%nval, maxdata, vmap(1, 1))
     pol_in(2)%nval = pol_in(1)%nval
     vmap(1:pol_in(1)%nval, 2) = vmap(1:pol_in(1)%nval, 1)
   end if
 
   if (esdf_block('tdlda_valence_up', nlines)) then
     if (pol_in(1)%nval < 0) pol_in(1)%nval = 0
-    call esdf_parse_block('tdlda_valence_up', nlines, &
-                          pol_in(1)%nval, maxdata, vmap(1, 1))
+    call esdf_parse_block('tdlda_valence_up', nlines, pol_in(1)%nval, maxdata, vmap(1, 1))
   end if
 
   if (esdf_block('tdlda_valence_down', nlines)) then
     if (pol_in(2)%nval < 0) pol_in(2)%nval = 0
-    call esdf_parse_block('tdlda_valence_down', nlines, &
-                          pol_in(2)%nval, maxdata, vmap(1, 2))
+    call esdf_parse_block('tdlda_valence_down', nlines, pol_in(2)%nval, maxdata, vmap(1, 2))
   end if
 
   if (esdf_block('tdlda_conduction', nlines)) then
     if (pol_in(1)%ncond < 0) pol_in(1)%ncond = 0
-    call esdf_parse_block('tdlda_conduction', nlines, &
-                          pol_in(1)%ncond, maxdata, cmap(1, 1))
+    call esdf_parse_block('tdlda_conduction', nlines, pol_in(1)%ncond, maxdata, cmap(1, 1))
     pol_in(2)%ncond = pol_in(1)%ncond
     cmap(1:pol_in(1)%ncond, 2) = cmap(1:pol_in(1)%ncond, 1)
   end if
 
   if (esdf_block('tdlda_conduction_up', nlines)) then
     if (pol_in(1)%ncond < 0) pol_in(1)%ncond = 0
-    call esdf_parse_block('tdlda_conduction_up', nlines, &
-                          pol_in(1)%ncond, maxdata, cmap(1, 1))
+    call esdf_parse_block('tdlda_conduction_up', nlines, pol_in(1)%ncond, maxdata, cmap(1, 1))
   end if
 
   if (esdf_block('tdlda_conduction_down', nlines)) then
     if (pol_in(2)%ncond < 0) pol_in(2)%ncond = 0
-    call esdf_parse_block('tdlda_conduction_down', nlines, &
-                          pol_in(2)%ncond, maxdata, cmap(1, 2))
+    call esdf_parse_block('tdlda_conduction_down', nlines, pol_in(2)%ncond, maxdata, cmap(1, 2))
   end if
 
   if (esdf_block('qpoints', qpt%nk)) then

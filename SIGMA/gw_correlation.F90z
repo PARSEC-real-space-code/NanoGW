@@ -19,9 +19,8 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
-subroutine Zgw_correlation(gvec, kpt, qpt, k_c, pol, sig_in, sig, nspin, nkpt, irp, &
-                           pol_unit, nn_p, nq, iq, sig_en, nolda, xsum, &
-                           isdf_in, opt)
+subroutine Zgw_correlation(gvec, kpt, qpt, k_c, pol, sig_in, sig, nspin, nkpt, irp, pol_unit, nn_p, nq, iq, sig_en, &
+                           nolda, xsum, isdf_in, opt)
 
   use typedefs
   use mpi_module
@@ -66,8 +65,8 @@ subroutine Zgw_correlation(gvec, kpt, qpt, k_c, pol, sig_in, sig, nspin, nkpt, i
 #endif
   SCALAR, dimension(:, :), allocatable :: pot_c, pot_f
 
-  if (r_grp%master) write (6, '(/,a,/,a,i3,a,i3,/)') repeat('-', 65), &
-    ' Working now with representation ', irp, ' out of ', gvec%syms%ntrans
+  if (r_grp%master) write (6, '(/,a,/,a,i3,a,i3,/)') &
+    repeat('-', 65), ' Working now with representation ', irp, ' out of ', gvec%syms%ntrans
   if (r_grp%master .and. kpt%lcplx) write (6, '(a,i4,a,3f16.8,a,/)') &
     ' q-vector # ', iq, ' ( ', qpt%fk(:, iq), ' )'
 
@@ -89,8 +88,7 @@ subroutine Zgw_correlation(gvec, kpt, qpt, k_c, pol, sig_in, sig, nspin, nkpt, i
     !
     call stopwatch(r_grp%master, ' Calling readmatrix kernel_c')
     call timacc(3, 1, tsec)
-    call Zkernel(gvec, kpt, k_c, irp, 0, nspin, qpt%fk(1, iq), 'r', .true., &
-                 isdf_in)
+    call Zkernel(gvec, kpt, k_c, irp, 0, nspin, qpt%fk(1, iq), 'r', .true., isdf_in)
     call timacc(3, 2, tsec)
     call stopwatch(r_grp%master, ' Calling potential pot_c ')
     allocate (pot_c(pol%nn, k_c%ncol), stat=info)
@@ -142,8 +140,7 @@ subroutine Zgw_correlation(gvec, kpt, qpt, k_c, pol, sig_in, sig, nspin, nkpt, i
     if (.not. nolda) then
       call stopwatch(r_grp%master, ' Calling readmatrix kernel_f')
       call timacc(3, 1, tsec)
-      call Zkernel(gvec, kpt, k_c, irp, 2, nspin, qpt%fk(1, iq), 'r', .true., &
-                   isdf_in)
+      call Zkernel(gvec, kpt, k_c, irp, 2, nspin, qpt%fk(1, iq), 'r', .true., isdf_in)
       call timacc(3, 2, tsec)
       call stopwatch(r_grp%master, ' Calling potential pot_f ')
       allocate (pot_f(pol%nn, k_c%ncol), stat=info)
