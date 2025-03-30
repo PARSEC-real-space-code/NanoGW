@@ -45,7 +45,7 @@ subroutine parsec_wfn(gvec, kpt, nmap, nspin, wmap, init_gr)
 
   ! Local variables
   integer, parameter :: infile = 25  ! number of input unit
-  logical :: readwfn
+  logical :: readwfn  ! true for wfn.dat, false for parsec.dat
   character(len=26) :: datelabel
   character(len=800) :: lastwords
   integer :: ii, jj, nn, isp, ikp, icount, info, ndim, nwedge, itmp(3)
@@ -78,7 +78,7 @@ subroutine parsec_wfn(gvec, kpt, nmap, nspin, wmap, init_gr)
       end if
     end if
     read (infile) datelabel
-    write (6, '(/,a,a,a)') ' Wavefunction file created on ', datelabel, ' UTC'
+    write (*, '(/,A,A)') ' Wavefunction file created on ', datelabel
     if (readwfn) then
       ! Assume non-periodic system, real wave-functions.
       gvec%per = 0
@@ -664,11 +664,12 @@ subroutine parsec_wfn(gvec, kpt, nmap, nspin, wmap, init_gr)
     do ikp = 1, kpt%nk
       if (peinf%master) then
 #ifdef DEBUG
-        write (6, '(A,i2,A,i4)') " Reading wfn with spin ", isp, " at kpt ", ikp
+        write (*, '(/,4(A,i0))') " Reading wfn with isp: ", isp, "/", nspin, "   ik: ", ikp, "/", kpt%nk
+        write (*, '(A)') "    ib    norm"
 #endif
         allocate (map_found(kpt%wfn(isp, ikp)%nmem))
         map_found = 0
-        if (readwfn) then
+        if (readwfn) then  ! wfn.dat
           if (isp == 2) then
             do ii = 1, 6
               read (infile)
@@ -679,7 +680,7 @@ subroutine parsec_wfn(gvec, kpt, nmap, nspin, wmap, init_gr)
           do ii = 1, nn
             iord(ii) = ii
           end do
-        else
+        else  ! parsec.dat
           do ii = 1, 7
             read (infile)
           end do
@@ -726,7 +727,7 @@ subroutine parsec_wfn(gvec, kpt, nmap, nspin, wmap, init_gr)
             norm = dot_product(dwfn, dwfn)*real(gvec%syms%ntrans, dp)
           end if
 #ifdef DEBUG
-          write (6, '(a,3i8,g14.5)') ' wfn ', isp, iord(ii), gvec%nr, norm
+          write (*, '(I6,F10.6)') iord(ii), norm
 #endif
           if (abs(norm - one) > 1.d-6) then
             write (6, *) ' WARNING: The wavefuctions are not normalized ', iord(ii), gvec%nr, norm, isp
