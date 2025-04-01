@@ -90,12 +90,10 @@ program sigma
 
   character(len=40), allocatable :: routnam(:)
 
-  logical :: nolda, tamm_d, snorm, writeqp, readvxc, readocc, cohsex, nooffd, &
-             init_gr, hqp_sym, lstop
-  integer :: ii, irp, iq, ik, nmap, nspin, nbuff, lcache, isp, it_scf, &
-             chkpt_in, n_it, nr_buff, static_type, sig_en, nkpt, dft_code
-  real(dp) :: tsec(2), mem1, mem2, mem3, xsum, xmax, rtmp, tdldacut, max_sig, &
-              max_conv, xbuff, ecuts, qpmix, sig_cut
+  logical :: nolda, tamm_d, snorm, writeqp, readvxc, readocc, cohsex, nooffd, init_gr, hqp_sym, lstop
+  integer :: ii, irp, iq, ik, nmap, nspin, nbuff, lcache, isp, it_scf, chkpt_in, n_it, nr_buff, static_type, sig_en, &
+             nkpt, dft_code
+  real(dp) :: tsec(2), mem1, mem2, mem3, xsum, xmax, rtmp, tdldacut, max_sig, max_conv, xbuff, ecuts, qpmix, sig_cut
   logical, allocatable :: wmap(:)
 
   ! W Gao ISDF method
@@ -106,11 +104,9 @@ program sigma
   ! ncv(1) correspond to spin up, and ncv(2) correspond to spin down.
   ! Assumption: for different kpts, the number of states with the same
   !  spin are the same
-  integer :: n_intp, n_intp_r, maxnc, maxnv, ic, iv, ij, maxncv, ihomo, ikp, &
-             intp_type, isdf_type, kflag, maxicc, maxivv, maxsig, ipt, virp, cirp, &
-             vcirp, vvirp, ccirp, ivv, ivt, ict, icc, jrp, jj, mv, mc, n_dummy, &
-             igrid, jgrid, incr, ipe, res, pdgesv_nbl2d, lanczos_npoly, &
-             lanczos_niter, kk, jnblock
+  integer :: n_intp, n_intp_r, maxnc, maxnv, ic, iv, ij, maxncv, ihomo, ikp, intp_type, isdf_type, kflag, &
+             maxicc, maxivv, maxsig, ipt, virp, cirp, vcirp, vvirp, ccirp, ivv, ivt, ict, icc, jrp, jj, mv, mc, &
+             n_dummy, igrid, jgrid, incr, ipe, res, kk
   ! cvt.f90
   integer, allocatable :: intp(:), pairmap(:, :, :, :, :), invpairmap(:, :, :, :, :), &
                           nc(:, :, :), nv(:, :, :), ncv(:, :, :), ivlist(:, :, :, :), iclist(:, :, :, :), &
@@ -152,33 +148,27 @@ program sigma
   dbg_filename = "kernel_dbg"//adjustl(dbg_filename)
   open (outdbg, file=dbg_filename, status='unknown', iostat=info)
 #endif
+
   !-------------------------------------------------------------------
   ! Read input parameters from nanogw.in.
   !
-  call input_g(pol_in, qpt, tdldacut, nbuff, lcache, w_grp%npes, nolda, &
-               tamm_d, r_grp%num, dft_code, doisdf, n_intp, intp_type, isdf_type, &
-               isdf_in%lessmemory, isdf_in%fastselect, opt%eigsolver, &
-               opt%linear_algebra, opt%pdgesv_nbl2d, .false.)
-  if (peinf%master) print *, " input_g done"
-  if (opt%linear_algebra == 2 .or. opt%eigsolver == 2) then
+  call input_g(pol_in, qpt, tdldacut, nbuff, lcache, w_grp%npes, nolda, tamm_d, r_grp%num, dft_code, doisdf, n_intp, &
+               intp_type, isdf_type, isdf_in%lessmemory, isdf_in%fastselect, opt%eigsolver, opt%linear_algebra, &
+               opt%pdgesv_nbl2d, .false.)
+  if (peinf%master) write (*, *) " input_g done"
+
 #ifndef HIPMAGMA
-    print *, "Not compiled with '-DHIPMAGMA', use cpu for eigsolver and ", &
-      "linear algebra !!"
+  if (opt%linear_algebra == 2 .or. opt%eigsolver == 2) then
+    write (*, *) "Not compiled with '-DHIPMAGMA', use cpu for eigsolver and linear algebra !!"
     opt%linear_algebra = 1
     opt%eigsolver = 1
-#endif
   end if
+#endif
 
-  call MPI_BARRIER(peinf%comm, info)
-  call input_s(sig_in, kpt_sig, snorm, writeqp, readvxc, readocc, cohsex, &
-               nooffd, hqp_sym, n_it, chkpt_in, static_type, sig_en, max_conv, xbuff, &
-               ecuts, qpmix, sig_cut, pdgesv_nbl2d, lanczos_npoly, lanczos_niter, &
-               jnblock, .false.)
-  call MPI_BARRIER(peinf%comm, info)
-  opt%pdgesv_nbl2d = pdgesv_nbl2d ! Defaul is 32, see input_s.F90
-  opt%lanczos_npoly = lanczos_npoly
-  opt%lanczos_niter = lanczos_niter
-  opt%jnblock = jnblock
+  call input_s(sig_in, kpt_sig, snorm, writeqp, readvxc, readocc, cohsex, nooffd, hqp_sym, n_it, chkpt_in, &
+               static_type, sig_en, max_conv, xbuff, ecuts, qpmix, sig_cut, opt%lanczos_npoly, &
+               opt%lanczos_niter, opt%jnblock, .false.)
+  if (peinf%master) write (*, *) " input_s done"
 
   !-------------------------------------------------------------------
   ! Determine the set of wavefunctions to read: if n-th wavefunction is
@@ -196,10 +186,9 @@ program sigma
     else
       allocate (wmap(1))
     end if
-  else
+  else  ! sig_in%xc == XC_GW
     !write(6,*) " 1 nmap = ", nmap
-    if (max(pol_in(1)%ncond, pol_in(1)%nval, pol_in(2)%ncond, pol_in(2)%nval, &
-            sig_in%nmax_c, sig_in%nmap) > 0) then
+    if (max(pol_in(1)%ncond, pol_in(1)%nval, pol_in(2)%ncond, pol_in(2)%nval, sig_in%nmax_c, sig_in%nmap) > 0) then
       ! print *, " sig_in%nmax_c = ", sig_in%nmax_c
       ! print *, " sig_in%nmap = ", sig_in%nmap
       nmap = max(sig_in%nmax_c, sig_in%nmap)
@@ -229,8 +218,7 @@ program sigma
     end if
     !write(6,*) " 2 nmap = ", nmap
     !write(6,*) pol_in(1)%ncond,pol_in(1)%nval,pol_in(2)%ncond,pol_in(2)%nval
-    if (min(pol_in(1)%ncond, pol_in(1)%nval, pol_in(2)%ncond, pol_in(2)%nval, &
-            sig_in%nmax_c, sig_in%nmap) < 0) then
+    if (min(pol_in(1)%ncond, pol_in(1)%nval, pol_in(2)%ncond, pol_in(2)%nval, sig_in%nmax_c, sig_in%nmap) < 0) then
       deallocate (wmap)
       allocate (wmap(1))
       nmap = 0
@@ -410,8 +398,7 @@ program sigma
       jgrid = (igrid - 1)/gvec%syms%ntrans + 1
       rho_at_intp_r(ipt) = kpt%rho(jgrid, 1)
 #ifdef DEBUG
-      if (peinf%master) write (rho_intp_dbg, '(i7,i7,f30.23)') ipt, &
-        intp_r_tmp(ipt), kpt%rho(jgrid, 1)
+      if (peinf%master) write (rho_intp_dbg, '(i7,i7,f30.23)') ipt, intp_r_tmp(ipt), kpt%rho(jgrid, 1)
 #endif
     end do
     call quicksort(n_intp_r, rho_at_intp_r, sort_idx)
@@ -419,25 +406,21 @@ program sigma
     ! Note: if there are a few points having the same rho, then
     !       we pick up the last point of these duplicated points.
 #ifdef DEBUG
-    if (peinf%master) write (rho_intp_dbg, *) &
-      "# rho at interpolation points (sorted) "
+    if (peinf%master) write (rho_intp_dbg, *) "# rho at interpolation points (sorted) "
 #endif
     do ipt = 1, n_intp_r - 1
-      if (abs(rho_at_intp_r(sort_idx(ipt)) - rho_at_intp_r(sort_idx(ipt + 1))) &
-          < 1.0e-14) then
+      if (abs(rho_at_intp_r(sort_idx(ipt)) - rho_at_intp_r(sort_idx(ipt + 1))) < 1.0e-14) then
         not_duplicate(sort_idx(ipt)) = .false.
 #ifdef DEBUG
         if (peinf%master) write (rho_intp_dbg, '(i7,i7,f30.23,a)') &
-          sort_idx(ipt), intp_r_tmp(sort_idx(ipt)), &
-          rho_at_intp_r(sort_idx(ipt)), 'F'
+          sort_idx(ipt), intp_r_tmp(sort_idx(ipt)), rho_at_intp_r(sort_idx(ipt)), 'F'
 #endif
       else
         not_duplicate(sort_idx(ipt)) = .true.
         n_dummy = n_dummy + 1
 #ifdef DEBUG
         if (peinf%master) write (rho_intp_dbg, '(i7,i7,f30.23,a)') &
-          sort_idx(ipt), intp_r_tmp(sort_idx(ipt)), &
-          rho_at_intp_r(sort_idx(ipt)), 'T'
+          sort_idx(ipt), intp_r_tmp(sort_idx(ipt)), rho_at_intp_r(sort_idx(ipt)), 'T'
 #endif
       end if
     end do
@@ -446,8 +429,7 @@ program sigma
     n_dummy = n_dummy + 1
 #ifdef DEBUG
     if (peinf%master) write (rho_intp_dbg, '(i7,i7,f30.23,a)') &
-      sort_idx(n_intp_r), intp_r_tmp(sort_idx(n_intp_r)), &
-      rho_at_intp_r(sort_idx(n_intp_r)), 'T'
+      sort_idx(n_intp_r), intp_r_tmp(sort_idx(n_intp_r)), rho_at_intp_r(sort_idx(n_intp_r)), 'T'
 #endif
     if (peinf%master) then
       print *, "Original n_intp_r =", n_intp_r
@@ -524,9 +506,8 @@ program sigma
         end do
         ncv(isp, ikp, 1:gvec%syms%ntrans) = icv(1:gvec%syms%ntrans)
 #ifdef DEBUG
-        !if(peinf%master) write(outdbg, *) " ncv ", &
+        !if(peinf%master) write(outdbg, *) " ncv ", (ncv(isp,ikp,ii), ii =1,gvec%syms%ntrans)
 #endif
-        !  (ncv(isp,ikp,ii), ii =1,gvec%syms%ntrans)
         if (mv > maxivv) maxivv = mv
         if (mc > maxicc) maxicc = mc
       end do ! isp
@@ -684,8 +665,7 @@ program sigma
       do isp = 1, nspin
         do ikp = 1, kpt%nk
           if (kpt%wfn(isp, ikp)%nmem /= kpt%wfn(1, 1)%nmem) then
-            write (6, '(a,i2,a,i5,a)') " kpt%wfn(", isp, ",", ikp, &
-              ")%nmem is not equal to kpt%wfn(1,1)%nmem."
+            write (6, '(a,i2,a,i5,a)') " kpt%wfn(", isp, ",", ikp, ")%nmem is not equal to kpt%wfn(1,1)%nmem."
             print *, " Can't allocate isdf_in%Psi_intp "
           end if
         end do ! ikp
@@ -772,105 +752,82 @@ program sigma
   !
   if (kpt%lcplx) tamm_d = .true.
   if (peinf%master) then
-    write (6, '(/,a,/,/,a,/,2a,/)') repeat('-', 65), &
-      ' Self-energy input data: ', ' ', repeat('-', 23)
+    write (*, '(/,A,/,/,A,/,2A,/)') repeat('-', 65), ' Self-energy input data: ', ' ', repeat('-', 23)
     if (sig_in%xc == XC_GW) then
-      write (6, '(2a)') ' Number of transitions per representation ', &
-        'in TDLDA polarizabillity:'
-      write (6, '(8i8)') ((pol(irp, iq)%ntr, irp=1, gvec%syms%ntrans), &
-                          iq=1, qpt%nk)
-      write (6, '(a,i10,/)') ' total = ', sum(pol(:, :)%ntr)
+      write (*, '(A)') ' Number of transitions per representation in TDLDA polarizabillity:'
+      write (*, '(8I8)') ((pol(irp, iq)%ntr, irp=1, gvec%syms%ntrans), iq=1, qpt%nk)
+      write (*, '(A,I10,/)') ' total = ', sum(pol(:, :)%ntr)
       if (tdldacut > zero) then
-        print *, 'Energy cutoff applied in TDLDA polarizability = ', &
-          tdldacut*ryd, ' eV'
+        write (*, *) 'Energy cutoff applied in TDLDA polarizability = ', tdldacut*ryd, ' eV'
       else
-        print *, 'No energy cutoff in TDLDA polarizability'
+        write (*, *) 'No energy cutoff in TDLDA polarizability'
       end if
-      if (nolda) write (6, '(/,a,/)') &
-        ' LDA kernel is not included in polarizability'
+      if (nolda) write (*, '(/,A,/)') ' LDA kernel is not included in polarizability'
       if (tamm_d) then
-        write (6, '(2a,/)') ' Calculating TDLDA ', &
-          'polarizability within the Tamm-Dancoff approximation.'
+        write (*, '(A,/)') ' Calculating TDLDA polarizability within the Tamm-Dancoff approximation.'
       else
-        write (6, '(2a,/)') ' Not using the Tamm-Dancoff ', &
-          'approximation in TDLDA polarizability.'
+        write (*, '(A,/)') ' Not using the Tamm-Dancoff approximation in TDLDA polarizability.'
       end if
       if (snorm) then
-        write (6, '(a,/)') ' Renormalizing Sum rule '
+        write (*, '(A,/)') ' Renormalizing Sum rule '
       else
-        write (6, '(a,/)') ' Sum rule not renormalized'
+        write (*, '(A,/)') ' Sum rule not renormalized'
       end if
-      write (6, '(2a,i5)') ' Order of highest LDA state included ', &
-        'in Green function = ', sig_in%nmax_c
-      write (6, '(2a,i5,/)') ' Order of highest LDA state included ', &
-        'in COHSEX approximation = ', sig_in%nmap
-      write (6, '(2a,g12.4,/)') ' Energy resolution in energy poles, ', &
-        'self-energy (eV) = ', ecuts*ryd
-      write (6, '(2a,f10.4,a,/)') ' Energy range used to calculate ', &
-        'self-energy  = ', sig_in%deltae*ryd, ' eV '
-      write (6, '(2a,i5,/)') ' Number of data points used to calculate ', &
-        'self-energy = ', sig_in%nen
+      write (*, '(A,I5)') ' Order of highest LDA state included in Green function = ', sig_in%nmax_c
+      write (*, '(A,I5,/)') ' Order of highest LDA state included in COHSEX approximation = ', sig_in%nmap
+      write (*, '(A,G12.4,/)') ' Energy resolution in energy poles, self-energy (eV) = ', ecuts*ryd
+      write (*, '(A,F10.4,A,/)') ' Energy range used to calculate self-energy  = ', sig_in%deltae*ryd, ' eV '
+      write (*, '(A,I5,/)') ' Number of data points used to calculate self-energy = ', sig_in%nen
       select case (sig_en)
       case (SIG_LEFT)
-        write (6, '(a,a,/)') ' Calculating < n_1 | Sigma | n_2 > at ', &
-          'the energy of orbital n_1'
+        write (*, '(a,/)') ' Calculating < n_1 | Sigma | n_2 > at the energy of orbital n_1'
       case (SIG_RIGHT)
-        write (6, '(a,a,/)') ' Calculating < n_1 | Sigma | n_2 > at ', &
-          'the energy of orbital n_2'
+        write (*, '(a,/)') ' Calculating < n_1 | Sigma | n_2 > at the energy of orbital n_2'
       case (SIG_AV)
-        write (6, '(a,a,/)') ' Calculating < n_1 | Sigma | n_2 > at ', &
-          'the average of energies E_1, E_2.'
+        write (*, '(a,/)') ' Calculating < n_1 | Sigma | n_2 > at the average of energies E_1, E_2.'
       end select
       if (nr_buff > 0) then
         xsum = sum(kpt%rho(1:gvec%nr, 1:nspin))*two/real(nspin, dp)
         rtmp = sum(kpt%rho(1:nr_buff, 1:nspin))*two/real(nspin, dp)
-        print *, 'Calculating W_pol in static limit with nr = ', nr_buff
-        print *, 'Fraction of electron density within nr = ', &
-          rtmp/xsum*1.d2, ' %'
+        write (*, *) 'Calculating W_pol in static limit with nr = ', nr_buff
+        write (*, *) 'Fraction of electron density within nr = ', rtmp/xsum*1.d2, ' %'
         xsum = real(nr_buff, dp)*real(sum(pol(:, :)%ntr))/65536.d0
-        write (6, '(a,f10.2,a,/)') ' Disk space used = ', xsum, ' MB'
+        write (*, '(A,F10.2,A,/)') ' Disk space used = ', xsum, ' MB'
       end if
-      if (cohsex) write (6, '(a,a,/)') ' Using the ', &
-        'COHSEX (static) approximation in self-energy.'
+      if (cohsex) write (*, '(a,/)') ' Using the COHSEX (static) approximation in self-energy.'
     else
       select case (sig_in%xc)
       case (XC_HF)
-        write (6, '(2a,/)') ' Using the ', &
-          'Hartree-Fock approximation in self-energy.'
+        write (*, '(A,/)') ' Using the Hartree-Fock approximation in self-energy.'
       case (XC_B3LYP)
-        write (6, '(2a,/)') ' Replacing ', &
-          'self-energy with the hybrid B3LYP functional.'
+        write (*, '(A,/)') ' Replacing self-energy with the hybrid B3LYP functional.'
       case (XC_LDA_CA)
-        write (6, '(2a,/)') ' Replacing ', &
-          'self-energy with the LDA CA-PZ functional.'
+        write (*, '(A,/)') ' Replacing self-energy with the LDA CA-PZ functional.'
       case (XC_GGA_PBE)
-        write (6, '(2a,/)') ' Replacing ', &
-          'self-energy with the GGA PBE functional.'
+        write (*, '(A,/)') ' Replacing self-energy with the GGA PBE functional.'
       case (XC_GGA_BLYP)
-        write (6, '(2a,/)') ' Replacing ', &
-          'self-energy with the GGA BLYP functional.'
+        write (*, '(A,/)') ' Replacing self-energy with the GGA BLYP functional.'
       end select
     end if
-    if (qpmix /= one) write (6, '(a,/,a,g12.4,/)') &
-      ' Mixing input and output (QP) wavefunctions.', &
-      ' Mixing parameter = ', qpmix
-    if (sig_cut > zero) write (6, '(a,f20.10,a,/)') &
-      ' Applying cut-off ', sig_cut, ' eV to self-energy.'
-    if (writeqp) write (6, '(a,/)') 'Printing out new wavefunctions.'
-    if (n_it > 0) write (6, '(a,i5,a,/,a,f10.5,a,/)') &
-      ' Performing ', n_it, ' SCGW iterations.', &
-      ' Maximum converged potential = ', max_conv, ' eV'
+    if (abs(qpmix - one) > 1.d-6) then
+      write (*, '(A)') ' Mixing input and output (QP) wavefunctions.'
+      write (*, '(A,G12.4,/)') ' Mixing parameter = ', qpmix
+    end if
+    if (sig_cut > zero) write (*, '(A,F20.10,A,/)') ' Applying cut-off ', sig_cut, ' eV to self-energy.'
+    if (writeqp) write (*, '(A,/)') 'Printing out new wavefunctions.'
+    if (n_it > 0) then
+      write (*, '(A,I5,A)') ' Performing ', n_it, ' SCGW iterations.'
+      write (*, '(A,F10.5,A,/)') ' Maximum converged potential = ', max_conv, ' eV'
+    end if
     !
     ! Estimate memory usage.
     !
-    mem1 = sum(kpt%wfn(:, :)%nmem)*two/real(nspin, dp)* &
-           real(nspin*gvec%nr, dp)/two/131072.d0/real(w_grp%npes, dp)
-    if (kpt%lcplx) mem1 = mem1*two
+    mem1 = sum(kpt%wfn(:, :)%nmem) * real(gvec%nr, dp) / 131072.d0 / real(w_grp%npes, dp)
+    if (kpt%lcplx) mem1 = mem1 * two
     write (6, '(a,f10.2,a)') ' Memory needed to store wavefunctions : ', mem1, ' MB/proc.'
-    mem1 = real(5*gvec%nr, dp)/131072.d0
-    if (kpt%lcplx) mem1 = mem1*two
-    write (6, '(a,f10.2,a)') ' Memory needed to calculate kernel matrix elements : ', &
-      mem1, ' MB/proc.'
+    mem1 = real(5*gvec%nr, dp) / 131072.d0
+    if (kpt%lcplx) mem1 = mem1 * two
+    write (6, '(a,f10.2,a)') ' Memory needed to calculate kernel matrix elements : ', mem1, ' MB/proc.'
     if (sig_in%xc == XC_GW) then
       ! For diagonalization, we store 4 matrices: hamiltonian/eigenvectors,
       ! temporary array (in eigensolver), and kernel.
@@ -884,8 +841,7 @@ program sigma
       end do
       mem1 = xmax/1024.d0*3.d0/128.d0/r_grp%npes
       if (r_grp%npes > 1) mem1 = mem1*four/three
-      ! For self-energy calculation, we store eigenvectors, 2 potential
-      ! matrices, and 2 kernel matrices.
+      ! For self-energy calculation, we store eigenvectors, 2 potential matrices, and 2 kernel matrices.
       xmax = 0
       do iq = 1, qpt%nk
         do irp = 1, gvec%syms%ntrans
@@ -983,8 +939,7 @@ program sigma
     w_grp%ncv = k_p(1, 1)%ncol
     if (isdf_in%lessmemory == 4) then
       ! do nothing
-      !w_grp%ncv_start, w_grp%ncv_end, ldncv will be defined in
-      ! calculate_sigma_lanczos_lowcomm_new
+      ! w_grp%ncv_start, w_grp%ncv_end, ldncv will be defined in calculate_sigma_lanczos_lowcomm_new
     else ! isdf_in%lessmemory .ne. 4
       incr = w_grp%ncv/w_grp%npes
       res = mod(w_grp%ncv, w_grp%npes)
@@ -993,7 +948,7 @@ program sigma
       else
         w_grp%ldncv = incr
       end if
-      !print *, "incr ", incr, " res ", res
+      ! print *, "incr ", incr, " res ", res
       do ipe = 0, peinf%npes - 1
         if (ipe < res) then
           w_grp%ncv_start(ipe) = ipe*(incr + 1) + 1
@@ -1013,45 +968,38 @@ program sigma
   end if
   do it_scf = 0, n_it
     if (kpt%lcplx) then
-      call zcalculate_sigma(nspin, kpt_sig%nk, n_it, it_scf, nr_buff, &
-                            static_type, sig_en, dft_code, chkpt_in, gvec, kpt, qpt, k_c, k_p, &
-                            pol, sig_in, sig, q_p, nolda, tamm_d, writeqp, snorm, cohsex, &
-                            hqp_sym, lstop, ecuts, qpmix, sig_cut, max_sig, isdf_in, doisdf, opt)
+      call zcalculate_sigma(nspin, kpt_sig%nk, n_it, it_scf, nr_buff, static_type, sig_en, dft_code, chkpt_in, gvec, &
+                            kpt, qpt, k_c, k_p, pol, sig_in, sig, q_p, nolda, tamm_d, writeqp, snorm, cohsex, hqp_sym, &
+                            lstop, ecuts, qpmix, sig_cut, max_sig, isdf_in, doisdf, opt)
     else
       if (sig_in%lanczos) then
         if (isdf_in%lessmemory == 2) then
           if (peinf%master) print *, "call calculate_sigma_lanczos_UltraLowMem"
-          call dcalculate_sigma_lanczos_UltraLowMem(nspin, kpt_sig%nk, &
-                                                    sig_en, dft_code, gvec, kpt, qpt, k_c, k_p, sig_in, sig, q_p, &
-                                                    nolda, tamm_d, writeqp, snorm, cohsex, lstop, ecuts, sig_cut, &
-                                                    max_sig, isdf_in, doisdf, opt)
+          call dcalculate_sigma_lanczos_UltraLowMem(nspin, kpt_sig%nk, sig_en, dft_code, gvec, kpt, qpt, k_c, k_p, &
+                                                    sig_in, sig, q_p, nolda, tamm_d, writeqp, snorm, cohsex, lstop, &
+                                                    ecuts, sig_cut, max_sig, isdf_in, doisdf, opt)
         else if (isdf_in%lessmemory == 3) then
           if (peinf%master) print *, "call calculate_sigma_lanczos_BLOCK "
-          call dcalculate_sigma_lanczos_BLOCK(nspin, kpt_sig%nk, sig_en, &
-                                              dft_code, gvec, kpt, qpt, k_c, k_p, sig_in, sig, q_p, nolda, &
-                                              tamm_d, writeqp, snorm, cohsex, ecuts, sig_cut, max_sig, &
-                                              isdf_in, doisdf, opt)
+          call dcalculate_sigma_lanczos_BLOCK(nspin, kpt_sig%nk, sig_en, dft_code, gvec, kpt, qpt, k_c, k_p, sig_in, &
+                                              sig, q_p, nolda, tamm_d, writeqp, snorm, cohsex, ecuts, sig_cut, &
+                                              max_sig, isdf_in, doisdf, opt)
           lstop = .true.
         else if (isdf_in%lessmemory == 4) then
           if (peinf%master) print *, "call calculate_sigma_lanczos_lowcomsym "
-          call dcalculate_sigma_lanczos_lowcomsym(nspin, kpt_sig%nk, &
-                                                  sig_en, dft_code, gvec, kpt, qpt, k_c, k_p, sig_in, sig, q_p, &
-                                                  nolda, tamm_d, writeqp, snorm, cohsex, ecuts, sig_cut, &
-                                                  max_sig, isdf_in, doisdf, opt)
+          call dcalculate_sigma_lanczos_lowcomsym(nspin, kpt_sig%nk, sig_en, dft_code, gvec, kpt, qpt, k_c, k_p, &
+                                                  sig_in, sig, q_p, nolda, tamm_d, writeqp, snorm, cohsex, ecuts, &
+                                                  sig_cut, max_sig, isdf_in, doisdf, opt)
           lstop = .true.
         else
           if (peinf%master) print *, "call calculate_sigma_lanczos"
-          call dcalculate_sigma_lanczos(nspin, kpt_sig%nk, sig_en, dft_code, &
-                                        gvec, kpt, qpt, k_c, k_p, sig_in, sig, q_p, nolda, tamm_d, &
-                                        writeqp, snorm, cohsex, lstop, ecuts, sig_cut, max_sig, &
+          call dcalculate_sigma_lanczos(nspin, kpt_sig%nk, sig_en, dft_code, gvec, kpt, qpt, k_c, k_p, sig_in, sig, &
+                                        q_p, nolda, tamm_d, writeqp, snorm, cohsex, lstop, ecuts, sig_cut, max_sig, &
                                         isdf_in, doisdf, opt)
         end if
       else
-        call dcalculate_sigma(nspin, kpt_sig%nk, n_it, it_scf, nr_buff, &
-                              static_type, sig_en, dft_code, chkpt_in, gvec, kpt, qpt, k_c, &
-                              k_p, pol, sig_in, sig, q_p, nolda, tamm_d, writeqp, snorm, &
-                              cohsex, hqp_sym, lstop, ecuts, qpmix, sig_cut, max_sig, isdf_in, &
-                              doisdf, opt)
+        call dcalculate_sigma(nspin, kpt_sig%nk, n_it, it_scf, nr_buff, static_type, sig_en, dft_code, chkpt_in, gvec, &
+                              kpt, qpt, k_c, k_p, pol, sig_in, sig, q_p, nolda, tamm_d, writeqp, snorm, cohsex, &
+                              hqp_sym, lstop, ecuts, qpmix, sig_cut, max_sig, isdf_in, doisdf, opt)
       end if
     end if
 
@@ -1132,7 +1080,7 @@ program sigma
   ! Time accounting.
   !
   ii = 13
-  ik = 39-13
+  ik = 37-13
   allocate (routnam(ii + ik))
   allocate (timerlist(ii + ik))
   routnam(1) = "SETUP_S"; timerlist(1) = 2
@@ -1152,29 +1100,27 @@ program sigma
   routnam(14) = "POISSON_FFT"; timerlist(14) = 11
   routnam(15) = "EIGENSOLVER"; timerlist(15) = 12
   routnam(16) = "INTEGRATION"; timerlist(16) = 13
-  routnam(17) = "Calc intp vectors"; timerlist(17) = 53
-  routnam(18) = "Calc <zeta|K|zeta>"; timerlist(18) = 54
-  routnam(19) = "(in cvt step1)"; timerlist(19) = 61
-  routnam(20) = "(in cvt step2)"; timerlist(20) = 62
-  routnam(21) = "k_integrate_isdf"; timerlist(21) = 63
-  routnam(22) = "kernel k_print"; timerlist(22) = 64
-  routnam(23) = "k_int_isdf 1"; timerlist(23) = 65
-  routnam(24) = "k_int_isdf 2"; timerlist(24) = 66
-  routnam(25) = "k_int_isdf 3"; timerlist(25) = 67
-  routnam(26) = "ISDF_P & Q"; timerlist(26) = 53
-  routnam(27) = "ISDF_dgemm1"; timerlist(27) = 78
-  routnam(28) = "ISDF_Hadamard"; timerlist(28) = 80
-  routnam(29) = "ISDF_Mmtrx"; timerlist(29) = 54
-  routnam(30) = "ISDF_dgemm2"; timerlist(30) = 77
-  routnam(31) = "ISDF_dpoisson"; timerlist(31) = 79
-  routnam(32) = "Lanczos_matvec"; timerlist(32) = 58
-  routnam(33) = "Lanczos_poly"; timerlist(33) = 57
-  routnam(34) = "matvec_sqR@vec"; timerlist(34) = 68
-  routnam(35) = "matvec_Hadamard"; timerlist(35) = 69
-  routnam(36) = "matvec_C@vec"; timerlist(36) = 71
-  routnam(37) = "matvec_M@vec"; timerlist(37) = 72
-  routnam(38) = "matvec_mpi"; timerlist(38) = 70
-  routnam(39) = "matvec_vec_final"; timerlist(39) = 73
+  routnam(17) = "CVT_step1"; timerlist(17) = 61
+  routnam(18) = "CVT_step2"; timerlist(18) = 62
+  routnam(19) = "k_integrate_isdf"; timerlist(19) = 63
+  routnam(20) = "kernel k_print"; timerlist(20) = 64
+  routnam(21) = "k_int_isdf 1"; timerlist(21) = 65
+  routnam(22) = "k_int_isdf 2"; timerlist(22) = 66
+  routnam(23) = "k_int_isdf 3"; timerlist(23) = 67
+  routnam(24) = "ISDF_intp_vectors"; timerlist(24) = 53
+  routnam(25) = "ISDF_dgemm1"; timerlist(25) = 78
+  routnam(26) = "ISDF_Hadamard"; timerlist(26) = 80
+  routnam(27) = "ISDF_<z|K|z>"; timerlist(27) = 54
+  routnam(28) = "ISDF_dgemm2"; timerlist(28) = 77
+  routnam(29) = "ISDF_dpoisson"; timerlist(29) = 79
+  routnam(30) = "Lanczos_matvec"; timerlist(30) = 58
+  routnam(31) = "Lanczos_poly"; timerlist(31) = 57
+  routnam(32) = "matvec_sqR@vec"; timerlist(32) = 68
+  routnam(33) = "matvec_Hadamard"; timerlist(33) = 69
+  routnam(34) = "matvec_C@vec"; timerlist(34) = 71
+  routnam(35) = "matvec_M@vec"; timerlist(35) = 72
+  routnam(36) = "matvec_mpi"; timerlist(36) = 70
+  routnam(37) = "matvec_vec_final"; timerlist(37) = 73
 
 #ifdef HIPMAGMA
   !if (opt%linear_algebra .eq. 2 .or. opt%eigsolver .eq. 2) then

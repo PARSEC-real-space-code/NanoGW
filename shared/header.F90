@@ -69,19 +69,19 @@ subroutine header(namelabel)
   ! Write header.
   call get_date(datelabel)
   if (peinf%master) then
-    write (6, '(/,a)') repeat('=', 65)
-    write (6, '(/,1x,a,3x,a,a)') namelabel, datelabel, ' UTC'
+    write (*, '(/,A)') repeat('=', 65)
+    write (*, '(/,1X,A,3X,A)') namelabel, datelabel
 #ifdef MPI
-    write (6, '(/,a,i4,a,/,a,/)') ' RUNNING ON ', &
-      peinf%npes, ' PROCESSORS', ' Running MPI version (parallel)'
+    write (*, '(/,A,I0,A,/)') ' Running parallel version (MPI) on ', peinf%npes, ' processors'
 #else
-    write (6, '(/,a,/)') ' Running serial version (no MPI)'
+    write (*, '(/,A,/)') ' Running serial version (no MPI)'
 #endif
-    write (6, '(a)') 'Version date : VERSIONDATE cut-offs'
-    write (6, '(a)') 'architecture = MACH'
-    write (6, '(a)') 'pre-processing options = CPPOPT'
-    write (6, '(a)') 'compilation options = OPTS'
-    write (6, '(/,a,/)') repeat('=', 65)
+    write (*, '(A)') ' Git commit : GIT_COMMIT'
+    write (*, '(A)') ' Build date : BUILD_DATE'
+    write (*, '(A)') ' Architecture : MACH'
+    write (*, '(A)') ' Pre-processing options : CPPOPT'
+    write (*, '(A)') ' Compilation options : OPTS'
+    write (*, '(/,A,/)') repeat('=', 65)
   end if
 
   return

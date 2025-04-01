@@ -54,8 +54,7 @@ module typedefs
     real(dp), pointer :: Mmtrx_loc(:, :, :, :, :, :, :)
     real(dp), pointer :: Psi_intp_loc(:, :, :, :)
     real(dp), pointer :: PsiC_intp_bl(:, :, :, :), PsiV_intp_bl(:, :, :, :)
-    integer :: xvgrp, xcgrp, myvgrp, mycgrp, mynv, mync, &
-               ldv, ldc, myvstart, myvend, mycstart, mycend
+    integer :: xvgrp, xcgrp, myvgrp, mycgrp, mynv, mync, ldv, ldc, myvstart, myvend, mycstart, mycend
 
     ! We assume nkp = nspin = 1 for now, kp and spin indices
     ! are needed later

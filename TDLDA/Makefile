@@ -57,8 +57,10 @@ module:
 
 initial:
 	sed "s/MACH/$(MACH)/g" ../shared/header.F90 \
-	| sed "s/CPPOPT/$(CPPOPT)/g" | sed "s/OPTS/$(OPTS)/g" \
-	| sed "s/VERSIONDATE/$(VERSIONDATE)/g" > init_tmp.F90
+	| sed "s/CPPOPT/$(CPPOPT)/g" \
+	| sed "s/OPTS/$(OPTS)/g" \
+	| sed "s/GIT_COMMIT/$(GIT_COMMIT)/g" \
+	| sed "s/BUILD_DATE/$(BUILD_DATE)/g" > init_tmp.F90
 	make FOPTS="$(OPTS)" $(INITIAL)
 
 $(POBJ): $(MODULE)

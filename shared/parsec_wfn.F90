@@ -45,7 +45,7 @@ subroutine parsec_wfn(gvec, kpt, nmap, nspin, wmap, init_gr)
 
   ! Local variables
   integer, parameter :: infile = 25  ! number of input unit
-  logical :: readwfn
+  logical :: readwfn  ! true for wfn.dat, false for parsec.dat
   character(len=26) :: datelabel
   character(len=800) :: lastwords
   integer :: ii, jj, nn, isp, ikp, icount, info, ndim, nwedge, itmp(3)
@@ -62,8 +62,7 @@ subroutine parsec_wfn(gvec, kpt, nmap, nspin, wmap, init_gr)
   ! Read info for real space grid from parsec.dat.
   !
   if (peinf%master) then
-    write (6, '(/,a,/,a,a,/)') ' Electronic structure data :', &
-      ' ', repeat('-', 27)
+    write (6, '(/,a,/,a,a,/)') ' Electronic structure data :', ' ', repeat('-', 27)
     write (6, *) 'Reading electron wavefunctions from file parsec.dat/wfn.dat'
     open (infile, file='parsec.dat', form='unformatted', status='old', iostat=info)
     readwfn = .false.
@@ -79,7 +78,7 @@ subroutine parsec_wfn(gvec, kpt, nmap, nspin, wmap, init_gr)
       end if
     end if
     read (infile) datelabel
-    write (6, '(/,a,a,a)') ' Wavefunction file created on ', datelabel, ' UTC'
+    write (*, '(/,A,A)') ' Wavefunction file created on ', datelabel
     if (readwfn) then
       ! Assume non-periodic system, real wave-functions.
       gvec%per = 0
@@ -204,38 +203,23 @@ subroutine parsec_wfn(gvec, kpt, nmap, nspin, wmap, init_gr)
 #endif
   end if
 #ifdef MPI
-  call MPI_BCAST(readwfn, 1, &
-                 MPI_LOGICAL, peinf%masterid, peinf%comm, info)
-  call MPI_BCAST(gvec%per, 1, &
-                 MPI_INTEGER, peinf%masterid, peinf%comm, info)
-  call MPI_BCAST(gvec%step, 6, &
-                 MPI_DOUBLE_PRECISION, peinf%masterid, peinf%comm, info)
-  call MPI_BCAST(gvec%avec, 9, &
-                 MPI_DOUBLE_PRECISION, peinf%masterid, peinf%comm, info)
-  call MPI_BCAST(fd%lap_dir_num, 1, &
-                 MPI_INTEGER, peinf%masterid, peinf%comm, info)
-  call MPI_BCAST(fd%lap_dir, 6, &
-                 MPI_INTEGER, peinf%masterid, peinf%comm, info)
-  call MPI_BCAST(fd%lap_neig, 18, &
-                 MPI_INTEGER, peinf%masterid, peinf%comm, info)
-  call MPI_BCAST(fd%lap_dir_step, 6, &
-                 MPI_DOUBLE_PRECISION, peinf%masterid, peinf%comm, info)
-  call MPI_BCAST(fd%b_lap, 6, &
-                 MPI_DOUBLE_PRECISION, peinf%masterid, peinf%comm, info)
-  call MPI_BCAST(kpt%nk, 1, &
-                 MPI_INTEGER, peinf%masterid, MPI_COMM_WORLD, info)
+  call MPI_BCAST(readwfn, 1, MPI_LOGICAL, peinf%masterid, peinf%comm, info)
+  call MPI_BCAST(gvec%per, 1, MPI_INTEGER, peinf%masterid, peinf%comm, info)
+  call MPI_BCAST(gvec%step, 6, MPI_DOUBLE_PRECISION, peinf%masterid, peinf%comm, info)
+  call MPI_BCAST(gvec%avec, 9, MPI_DOUBLE_PRECISION, peinf%masterid, peinf%comm, info)
+  call MPI_BCAST(fd%lap_dir_num, 1, MPI_INTEGER, peinf%masterid, peinf%comm, info)
+  call MPI_BCAST(fd%lap_dir, 6, MPI_INTEGER, peinf%masterid, peinf%comm, info)
+  call MPI_BCAST(fd%lap_neig, 18, MPI_INTEGER, peinf%masterid, peinf%comm, info)
+  call MPI_BCAST(fd%lap_dir_step, 6, MPI_DOUBLE_PRECISION, peinf%masterid, peinf%comm, info)
+  call MPI_BCAST(fd%b_lap, 6, MPI_DOUBLE_PRECISION, peinf%masterid, peinf%comm, info)
+  call MPI_BCAST(kpt%nk, 1, MPI_INTEGER, peinf%masterid, MPI_COMM_WORLD, info)
   if (.not. peinf%master) allocate (kpt%fk(3, kpt%nk))
-  call MPI_BCAST(kpt%fk, kpt%nk*3, &
-                 MPI_DOUBLE_PRECISION, peinf%masterid, MPI_COMM_WORLD, info)
+  call MPI_BCAST(kpt%fk, kpt%nk*3, MPI_DOUBLE_PRECISION, peinf%masterid, MPI_COMM_WORLD, info)
   if (.not. peinf%master) allocate (kpt%weight(kpt%nk))
-  call MPI_BCAST(kpt%weight, kpt%nk, &
-                 MPI_DOUBLE_PRECISION, peinf%masterid, MPI_COMM_WORLD, info)
-  call MPI_BCAST(gvec%syms%ntrans, 1, &
-                 MPI_INTEGER, peinf%masterid, peinf%comm, info)
-  call MPI_BCAST(nspin, 1, &
-                 MPI_INTEGER, peinf%masterid, peinf%comm, info)
-  call MPI_BCAST(kpt%lcplx, 1, &
-                 MPI_LOGICAL, peinf%masterid, peinf%comm, info)
+  call MPI_BCAST(kpt%weight, kpt%nk, MPI_DOUBLE_PRECISION, peinf%masterid, MPI_COMM_WORLD, info)
+  call MPI_BCAST(gvec%syms%ntrans, 1, MPI_INTEGER, peinf%masterid, peinf%comm, info)
+  call MPI_BCAST(nspin, 1, MPI_INTEGER, peinf%masterid, peinf%comm, info)
+  call MPI_BCAST(kpt%lcplx, 1, MPI_LOGICAL, peinf%masterid, peinf%comm, info)
 #endif
   !
   ! K-vectors are writen in Cartesian components. Must convert them to units
@@ -256,12 +240,9 @@ subroutine parsec_wfn(gvec, kpt, nmap, nspin, wmap, init_gr)
     read (infile) gvec%syms%chi
   end if
 #ifdef MPI
-  call MPI_BCAST(gvec%shift, 3, &
-                 MPI_DOUBLE_PRECISION, peinf%masterid, peinf%comm, info)
-  call MPI_BCAST(gvec%syms%trans, 9*gvec%syms%ntrans, &
-                 MPI_DOUBLE_PRECISION, peinf%masterid, peinf%comm, info)
-  call MPI_BCAST(gvec%syms%chi, gvec%syms%ntrans*gvec%syms%ntrans, &
-                 MPI_INTEGER, peinf%masterid, peinf%comm, info)
+  call MPI_BCAST(gvec%shift, 3, MPI_DOUBLE_PRECISION, peinf%masterid, peinf%comm, info)
+  call MPI_BCAST(gvec%syms%trans, 9*gvec%syms%ntrans, MPI_DOUBLE_PRECISION, peinf%masterid, peinf%comm, info)
+  call MPI_BCAST(gvec%syms%chi, gvec%syms%ntrans*gvec%syms%ntrans, MPI_INTEGER, peinf%masterid, peinf%comm, info)
 #endif
 
   !-------------------------------------------------------------------
@@ -288,13 +269,10 @@ subroutine parsec_wfn(gvec, kpt, nmap, nspin, wmap, init_gr)
     gvec%rmax = sqrt(gvec%rmax)
   end if
 #ifdef MPI
-  call MPI_BCAST(gvec%rmax, 1, &
-                 MPI_DOUBLE_PRECISION, peinf%masterid, peinf%comm, info)
-  call MPI_BCAST(nwedge, 1, &
-                 MPI_INTEGER, peinf%masterid, peinf%comm, info)
+  call MPI_BCAST(gvec%rmax, 1, MPI_DOUBLE_PRECISION, peinf%masterid, peinf%comm, info)
+  call MPI_BCAST(nwedge, 1, MPI_INTEGER, peinf%masterid, peinf%comm, info)
   if (.not. peinf%master) allocate (gtable(3, nwedge))
-  call MPI_BCAST(gtable, 3*nwedge, &
-                 MPI_INTEGER, peinf%masterid, peinf%comm, info)
+  call MPI_BCAST(gtable, 3*nwedge, MPI_INTEGER, peinf%masterid, peinf%comm, info)
 #endif
 
   !-------------------------------------------------------------------
@@ -316,8 +294,7 @@ subroutine parsec_wfn(gvec, kpt, nmap, nspin, wmap, init_gr)
       allocate (kpt%wfn(isp, ikp)%e0(kpt%wfn(isp, ikp)%nstate))
       read (infile) (kpt%wfn(isp, ikp)%e0(ii), ii=1, kpt%wfn(isp, ikp)%nstate)
       allocate (kpt%wfn(isp, ikp)%e1(kpt%wfn(isp, ikp)%nstate))
-      call read_scissors(peinf%master, isp, kpt%wfn(isp, ikp)%nstate, &
-                         kpt%wfn(isp, ikp)%e0, kpt%wfn(isp, ikp)%e1)
+      call read_scissors(peinf%master, isp, kpt%wfn(isp, ikp)%nstate, kpt%wfn(isp, ikp)%e0, kpt%wfn(isp, ikp)%e1)
       allocate (kpt%wfn(isp, ikp)%occ0(kpt%wfn(isp, ikp)%nstate))
       read (infile) (kpt%wfn(isp, ikp)%occ0(ii), ii=1, kpt%wfn(isp, ikp)%nstate)
     end do
@@ -338,8 +315,7 @@ subroutine parsec_wfn(gvec, kpt, nmap, nspin, wmap, init_gr)
         allocate (kpt%wfn(isp, ikp)%e0(kpt%wfn(isp, ikp)%nstate))
         read (infile) (kpt%wfn(isp, ikp)%e0(ii), ii=1, kpt%wfn(isp, ikp)%nstate)
         allocate (kpt%wfn(isp, ikp)%e1(kpt%wfn(isp, ikp)%nstate))
-        call read_scissors(peinf%master, isp, kpt%wfn(isp, ikp)%nstate, &
-                           kpt%wfn(isp, ikp)%e0, kpt%wfn(isp, ikp)%e1)
+        call read_scissors(peinf%master, isp, kpt%wfn(isp, ikp)%nstate, kpt%wfn(isp, ikp)%e0, kpt%wfn(isp, ikp)%e1)
         allocate (kpt%wfn(isp, ikp)%occ0(kpt%wfn(isp, ikp)%nstate))
         read (infile) (kpt%wfn(isp, ikp)%occ0(ii), ii=1, kpt%wfn(isp, ikp)%nstate)
       end do
@@ -362,8 +338,7 @@ subroutine parsec_wfn(gvec, kpt, nmap, nspin, wmap, init_gr)
 #ifdef MPI
   do ikp = 1, kpt%nk
     do isp = 1, nspin
-      call MPI_BCAST(kpt%wfn(isp, ikp)%nstate, 1, &
-                     MPI_INTEGER, peinf%masterid, peinf%comm, info)
+      call MPI_BCAST(kpt%wfn(isp, ikp)%nstate, 1, MPI_INTEGER, peinf%masterid, peinf%comm, info)
       if (.not. peinf%master) then
         allocate (kpt%wfn(isp, ikp)%irep(kpt%wfn(isp, ikp)%nstate))
         allocate (kpt%wfn(isp, ikp)%e0(kpt%wfn(isp, ikp)%nstate))
@@ -380,8 +355,7 @@ subroutine parsec_wfn(gvec, kpt, nmap, nspin, wmap, init_gr)
                      MPI_DOUBLE_PRECISION, peinf%masterid, peinf%comm, info)
     end do
   end do
-  call MPI_BCAST(rho_in, nwedge*3, &
-                 MPI_DOUBLE_PRECISION, peinf%masterid, peinf%comm, info)
+  call MPI_BCAST(rho_in, nwedge*3, MPI_DOUBLE_PRECISION, peinf%masterid, peinf%comm, info)
 #endif
 
   !-------------------------------------------------------------------
@@ -467,23 +441,18 @@ subroutine parsec_wfn(gvec, kpt, nmap, nspin, wmap, init_gr)
     do ikp = 1, kpt%nk
       do isp = 1, nspin
         if (gvec%per > 0) write (6, '(a,3f13.6)') ' K-point = ', kpt%fk(:, ikp)
-        write (6, *) ' Number of occupied levels, spin ', isp, &
-          ' : ', sum(kpt%wfn(isp, ikp)%occ0)
+        write (6, *) ' Number of occupied levels, spin ', isp, ' : ', sum(kpt%wfn(isp, ikp)%occ0)
 #ifdef DEBUG
         write (6, *) 'DFT Eigenvalues (eV), spin ', isp, ' :'
-        write (6, '(10f7.2)') &
-          (kpt%wfn(isp, ikp)%e0(ii)*ryd, ii=1, kpt%wfn(isp, ikp)%nstate)
+        write (6, '(10f7.2)') (kpt%wfn(isp, ikp)%e0(ii)*ryd, ii=1, kpt%wfn(isp, ikp)%nstate)
         write (6, *) 'Irreducible representations, spin ', isp, ' :'
-        write (6, '(10i5)') &
-          (kpt%wfn(isp, ikp)%irep(ii), ii=1, kpt%wfn(isp, ikp)%nstate)
+        write (6, '(10i5)') (kpt%wfn(isp, ikp)%irep(ii), ii=1, kpt%wfn(isp, ikp)%nstate)
         write (6, *)
 #endif
       end do
     end do
-    write (6, '(2a,e16.8)') ' Maximum value of electron density ', &
-      '(a.u.^-3) = ', maxval(rho_in(:, 1))
-    write (6, '(a,f10.4)') ' Total number of electrons = ', &
-      sum(rho_in(:, 1))*gvec%hcub*real(gvec%syms%ntrans, dp)
+    write (6, '(a,e16.8)') ' Maximum value of electron density (a.u.^-3) = ', maxval(rho_in(:, 1))
+    write (6, '(a,f10.4)') ' Total number of electrons = ', sum(rho_in(:, 1))*gvec%hcub*real(gvec%syms%ntrans, dp)
   end if
 
   !-------------------------------------------------------------------
@@ -539,29 +508,24 @@ subroutine parsec_wfn(gvec, kpt, nmap, nspin, wmap, init_gr)
   if (peinf%master) then
     write (6, '(/,a,/,a,/)') ' Grid data :', ' -----------'
     if (fd%norder > 0) then
-      write (6, '(2a,i3,/)') ' Gradients and Laplacians calculated ', &
-        'with finite differences, order ', fd%norder
+      write (6, '(a,i3,/)') ' Gradients and Laplacians calculated with finite differences, order ', fd%norder
       if (abs(sum(fd%b_lap) - three) > 1.d-6) &
-        write (6, '(2a,g20.10)') 'WARNING! Trace of laplacian ', &
-        'directions is not exactly 3 ! ', sum(fd%b_lap)
+        write (6, '(a,g20.10)') 'WARNING! Trace of laplacian directions is not exactly 3 ! ', sum(fd%b_lap)
       write (6, '(a,i2,/,a)') ' Number of finite difference directions = ', &
         fd%lap_dir_num, ' Finite difference directions:'
-      write (6, '(6(3i6,3x,a,f9.6,/))') ((fd%lap_neig(ii, jj), jj=1, 3), &
-                                         '  weight = ', fd%b_lap(ii), ii=1, fd%lap_dir_num)
+      write (6, '(6(3i6,3x,a,f9.6,/))') &
+        ((fd%lap_neig(ii, jj), jj=1, 3), '  weight = ', fd%b_lap(ii), ii=1, fd%lap_dir_num)
     else
       write (6, '(a,/)') ' Gradients and Laplacians calculated with FFT'
     end if
     if (gvec%per > 0) then
       select case (gvec%per)
       case (1)
-        write (6, '(a,//,a,f16.6)') '  WIRE BOUNDARY CONDITIONS !', &
-          ' Length of periodic cell (a.u.) = ', gvec%celvol
+        write (6, '(a,//,a,f16.6)') '  WIRE BOUNDARY CONDITIONS !', ' Length of periodic cell (a.u.) = ', gvec%celvol
       case (2)
-        write (6, '(a,//,a,f16.6)') '  SLAB BOUNDARY CONDITIONS !', &
-          ' Area of periodic cell (a.u.^2) = ', gvec%celvol
+        write (6, '(a,//,a,f16.6)') '  SLAB BOUNDARY CONDITIONS !', ' Area of periodic cell (a.u.^2) = ', gvec%celvol
       case (3)
-        write (6, '(a,//,a,f16.6)') '  BULK BOUNDARY CONDITIONS !', &
-          ' Volume of periodic cell (a.u.^3) = ', gvec%celvol
+        write (6, '(a,//,a,f16.6)') '  BULK BOUNDARY CONDITIONS !', ' Volume of periodic cell (a.u.^3) = ', gvec%celvol
       end select
       write (6, '(/,a)') ' Unit lattice vectors (a.u.) = '
       do jj = 1, gvec%per
@@ -577,15 +541,12 @@ subroutine parsec_wfn(gvec, kpt, nmap, nspin, wmap, init_gr)
     write (6, '(a,3(/,3f20.10))') ' Reciprocal space metric (a.u.^-2): ', gvec%bdot
     write (6, '(a,g20.8)') ' Numeric volume infinitesimal (a.u.^3): ', gvec%hcub
 !#endif
-    if (gvec%per < 3) write (6, '(/,a,f16.6)') &
-      ' Confining radius (a.u.) = ', gvec%rmax
+    if (gvec%per < 3) write (6, '(/,a,f16.6)') ' Confining radius (a.u.) = ', gvec%rmax
     write (6, '(/,a,3f16.6)') ' Grid spacing (a.u.) = ', gvec%step
     write (6, '(/,a,4i4,/)') ' Real-space FFT grid = ', fft_box%nfft
-    write (6, '(a,f20.10,/)') ' Long-wavelength Coulomb energy (eV) = ', &
-      gvec%long*ryd
+    write (6, '(a,f20.10,/)') ' Long-wavelength Coulomb energy (eV) = ', gvec%long*ryd
     if (fft_box%trunc > zero) then
-      write (6, '(a,f20.10)') ' Coulomb truncation length (a.u.) = ', &
-        fft_box%trunc
+      write (6, '(a,f20.10)') ' Coulomb truncation length (a.u.) = ', fft_box%trunc
     else
       write (6, *) 'No Coulomb truncation'
     end if
@@ -614,8 +575,7 @@ subroutine parsec_wfn(gvec, kpt, nmap, nspin, wmap, init_gr)
           kpt%wfn(isp, ikp)%map(ii) = icount
           if (ii > kpt%wfn(isp, ikp)%nstate) then
             write (lastwords, *) 'ERROR: You requested at least ', ii, &
-              ' states but parsec.dat/wfn.dat contains only ', &
-              kpt%wfn(isp, ikp)%nstate, ' Stop.'
+              ' states but parsec.dat/wfn.dat contains only ', kpt%wfn(isp, ikp)%nstate, ' Stop.'
             call die(lastwords)
           end if
         end do
@@ -660,8 +620,7 @@ subroutine parsec_wfn(gvec, kpt, nmap, nspin, wmap, init_gr)
     end do
   end if
 #ifdef MPI
-  call MPI_BCAST(kpt%rho, gvec%nr*nspin, &
-                 MPI_DOUBLE_PRECISION, peinf%masterid, peinf%comm, info)
+  call MPI_BCAST(kpt%rho, gvec%nr*nspin, MPI_DOUBLE_PRECISION, peinf%masterid, peinf%comm, info)
 #endif
   deallocate (rho_in)
 
@@ -705,11 +664,12 @@ subroutine parsec_wfn(gvec, kpt, nmap, nspin, wmap, init_gr)
     do ikp = 1, kpt%nk
       if (peinf%master) then
 #ifdef DEBUG
-        write (6, '(A,i2,A,i4)') " Reading wfn with spin ", isp, " at kpt ", ikp
+        write (*, '(/,4(A,i0))') " Reading wfn with isp: ", isp, "/", nspin, "   ik: ", ikp, "/", kpt%nk
+        write (*, '(A)') "    ib    norm"
 #endif
         allocate (map_found(kpt%wfn(isp, ikp)%nmem))
         map_found = 0
-        if (readwfn) then
+        if (readwfn) then  ! wfn.dat
           if (isp == 2) then
             do ii = 1, 6
               read (infile)
@@ -720,14 +680,13 @@ subroutine parsec_wfn(gvec, kpt, nmap, nspin, wmap, init_gr)
           do ii = 1, nn
             iord(ii) = ii
           end do
-        else
+        else  ! parsec.dat
           do ii = 1, 7
             read (infile)
           end do
           read (infile) nn
           if (nn == 0) then
-            write (lastwords, *) &
-              ' ERROR: parsec.dat contains no wavefunctions ! ', jj
+            write (lastwords, *) ' ERROR: parsec.dat contains no wavefunctions ! ', jj
             call die(lastwords)
           end if
           allocate (iord(nn))
@@ -768,35 +727,30 @@ subroutine parsec_wfn(gvec, kpt, nmap, nspin, wmap, init_gr)
             norm = dot_product(dwfn, dwfn)*real(gvec%syms%ntrans, dp)
           end if
 #ifdef DEBUG
-          write (6, '(a,3i8,g14.5)') ' wfn ', &
-            isp, iord(ii), gvec%nr, norm
+          write (*, '(I6,F10.6)') iord(ii), norm
 #endif
-          if (abs(norm - one) > 1.d-6) write (6, *) &
-            ' WARNING: The wavefuctions are not normalized ', &
-            iord(ii), gvec%nr, norm, isp
+          if (abs(norm - one) > 1.d-6) then
+            write (6, *) ' WARNING: The wavefuctions are not normalized ', iord(ii), gvec%nr, norm, isp
+          end if
         end if
         icount = icount + 1
         if (kpt%lcplx) then
 #ifdef MPI
-          call MPI_BCAST(zwfn, gvec%nr, &
-                         MPI_DOUBLE_COMPLEX, peinf%masterid, peinf%comm, info)
+          call MPI_BCAST(zwfn, gvec%nr, MPI_DOUBLE_COMPLEX, peinf%masterid, peinf%comm, info)
 #endif
           call zcopy(w_grp%mydim, zwfn(w_grp%offset + 1), 1, kpt%wfn(isp, ikp)%zwf(1, icount), 1)
         else
 #ifdef MPI
-          call MPI_BCAST(dwfn, gvec%nr, &
-                         MPI_DOUBLE_PRECISION, peinf%masterid, peinf%comm, info)
+          call MPI_BCAST(dwfn, gvec%nr, MPI_DOUBLE_PRECISION, peinf%masterid, peinf%comm, info)
 #endif
           call dcopy(w_grp%mydim, dwfn(w_grp%offset + 1), 1, kpt%wfn(isp, ikp)%dwf(1, icount), 1)
         end if
-      end do                     !ii (loop on states)
+      end do  ! ii (loop on states)
       if (peinf%master) then
         if (kpt%lcplx) then
-          write (6, '(/,a,i10,2(a,i4))') ' Read wavefunctions for ', &
-            icount, ' levels, spin ', isp, ' k-point ', ikp
+          write (6, '(/,a,i10,2(a,i4))') ' Read wavefunctions for ', icount, ' levels, spin ', isp, ' k-point ', ikp
         else
-          write (6, '(/,a,i10,a,i4)') ' Read wavefunctions for ', &
-            icount, ' levels, spin ', isp
+          write (6, '(/,a,i10,a,i4)') ' Read wavefunctions for ', icount, ' levels, spin ', isp
         end if
         do ii = 1, kpt%wfn(isp, ikp)%nstate
           if (kpt%wfn(isp, ikp)%map(ii) /= 0) then

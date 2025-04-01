@@ -15,7 +15,8 @@
 MACH ?= ubuntu_intel
 
 # Version date: must have exactly 28 characters!
-VERSIONDATE = "Wed Aug 23 17:07:49 EST 2023"
+GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_DATE := $(shell git log -1 --pretty=format:"%ci" 2>/dev/null || date +'%Y-%m-%d %H:%M:%S %z')
 
 #####################
 # Typically, no changes are needed beyond this point
@@ -37,7 +38,7 @@ default:
 	@echo " make tdlda     - code for calculation of TDLDA excited states"
 	@echo " make sigma     - code for self-energy in GW approximation"
 	@echo " make bsesolv   - code for solution of Bethe-Salpeter equation"
-	@echo " make w_blip  - code for BLIP interpolation" 
+	@echo " make w_blip    - code for BLIP interpolation" 
 	@echo " make util      - compile pre-processing and post-processing tools"
 	@echo " make all       - tdlda+sigma+bsesolv+w_blip+util"
 	@echo " make clean     - delete all generated files"
@@ -55,31 +56,43 @@ all: tdlda sigma bsesolv w_blip util
 
 tdlda: create_tmp
 	@ cd tmp_$(MACH) ; \
-	/bin/rm -f mach_tmp ; echo "MACH  = " $(MACH) > mach_tmp ; \
-	echo "VERSIONDATE = " $(VERSIONDATE)  >> mach_tmp ; \
-	/bin/rm -f Makefile ; cat ../$(MACH_CONF) mach_tmp \
-	../TDLDA/Makefile > makefile ; $(MAKE) -f makefile
+	/bin/rm -f mach_tmp ; \
+	echo "MACH  = " $(MACH) > mach_tmp ; \
+	echo "GIT_COMMIT = " $(GIT_COMMIT) >> mach_tmp ; \
+	echo "BUILD_DATE = " $(BUILD_DATE)  >> mach_tmp ; \
+	/bin/rm -f Makefile ; \
+	cat ../$(MACH_CONF) mach_tmp ../TDLDA/Makefile > makefile ; \
+	$(MAKE) -f makefile
 
 sigma: create_tmp
 	@ cd tmp_$(MACH) ; \
-	/bin/rm -f mach_tmp ; echo "MACH  = " $(MACH) > mach_tmp ; \
-	echo "VERSIONDATE = " $(VERSIONDATE) >> mach_tmp ; \
-	/bin/rm -f Makefile ; cat ../$(MACH_CONF) mach_tmp \
-	../SIGMA/Makefile > makefile ; $(MAKE) -f makefile
+	/bin/rm -f mach_tmp ; \
+	echo "MACH  = " $(MACH) > mach_tmp ; \
+	echo "GIT_COMMIT = " $(GIT_COMMIT) >> mach_tmp ; \
+	echo "BUILD_DATE = " $(BUILD_DATE) >> mach_tmp ; \
+	/bin/rm -f Makefile ; \
+	cat ../$(MACH_CONF) mach_tmp ../SIGMA/Makefile > makefile ; \
+	$(MAKE) -f makefile
 
 bsesolv: create_tmp
 	@ cd tmp_$(MACH) ; \
-	/bin/rm -f mach_tmp ; echo "MACH  = " $(MACH) > mach_tmp ; \
-	echo "VERSIONDATE = " $(VERSIONDATE) >> mach_tmp ; \
-	/bin/rm -f Makefile ; cat ../$(MACH_CONF) mach_tmp \
-	../BSE/Makefile > makefile ; $(MAKE) -f makefile
+	/bin/rm -f mach_tmp ; \
+	echo "MACH  = " $(MACH) > mach_tmp ; \
+	echo "GIT_COMMIT = " $(GIT_COMMIT) >> mach_tmp ; \
+	echo "BUILD_DATE = " $(BUILD_DATE) >> mach_tmp ; \
+	/bin/rm -f Makefile ; \
+	cat ../$(MACH_CONF) mach_tmp ../BSE/Makefile > makefile ; \
+	$(MAKE) -f makefile
 
 w_blip: create_tmp
 	@ cd tmp_$(MACH) ; \
-	/bin/rm -f mach_tmp ; echo "MACH  = " $(MACH) > mach_tmp ; \
-	echo "VERSIONDATE = " $(VERSIONDATE) >> mach_tmp ; \
-	/bin/rm -f Makefile ; cat ../$(MACH_CONF) mach_tmp \
-	../W_BLIP/Makefile > makefile ; $(MAKE) -f makefile
+	/bin/rm -f mach_tmp ; \
+	echo "MACH  = " $(MACH) > mach_tmp ; \
+	echo "GIT_COMMIT = " $(GIT_COMMIT) >> mach_tmp ; \
+	echo "BUILD_DATE = " $(BUILD_DATE) >> mach_tmp ; \
+	/bin/rm -f Makefile ; \
+	cat ../$(MACH_CONF) mach_tmp ../W_BLIP/Makefile > makefile ; \
+	$(MAKE) -f makefile
 
 util: $(UTILS)
 
@@ -101,3 +114,7 @@ allclean: clean
 
 cleanall: allclean
 
+print-vars:
+	@echo "GIT_COMMIT = $(GIT_COMMIT)"
+	@echo "BUILD_DATE = $(BUILD_DATE)"
+	@echo "MACH = $(MACH)" 

@@ -15,16 +15,22 @@ subroutine get_date(datelabel)
   integer :: values(8)
   character(len=26), intent(out) :: datelabel
 
-  ! local variables
-  character(len=3) :: month(12) = (/'Jan', 'Feb', 'Mar', 'Apr', 'May', &
-                                    'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'/)
+  integer :: tz_hours, tz_minutes
+  character(len=1) :: tz_sign
 
   call date_and_time(VALUES=values)
 
-  write (datelabel, '(i4,1x,a,1x,i2,1x,i2,a,i2,a,i2,1x,i5)') &
-    values(1), month(values(2)), values(3), &
-    values(5), ':', values(6), ':', values(7), values(4)
+  ! time zone information
+  if (values(4) >= 0) then
+    tz_sign = "+"
+  else
+    tz_sign = "-"
+  end if
+  tz_hours = abs(values(4)) / 60
+  tz_minutes = mod(abs(values(4)), 60)
 
-  return
+  write(datelabel, '(I4.4,"-",I2.2,"-",I2.2," ",I2.2,":",I2.2,":",I2.2,1X,A,I2.2,I2.2)') &
+    values(1), values(2), values(3), values(5), values(6), values(7), tz_sign, tz_hours, tz_minutes
+
 end subroutine get_date
 !===================================================================
