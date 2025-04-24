@@ -102,8 +102,8 @@ subroutine matvec_isdf_BLOCK(vec, Hvec, ncv_loc, isdf_in, wfn, cvpair, ncv, sqrt
       iv = cvpair(1, w_grp%ncv_start(ipe) + icv - 1)
       ic = cvpair(2, w_grp%ncv_start(ipe) + icv - 1)
       tmp_Cmtrx(1:w_grp%myn_intp_r, icv) = &
-        isdf_in%Psi_intp_loc(1:w_grp%myn_intp_r, ic, 1, 1)* &
-        isdf_in%Psi_intp_loc(1:w_grp%myn_intp_r, iv, 1, 1)
+        isdf_in%dPsi_intp_loc(1:w_grp%myn_intp_r, ic, 1, 1)* &
+        isdf_in%dPsi_intp_loc(1:w_grp%myn_intp_r, iv, 1, 1)
     end do ! icv
     call timacc(70, 2, tsec)
     call timacc(71, 1, tsec)
@@ -137,7 +137,7 @@ subroutine matvec_isdf_BLOCK(vec, Hvec, ncv_loc, isdf_in, wfn, cvpair, ncv, sqrt
   call timacc(73, 1, tsec)
   !if (w_grp%master) print *, "breakpoint 3"
   call dgemm('N', 'N', w_grp%myn_intp_r, blksz, isdf_in%n_intp_r, 1.d0, &
-             isdf_in%Mmtrx_loc(1, 1, 1, 1, 1, 1, 1), &
+             isdf_in%dMmtrx_loc(1, 1, 1, 1, 1, 1, 1), &
              w_grp%myn_intp_r, tmp_vec, isdf_in%n_intp_r, 0.d0, &
              MC_vec, w_grp%myn_intp_r)
   call timacc(73, 2, tsec)
@@ -173,8 +173,8 @@ subroutine matvec_isdf_BLOCK(vec, Hvec, ncv_loc, isdf_in, wfn, cvpair, ncv, sqrt
       iv = cvpair(1, w_grp%ncv_start(ipe) + icv - 1)
       ic = cvpair(2, w_grp%ncv_start(ipe) + icv - 1)
       tmp_Cmtrx(1:w_grp%myn_intp_r, icv) = &
-        isdf_in%Psi_intp_loc(1:w_grp%myn_intp_r, ic, 1, 1)* &
-        isdf_in%Psi_intp_loc(1:w_grp%myn_intp_r, iv, 1, 1)
+        isdf_in%dPsi_intp_loc(1:w_grp%myn_intp_r, ic, 1, 1)* &
+        isdf_in%dPsi_intp_loc(1:w_grp%myn_intp_r, iv, 1, 1)
     end do ! icv
     call timacc(75, 2, tsec)
     call timacc(76, 1, tsec)

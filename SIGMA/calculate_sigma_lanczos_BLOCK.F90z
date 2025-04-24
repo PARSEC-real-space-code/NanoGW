@@ -286,8 +286,8 @@ subroutine Zcalculate_sigma_lanczos_BLOCK(nspin, nkpt, &
           tmp_Cvec = 0.d0
           do kk = 1, blksz
             tmp_Cvec(myn_intp_start:myn_intp_end, kk) = &
-              isdf_in%Psi_intp_loc(1:myn_intp_r, m1, 1, 1)* &
-              isdf_in%Psi_intp_loc(1:myn_intp_r, jn + kk - 1, 1, 1)
+              isdf_in%ZPsi_intp_loc(1:myn_intp_r, m1, 1, 1)* &
+              isdf_in%ZPsi_intp_loc(1:myn_intp_r, jn + kk - 1, 1, 1)
           end do
           if (w_grp%npes > 1) then
             call mpi_allreduce(MPI_IN_PLACE, tmp_Cvec, isdf_in%n_intp_r*blksz, &
@@ -299,10 +299,10 @@ subroutine Zcalculate_sigma_lanczos_BLOCK(nspin, nkpt, &
           ! or
           ! = Mmtrx(intp_start:intp_end, 1:n_intp_r) @ tmp_Cvec(n_intp_r)
           !call dgemv( 'N', myn_intp_r, isdf_in%n_intp_r, 1.d0, &
-          !  isdf_in%Mmtrx_loc(1, 1, 1, 1, 1, 1, 1), myn_intp_r, &
+          !  isdf_in%ZMmtrx_loc(1, 1, 1, 1, 1, 1, 1), myn_intp_r, &
           !  tmp_Cvec, 1, 0.d0, tmp_CvecM, 1 )
-          call dgemm('N', 'N', myn_intp_r, blksz, isdf_in%n_intp_r, 1.d0, &
-                     isdf_in%Mmtrx_loc(1, 1, 1, 1, 1, 1, 1), myn_intp_r, &
+          call Zgemm('N', 'N', myn_intp_r, blksz, isdf_in%n_intp_r, 1.d0, &
+                     isdf_in%ZMmtrx_loc(1, 1, 1, 1, 1, 1, 1), myn_intp_r, &
                      tmp_Cvec, isdf_in%n_intp_r, 0.d0, tmp_CvecM, myn_intp_r)
          !!tmp_Cvec = 0.d0
          !!tmp_Cvec(myn_intp_start:myn_intp_end) = tmp_CvecM(1:myn_intp_r)
@@ -319,8 +319,8 @@ subroutine Zcalculate_sigma_lanczos_BLOCK(nspin, nkpt, &
               ic = k_p(1, 1)%col(1, ij)
               iv = k_p(1, 1)%col(2, ij)
               Cmtrx_bl(ij - w_grp%ncv_start(ipe) + 1, 1:myn_intp_r) = &
-                isdf_in%Psi_intp_loc(1:myn_intp_r, ic, 1, 1)* &
-                isdf_in%Psi_intp_loc(1:myn_intp_r, iv, 1, 1)
+                isdf_in%ZPsi_intp_loc(1:myn_intp_r, ic, 1, 1)* &
+                isdf_in%ZPsi_intp_loc(1:myn_intp_r, iv, 1, 1)
             end do ! ij
             this_ncv = w_grp%ncv_end(ipe) - w_grp%ncv_start(ipe) + 1
             call dgemm('n', 'n', this_ncv, blksz, myn_intp_r, 1.d0, &
@@ -328,7 +328,7 @@ subroutine Zcalculate_sigma_lanczos_BLOCK(nspin, nkpt, &
                        tmp_Pvec, ldncv)
             !print *, iv, ic
             !print *, tmp_Cvec(1:5)
-            !print *, isdf_in%Psi_intp_loc(1, ic, 1, 1)
+            !print *, isdf_in%ZPsi_intp_loc(1, ic, 1, 1)
             !print *, "iband", jn, tmp_Pvec(1:5)
             if (w_grp%npes > 1) then
               if (w_grp%inode == ipe) then

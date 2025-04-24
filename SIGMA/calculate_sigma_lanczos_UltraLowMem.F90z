@@ -232,8 +232,8 @@ subroutine Zcalculate_sigma_lanczos_UltraLowMem(nspin, nkpt, &
           call stopwatch(peinf%master, "prepare Pvec ")
           tmp_Cvec = 0.d0
           tmp_Cvec(myn_intp_start:myn_intp_end) = &
-            isdf_in%Psi_intp_loc(1:myn_intp_r, m1, 1, 1)* &
-            isdf_in%Psi_intp_loc(1:myn_intp_r, jn, 1, 1)
+            isdf_in%ZPsi_intp_loc(1:myn_intp_r, m1, 1, 1)* &
+            isdf_in%ZPsi_intp_loc(1:myn_intp_r, jn, 1, 1)
           if (w_grp%npes > 1) then
             call mpi_allreduce(MPI_IN_PLACE, tmp_Cvec, isdf_in%n_intp_r, &
                                MPI_DOUBLE, MPI_SUM, w_grp%comm, info)
@@ -243,8 +243,8 @@ subroutine Zcalculate_sigma_lanczos_UltraLowMem(nspin, nkpt, &
           ! = tmp_Cvec(1, n_intp_r) @ Mmtrx(1:n_intp_r, intp_start:intp_end)
           ! or
           ! = Mmtrx(intp_start:intp_end, 1:n_intp_r) @ tmp_Cvec(n_intp_r)
-          call dgemv('N', myn_intp_r, isdf_in%n_intp_r, 1.d0, &
-                     isdf_in%Mmtrx_loc(1, 1, 1, 1, 1, 1, 1), myn_intp_r, &
+          call Zgemv('N', myn_intp_r, isdf_in%n_intp_r, 1.d0, &
+                     isdf_in%ZMmtrx_loc(1, 1, 1, 1, 1, 1, 1), myn_intp_r, &
                      tmp_Cvec, 1, 0.d0, tmp_CvecM, 1)
          !!tmp_Cvec = 0.d0
          !!tmp_Cvec(myn_intp_start:myn_intp_end) = tmp_CvecM(1:myn_intp_r)
@@ -261,13 +261,13 @@ subroutine Zcalculate_sigma_lanczos_UltraLowMem(nspin, nkpt, &
               ic = k_p(1, 1)%col(1, ij)
               iv = k_p(1, 1)%col(2, ij)
               tmp_Cvec(1:myn_intp_r) = tmp_CvecM(1:myn_intp_r)* &
-                                       isdf_in%Psi_intp_loc(1:myn_intp_r, iv, 1, 1)
+                                       isdf_in%ZPsi_intp_loc(1:myn_intp_r, iv, 1, 1)
               tmp_Pvec(ij - w_grp%ncv_start(ipe) + 1) = &
-                ddot(myn_intp_r, isdf_in%Psi_intp_loc(1, ic, 1, 1), 1, tmp_Cvec(1), 1)
+                ddot(myn_intp_r, isdf_in%ZPsi_intp_loc(1, ic, 1, 1), 1, tmp_Cvec(1), 1)
             end do ! ij
             !print *, iv, ic
             !print *, tmp_Cvec(1:5)
-            !print *, isdf_in%Psi_intp_loc(1, ic, 1, 1)
+            !print *, isdf_in%ZPsi_intp_loc(1, ic, 1, 1)
             !if ( w_grp%master) print *, "iband", jn, tmp_Pvec(1:5)
             if (w_grp%npes > 1) then
               call MPI_REDUCE(tmp_Pvec(1), Pvec(1), w_grp%ncv_end(ipe) - w_grp%ncv_start(ipe) + 1, &

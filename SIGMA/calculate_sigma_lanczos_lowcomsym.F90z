@@ -51,16 +51,14 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
   ! quasi-particle data
   type(qpinfo), dimension(gvec%syms%ntrans, nspin, nkpt), intent(inout) :: q_p
 
-  logical, intent(in) :: &
-    nolda, &    ! true if LDA kernel is not used
-    tamm_d, &   ! true if Tamm-Dancof approximation is used
-    writeqp, &  ! true if QP wavefunctions are printed in file parsec_qp.dat
-    snorm, &    ! true if sum rule is renormalized
-    cohsex      ! true if self-energy is computed within the COHSEX approximation
+  logical, intent(in) :: nolda, &    ! true if LDA kernel is not used
+                         tamm_d, &   ! true if Tamm-Dancof approximation is used
+                         writeqp, &  ! true if QP wavefunctions are printed in file parsec_qp.dat
+                         snorm, &    ! true if sum rule is renormalized
+                         cohsex      ! true if self-energy is computed within the COHSEX approximation
 
-  real(dp), intent(in) :: &
-    ecuts, &    ! resolution in energy denominators, in Ry
-    sig_cut     ! cut-off in self-energy corrections
+  real(dp), intent(in) :: ecuts, &  ! resolution in energy denominators, in Ry
+                          sig_cut   ! cut-off in self-energy corrections
   ! maximum amplitude of self-energy correction
   real(dp), intent(out) :: max_sig
   ! Additional input parameters for ISDF method
@@ -72,14 +70,14 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
 
   logical :: staticcorr
   integer :: ii, jj, irp, iq, ik, jk, isp, isig, info, neig_qp, ien, ic, iv, icv, jn, m1, inode, &
-             myn_intp_start, myn_intp_end, myn_intp_r, npoly, ncond, nval, nbnd, jnblock
+             myn_intp_start, myn_intp_end, myn_intp_r, npoly, ncond, nval, nbnd, jnblock, ncplx
   real(dp) :: tsec(2), rtmp, deltae, emin, emax, en0
-  real(dp), allocatable :: polynomial(:), Pvec(:, :), tmp_Cmtrx(:, :), tmp_CvecM(:, :), tmp_poly(:), sqrtR(:), &
-                           tmp_Cvec(:, :), tmparray(:, :)
+  real(dp), allocatable :: polynomial(:), tmp_poly(:), sqrtR(:)
+  SCALAR, allocatable :: Pvec(:, :), tmp_Cvec(:, :), tmp_CvecM(:, :), tmp_Cmtrx(:, :), tmparray(:, :)
   integer, allocatable :: iord(:) !, cvpair(:,:)
   integer, parameter :: it_scf = 0
   real(dp), parameter :: qpmix = 1.d0
-  complex(dp), allocatable :: zz(:), ezz(:, :), sigma_corr(:), sigma_corr_tmp(:, :)
+  complex(dpc), allocatable :: zz(:), ezz(:, :), sigma_corr(:), sigma_corr_tmp(:, :)
 
   ! -------- temporary arrays for lanczos iterations --------
   integer :: irep, kk, blksz, iblk, cvstart, jc, jv, jvrep, jcrep, istart, ivstart, icstart, ln, lnval, m1_rep, &
@@ -95,7 +93,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
   !   tmp_vec(:,:)
   ! ---------------------------------------------------------
 #ifndef _CUDA
-  real(dp), external :: ddot
+  SCALAR, external :: Zdot_c
 #endif
 
 #ifdef DCU
@@ -142,8 +140,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
     call die(" GW lanczos is only implemented for 1 peinf group.")
   end if
   if (peinf%master) then
-    print *, " lanczos niter = ", opt%lanczos_niter, " polynomial degree = ", &
-      opt%lanczos_npoly
+    print *, " lanczos niter = ", opt%lanczos_niter, " polynomial degree = ", opt%lanczos_npoly
   end if
   jnblock = opt%jnblock
   if (peinf%master) print *, " jnblock = ", jnblock
@@ -236,7 +233,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
     allocate (zz(sig_in%nen))
     allocate (ezz(sig_in%nen + 1, jnblock))
 
-    ! if TDA, we do not need to take sqrt for eig, so no npoly
+    ! if TDA, we do not need to take sqrt for eig, so no polynomial fitting
     nval = sum(kpt%wfn(1, 1)%occ0) ! only works for systems with a gap
     ncond = kpt%wfn(1, 1)%nmem - nval
     if (tamm_d) then
@@ -274,7 +271,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
     call MPI_BCAST(polynomial, npoly + 1, MPI_DOUBLE, peinf%masterid, peinf%comm, ii)
 
     ! redistribute
-    if (peinf%master) print *, "Redistribute Psi_intp_loc to PsiV_intp_bl and PsiC_intp_bl"
+    if (peinf%master) print *, "Redistribute ZPsi_intp_loc to ZPsiV_intp_bl and ZPsiC_intp_bl"
     call Zredistribute_Psi_loc(isdf_in, nval, ncond)
 
     !-------------------------------------------------------------------
@@ -293,14 +290,6 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
     !  k_p(1,1)%col(1:2, mycv_start:mycv_end)
     ! local number of interpolation points
     ! prepare indices for symmetry representations
-    if (peinf%master) then
-      write (*, "(A, F0.2, A)") "  tmp_lrep: ", 1.d0 * kpt%wfn(1, 1)%nmem * gvec%syms%ntrans / 2**17, " MB"
-      write (*, "(A, F0.2, A)") "  tmp_lvrep: ", 1.d0 * isdf_in%mynv * gvec%syms%ntrans / 2**17, " MB"
-      write (*, "(A, F0.2, A)") "  tmp_lcrep: ", 1.d0 * isdf_in%mync * gvec%syms%ntrans / 2**17, " MB"
-      write (*, "(A, F0.2, A)") "  isdf_in%lrep: ", 1.d0 * kpt%wfn(1, 1)%nmem / 2**17, " MB"
-      write (*, "(A, F0.2, A)") "  isdf_in%lvrep: ", 1.d0 * isdf_in%mynv / 2**17, " MB"
-      write (*, "(A, F0.2, A)") "  isdf_in%lcrep: ", 1.d0 * isdf_in%mync / 2**17, " MB"
-    end if
     allocate (tmp_lrep(kpt%wfn(1, 1)%nmem, gvec%syms%ntrans))
     allocate (tmp_lvrep(isdf_in%mynv, gvec%syms%ntrans))
     allocate (tmp_lcrep(isdf_in%mync, gvec%syms%ntrans))
@@ -353,11 +342,11 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
     end do ! ibnd
 
     ! isdf_in%lrep ( lrep_bound(1,irp):lrep_bound(2,irp) ): 
-    !   the band index for representation irp, Psi_intp_loc(myn_intp_r, nmem)
+    !   the band index for representation irp, ZPsi_intp_loc(myn_intp_r, nmem)
     ! isdf_in%lvrep( lvrep_bound(1,irp):lvrep_bound(2,irp) ): 
-    !   the index of states of representation irp, stored in PsiV_intp_bl(n_intp_r, mynv)
+    !   the index of states of representation irp, stored in ZPsiV_intp_bl(n_intp_r, mynv)
     ! isdf_in%lcrep( lcrep_bound(1,irp):lvrep_bound(2,irp) ): 
-    !   the index of states of representation irp, PsiC_intp_bl(n_intp_r, mync)
+    !   the index of states of representation irp, ZPsiC_intp_bl(n_intp_r, mync)
     do irp = 1, gvec%syms%ntrans
       if (irp == 1) then
         istart = 0
@@ -390,6 +379,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
     deallocate (tmp_lrep)
     deallocate (tmp_lvrep)
     deallocate (tmp_lcrep)
+
     allocate (isdf_in%myncv_sym(gvec%syms%ntrans))
     allocate (isdf_in%mync_sym(gvec%syms%ntrans))
     allocate (isdf_in%mynv_sym(gvec%syms%ntrans))
@@ -400,8 +390,8 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
       isdf_in%mync_sym(irep) = isdf_in%lcrep_bound(irep, 2) - isdf_in%lcrep_bound(irep, 1) + 1
       isdf_in%mynv_sym(irep) = isdf_in%lvrep_bound(irep, 2) - isdf_in%lvrep_bound(irep, 1) + 1
     end do ! irep
-    do irep = 1, gvec%syms%ntrans
 
+    do irep = 1, gvec%syms%ntrans
       do lrp1 = 1, gvec%syms%ntrans
         do lrp2 = 1, gvec%syms%ntrans
           if (gvec%syms%prod(lrp1, lrp2) == irep) exit
@@ -455,8 +445,8 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
 #endif
 
 #ifdef DCU
-    call hipCheck(hipMalloc(d_PsiV, sizeof(isdf_in%PsiV_intp_bl)))
-    call hipCheck(hipMalloc(d_PsiC, sizeof(isdf_in%PsiC_intp_bl)))
+    call hipCheck(hipMalloc(d_PsiV, sizeof(isdf_in%ZPsiV_intp_bl)))
+    call hipCheck(hipMalloc(d_PsiC, sizeof(isdf_in%ZPsiC_intp_bl)))
     call hipCheck(hipMalloc(d_Cmtrx, sizeof(tmp_Cmtrx)))
     call hipCheck(hipMalloc(d_cvec, sizeof(tmp_Cvec))) ! n_intp_r, jnblock
     call hipCheck(hipMalloc(d_pvec, sizeof(tmparray))) ! mync, jnblock
@@ -466,8 +456,8 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
     call hipCheck(hipMemcpy(d_PsiC, c_loc(isdf_in%PsiC_intp_bl), sizeof(isdf_in%PsiC_intp_bl), hipMemcpyHostToDevice))
     call hipCheck(hipMemcpy(d_lcrep, c_loc(isdf_in%lcrep), sizeof(isdf_in%lcrep), hipMemcpyHostToDevice))
 #elif defined _CUDA
-    allocate (d_PsiV, source=isdf_in%PsiV_intp_bl(:, :, 1, 1))
-    allocate (d_PsiC, source=isdf_in%PsiC_intp_bl(:, :, 1, 1))
+    allocate (d_PsiV, source=isdf_in%ZPsiV_intp_bl(:, :, 1, 1))
+    allocate (d_PsiC, source=isdf_in%ZPsiC_intp_bl(:, :, 1, 1))
     allocate (d_lcrep, source=isdf_in%lcrep)
     allocate (d_Cmtrx(isdf_in%maxmync_sym*vstep, isdf_in%n_intp_r))
     allocate (d_cvec(isdf_in%n_intp_r, jnblock))
@@ -575,15 +565,15 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
               jn = blks(iblk, 1, irep) + isdf_in%lrep_bound(irep, 1) - 1
               blksz = blks(iblk, 2, irep) - blks(iblk, 1, irep) + 1
               call stopwatch(peinf%master, " Initializing Pvec")
-              tmp_Cvec = 0.d0
+              tmp_Cvec = Zzero
               do kk = 1, blksz
                 jk = isdf_in%lrep(jn + kk - 1)
-                tmp_Cvec(myn_intp_start:myn_intp_end, kk) = &
-                  isdf_in%Psi_intp_loc(1:myn_intp_r, m1, 1, 1)* &
-                  isdf_in%Psi_intp_loc(1:myn_intp_r, jk, 1, 1)
+                tmp_Cvec(myn_intp_start:myn_intp_end, kk) = isdf_in%ZPsi_intp_loc(1:myn_intp_r, m1, 1, 1)* &
+                                                            isdf_in%ZPsi_intp_loc(1:myn_intp_r, jk, 1, 1)
               end do ! kk
               !if (w_grp%npes .gt. 1) then
-              call MPI_ALLREDUCE(MPI_IN_PLACE, tmp_Cvec, isdf_in%n_intp_r*blksz, MPI_DOUBLE, MPI_SUM, peinf%comm, info)
+              call MPI_ALLREDUCE(MPI_IN_PLACE, tmp_Cvec, isdf_in%n_intp_r*blksz, MPI_DOUBLE_SCALAR, MPI_SUM, &
+                                 peinf%comm, info)
               !endif
               !if (w_grp%master) print *, "tmp_Cvec", tmp_Cvec(1:10, 1), "nmrep", nmrep
               ! Compute tmp_CvecM(1:n_intp_loc)
@@ -593,18 +583,19 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
               !call dgemv( 'N', myn_intp_r, isdf_in%n_intp_r, 1.d0, &
               !  isdf_in%Mmtrx_loc(1, 1, 1, 1, 1, 1, 1), myn_intp_r, &
               !  tmp_Cvec, 1, 0.d0, tmp_CvecM, 1 )
-              call dgemm('N', 'N', myn_intp_r, blksz, isdf_in%n_intp_r, 1.d0, &
-                         isdf_in%Mmtrx_loc(1, 1, 1, 1, 1, 1, nmrep), myn_intp_r, tmp_Cvec, &
-                         isdf_in%n_intp_r, 0.d0, tmp_CvecM, myn_intp_r)
-              tmp_Cvec = 0.d0
+              call Zgemm('N', 'N', myn_intp_r, blksz, isdf_in%n_intp_r, Zone, &
+                         isdf_in%ZMmtrx_loc(1, 1, 1, 1, 1, 1, nmrep), myn_intp_r, tmp_Cvec, isdf_in%n_intp_r, Zzero, &
+                         tmp_CvecM, myn_intp_r)
+              tmp_Cvec = Zzero
               tmp_Cvec(myn_intp_start:myn_intp_end, 1:blksz) = tmp_CvecM(1:myn_intp_r, 1:blksz)
-              call MPI_ALLREDUCE(MPI_IN_PLACE, tmp_Cvec, isdf_in%n_intp_r*blksz, MPI_DOUBLE, MPI_SUM, peinf%comm, info)
+              call MPI_ALLREDUCE(MPI_IN_PLACE, tmp_Cvec, isdf_in%n_intp_r*blksz, MPI_DOUBLE_SCALAR, MPI_SUM, &
+                                 peinf%comm, info)
               !if (peinf%master) print *, "  tmp_CvecM(:, 1) ", tmp_Cvec(1:10, 1)
               !if (peinf%master) print *, "  tmp_CvecM(:, 1) ", tmp_Cvec(1:10, 2)
               ! Pvec stores the icv_start to icv_end elements of the global_Pvec
               ! compute Pvec(1:ncv_loc) = tmp_Cvec(1:isdf_in%n_intp_r)*tmp_Cmtrx(1:isdf_in%n_intp_r, 1:ncv_loc)
-              Pvec = 0.d0 ! initialize Pvec with zeros
-              ! call dgemv('T', isdf_in%n_intp_r, ncv_loc, 1.d0, tmp_Cmtrx, isdf_in%n_intp_r, tmp_Cvec, 1, 0.d0, Pvec, 1)
+              Pvec = Zzero ! initialize Pvec with zeros
+              ! call Zgemv('T', isdf_in%n_intp_r, ncv_loc, 1.d0, tmp_Cmtrx, isdf_in%n_intp_r, tmp_Cvec, 1, 0.d0, Pvec, 1)
               cvstart = 0
 #ifdef _CUDA
               v_incr = 0
@@ -664,11 +655,11 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
                   do ic = isdf_in%lcrep_bound(jcrep, 1), isdf_in%lcrep_bound(jcrep, 2)
                     jc = isdf_in%lcrep(ic)
                     tmp_Cmtrx(ic - isdf_in%lcrep_bound(jcrep, 1) + 1, 1:isdf_in%n_intp_r) = &
-                      isdf_in%PsiC_intp_bl(1:isdf_in%n_intp_r, jc, 1, 1)* &
-                      isdf_in%PsiV_intp_bl(1:isdf_in%n_intp_r, jv, 1, 1)
+                      isdf_in%ZPsiC_intp_bl(1:isdf_in%n_intp_r, jc, 1, 1)* &
+                      isdf_in%ZPsiV_intp_bl(1:isdf_in%n_intp_r, jv, 1, 1)
                   end do ! ic loop
-                  call dgemm('N', 'N', isdf_in%mync_sym(jcrep), blksz, isdf_in%n_intp_r, 1.d0, tmp_Cmtrx, &
-                             isdf_in%maxmync_sym, tmp_Cvec, isdf_in%n_intp_r, 0.d0, tmparray, isdf_in%maxmync_sym)
+                  call Zgemm('N', 'N', isdf_in%mync_sym(jcrep), blksz, isdf_in%n_intp_r, Zone, tmp_Cmtrx, &
+                             isdf_in%maxmync_sym, tmp_Cvec, isdf_in%n_intp_r, Zzero, tmparray, isdf_in%maxmync_sym)
 #endif
 
 #ifndef _CUDA
@@ -701,9 +692,9 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
                   Pvec(1:isdf_in%myncv_sym(nmrep), kk) = &
                     Pvec(1:isdf_in%myncv_sym(nmrep), kk)*sqrtR(1:isdf_in%myncv_sym(nmrep))
                 end if
-                pnorm2(kk) = ddot(isdf_in%myncv_sym(nmrep), Pvec(1, kk), 1, Pvec(1, kk), 1)
+                pnorm2(kk) = real(Zdot_c(isdf_in%myncv_sym(nmrep), Pvec(1, kk), 1, Pvec(1, kk), 1), kind=dp)
               end do ! kk
-              call MPI_ALLREDUCE(MPI_IN_PLACE, pnorm2, blksz, MPI_DOUBLE, MPI_SUM, peinf%comm, info)
+              call MPI_ALLREDUCE(MPI_IN_PLACE, pnorm2, blksz, MPI_DOUBLE_PRECISION, MPI_SUM, peinf%comm, info)
               do kk = 1, blksz
                 pnorm(kk) = sqrt(pnorm2(kk))
               end do ! kk
@@ -715,22 +706,22 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
 
               do kk = 1, blksz
                 jk = isdf_in%lrep(jn + kk - 1)
-                ezz(1:sig_in%nen, kk) = (-zz(1:sig_in%nen)+kpt%wfn(isp, ik)%e1(jk))*eta(kk) + cmplx(0.d0, 1.d0)*ecuts
+                ezz(1:sig_in%nen, kk) = (-zz(1:sig_in%nen)+kpt%wfn(isp, ik)%e1(jk))*eta(kk) + zi*ecuts
               end do ! kk
-              ezz(sig_in%nen + 1, 1:blksz) = cmplx(0.d0, 0.d0)
+              ezz(sig_in%nen + 1, 1:blksz) = zzero
 
               ! compute <Pvec| 1/(ezz-H_aux) |Pvec>
-              call lanczos_spectra_isdf_lowcomsym(Pvec, pnorm, isdf_in%myncv_sym(nmrep), ezz, sig_in%nen + 1, &
-                                                  opt%lanczos_niter, isdf_in, sqrtR, polynomial, npoly, &
-                                                  sigma_corr_tmp, tamm_d, blksz, nmrep, gvec &
+              call Zlanczos_spectra_isdf_lowcomsym(Pvec, pnorm, isdf_in%myncv_sym(nmrep), ezz, sig_in%nen + 1, &
+                                                   opt%lanczos_niter, isdf_in, sqrtR, polynomial, npoly, &
+                                                   sigma_corr_tmp, tamm_d, blksz, nmrep, gvec &
 #ifdef DCU
-                                                  , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
-                                                  handle &
+                                                   , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
+                                                   handle &
 #elif defined _CUDA
-                                                  , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
-                                                  vstep, tmp_Cvec, streamid &
+                                                   , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
+                                                   vstep, tmp_Cvec, streamid &
 #endif
-                                                  )
+                                                   )
 
               call stopwatch(peinf%master, " Summing over bands")
               do kk = 1, blksz
@@ -790,8 +781,8 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
     !deallocate (MC_vec)
     !deallocate (CMC_vec)
     !deallocate (tmp_vec)
-    deallocate (isdf_in%PsiV_intp_bl)
-    deallocate (isdf_in%PsiC_intp_bl)
+    deallocate (isdf_in%ZPsiV_intp_bl)
+    deallocate (isdf_in%ZPsiC_intp_bl)
     deallocate (tmparray)
     deallocate (tmp_count)
 

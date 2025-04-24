@@ -24,11 +24,11 @@ module myconstants
   complex(dpc), parameter :: zone = (1.0_dp,0.0_dp)
   complex(dpc), parameter :: zi = (0.0_dp,1.0_dp)
   real(dp), parameter :: two = 2.0_dp
-  real(dp), parameter :: three = 3.d0
+  real(dp), parameter :: three = 3.0_dp
   real(dp), parameter :: four = 4.0_dp
-  real(dp), parameter :: five = 5.d0
+  real(dp), parameter :: five = 5.0_dp
   real(dp), parameter :: six = 6.0_dp
-  real(dp), parameter :: eight = 8.d0
+  real(dp), parameter :: eight = 8.0_dp
   real(dp), parameter :: nine = 9.0_dp
   real(dp), parameter :: half = 0.5_dp
   real(dp), parameter :: third = 1.0_dp/3.0_dp
@@ -58,14 +58,12 @@ module myconstants
   ! constants for the energy dependence in self-energy (sigma only)
   integer, parameter :: SIG_LEFT = 1, SIG_RIGHT = 2, SIG_AV = 3
   ! exchange-correlation models, used by "sigma" only.
-  integer, parameter :: &
-       XC_GW = 1, &               ! GW exchange-correlation
-       XC_HF = 2, &               ! Hartree-Fock exchange, no correlation
-       XC_B3LYP = 3, &            ! B3LYP (model) functional
-       ! see: A.D. Becke, J. Chem. Phys. 98, 5648 (1993)
-       XC_LDA_CA = 4, &           ! LDA Ceperley-Alder Perdew-Zunger functional
-       XC_GGA_PBE = 5, &          ! GGA Perdew-Burke-Ernzerhof functional
-       XC_GGA_BLYP = 6            ! GGA BLYP functional
+  integer, parameter :: XC_GW = 1, &       ! GW exchange-correlation
+                        XC_HF = 2, &       ! Hartree-Fock exchange, no correlation
+                        XC_B3LYP = 3, &    ! B3LYP (model) functional, see: A.D. Becke, J. Chem. Phys. 98, 5648 (1993)
+                        XC_LDA_CA = 4, &   ! LDA Ceperley-Alder Perdew-Zunger functional
+                        XC_GGA_PBE = 5, &  ! GGA Perdew-Burke-Ernzerhof functional
+                        XC_GGA_BLYP = 6    ! GGA BLYP functional
 
 end module myconstants
 !===================================================================

@@ -10,14 +10,18 @@
 ! This file is part of RGWBS. It is distributed under the GPL v1.
 !
 !-------------------------------------------------------------------
+
 #ifdef CPLX
+
 ! Constants
 #define Zzero zzero
 #define Zone zone
 #define MPI_DOUBLE_SCALAR MPI_DOUBLE_COMPLEX
+
 ! Implicit functions
 #define SCALAR complex(dpc)
 #define MYCONJG(x) conjg(x)
+
 ! External functions and subroutines
 #define Zdot_u zdot_u
 #define Zdot_c zdot_c
@@ -32,6 +36,9 @@
 #define Zvem zvem
 #define Zscal zscal
 #define Zgemv zgemv
+#define pZgemr2d pzgemr2d
+#define pZgesv pdgesv
+
 ! Internal functions and subroutines
 #define Zgather zgather
 #define Zscatter zscatter
@@ -90,13 +97,17 @@
 #define Zwpol_v zwpol_v
 #define Zstatic_corr zstatic_corr
 #define Zstatic zstatic
+#define Zisdf_parallel_sym_UltraLowMem zisdf_parallel_sym_UltraLowMem
+#define Zdistribute_intp_pts zdistribute_intp_pts
 #define Zcalculate_sigma zcalculate_sigma
 #define Zcalculate_sigma_lanczos zcalculate_sigma_lanczos
 #define Zcalculate_sigma_lanczos_UltraLowMem zcalculate_sigma_lanczos_UltraLowMem
 #define Zcalculate_sigma_lanczos_BLOCK zcalculate_sigma_lanczos_BLOCK
-#define Zcalculate_sigma_lanczos_lowcom zcalculate_sigma_lanczos_lowcom
 #define Zcalculate_sigma_lanczos_lowcomsym zcalculate_sigma_lanczos_lowcomsym
 #define Zredistribute_Psi_loc zredistribute_Psi_loc
+#define Zlanczos_spectra_isdf_lowcomsym zlanczos_spectra_isdf_lowcomsym
+#define Zmatvec_isdf_lowcomsym zmatvec_isdf_lowcomsym
+#define Zpolynomial_matvec_isdf_lowcomsym zpolynomial_matvec_isdf_lowcomsym
 #define Zgw_correlation zgw_correlation
 #define Zrotate_qp zrotate_qp
 #define Zpotential_mtxel zpotential_mtxel
@@ -117,6 +128,7 @@
 #define Zgroup_reduce_bse zgroup_reduce_bse
 #define Zget_phase zget_phase
 #define Zk_print zk_print
+
 ! Internal arrays
 #define Zbox zbox
 #define Zcoul zcoul
@@ -126,14 +138,22 @@
 #define Zm_f zm_f
 #define Zv zv
 #define Ztv ztv
+#define ZPsi_intp_loc zPsi_intp_loc
+#define ZMmtrx_loc zMmtrx_loc
+#define ZPsiV_intp_bl zPsiV_intp_bl
+#define ZPsiC_intp_bl zPsiC_intp_bl
+
 #else
+
 ! Constants
 #define Zzero zero
 #define Zone one
 #define MPI_DOUBLE_SCALAR MPI_DOUBLE_PRECISION
+
 ! Implicit functions
 #define SCALAR real(dp)
 #define MYCONJG(x) (x)
+
 ! External functions and subroutines
 #define Zdot_u ddot
 #define Zdot_c ddot
@@ -148,6 +168,9 @@
 #define Zvem dvem
 #define Zscal dscal
 #define Zgemv dgemv
+#define pZgemr2d pdgemr2d
+#define pZgesv pdgesv
+
 ! Internal functions and subroutines
 #define Zgather dgather
 #define Zscatter dscatter
@@ -206,13 +229,17 @@
 #define Zwpol_v dwpol_v
 #define Zstatic_corr dstatic_corr
 #define Zstatic dstatic
+#define Zisdf_parallel_sym_UltraLowMem disdf_parallel_sym_UltraLowMem
+#define Zdistribute_intp_pts ddistribute_intp_pts
 #define Zcalculate_sigma dcalculate_sigma
 #define Zcalculate_sigma_lanczos dcalculate_sigma_lanczos
 #define Zcalculate_sigma_lanczos_UltraLowMem dcalculate_sigma_lanczos_UltraLowMem
 #define Zcalculate_sigma_lanczos_BLOCK dcalculate_sigma_lanczos_BLOCK
-#define Zcalculate_sigma_lanczos_lowcom dcalculate_sigma_lanczos_lowcom
 #define Zcalculate_sigma_lanczos_lowcomsym dcalculate_sigma_lanczos_lowcomsym
 #define Zredistribute_Psi_loc dredistribute_Psi_loc
+#define Zlanczos_spectra_isdf_lowcomsym dlanczos_spectra_isdf_lowcomsym
+#define Zmatvec_isdf_lowcomsym dmatvec_isdf_lowcomsym
+#define Zpolynomial_matvec_isdf_lowcomsym dpolynomial_matvec_isdf_lowcomsym
 #define Zgw_correlation dgw_correlation
 #define Zrotate_qp drotate_qp
 #define Zpotential_mtxel dpotential_mtxel
@@ -233,6 +260,7 @@
 #define Zgroup_reduce_bse dgroup_reduce_bse
 #define Zget_phase dget_phase
 #define Zk_print dk_print
+
 ! Internal arrays
 #define Zbox dbox
 #define Zcoul dcoul
@@ -242,5 +270,11 @@
 #define Zm_f dm_f
 #define Zv dv
 #define Ztv dtv
+#define ZPsi_intp_loc dPsi_intp_loc
+#define ZMmtrx_loc dMmtrx_loc
+#define ZPsiV_intp_bl dPsiV_intp_bl
+#define ZPsiC_intp_bl dPsiC_intp_bl
+
 #endif
+
 !===================================================================

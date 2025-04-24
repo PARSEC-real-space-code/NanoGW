@@ -1,3 +1,4 @@
+#include "../shared/mycomplex.h"
 ! Weiwei Gao, Feb. 2018
 !
 ! In the density fitting method, the products of wave functions are
@@ -65,11 +66,10 @@
 ! How to reduce memory requirements:
 ! [ done ]  1. Split zeta into n_slice, and calculate one slice each time, store zeta and
 !    vc_zeta in hard drive using HDF5
-! [      ]  2. deallocate all the wave functions after using it for
-!    constructing PsiV and PsiC
+! [      ]  2. deallocate all the wave functions after using it for constructing PsiV and PsiC
 ! [      ]  3. store Mmtrx in hard drive using HDF5
 ! [ working on ]  4. don't calculate Cmtrx, only calculate and store Psi_intp
-subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, verbose)
+subroutine Zisdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, verbose)
 
 #ifdef HIPMAGMA
   use magma
@@ -107,22 +107,21 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
   ! Issue need to be addressed: if there are N wfn_grp, does it mean these matrix need to be
   ! calculated by all processors at the same time, or can we distribute the workload later ??
   !
-  real(dp), allocatable :: P(:, :, :), P_intp(:, :, :), &   ! P on reduced domain
-                           Q(:, :, :), Q_intp(:, :, :), &   ! Q on reduced domain
-                           zeta(:, :, :), vzeta(:, :, :), &
-                           fxc(:, :, :), fzeta(:, :), &
-                           tmp_array(:, :), &
-                           tmp_Psi_intp_loc(:, :), &
-                           tmp_Mmtrx_loc(:, :), &
-                           ! matrices and vectors used for solving linear equations
-                           Amtrx(:, :, :), Bmtrx(:, :), Xmtrx(:, :), &
-                           rho_h(:), rho_h_distr(:, :), &
-                           Amtrx_bl(:), Bmtrx_bl(:)
+  SCALAR, allocatable :: P(:, :, :), P_intp(:, :, :), &   ! P on reduced domain
+                         Q(:, :, :), Q_intp(:, :, :), &   ! Q on reduced domain
+                         zeta(:, :, :), vzeta(:, :, :), fzeta(:, :), &
+                         tmp_Psi_intp_loc(:, :), tmp_Mmtrx_loc(:, :), &
+                         ! matrices and vectors used for solving linear equations
+                         Amtrx(:, :, :), Bmtrx(:, :), Xmtrx(:, :), &
+                         rho_h(:), rho_h_distr(:, :), &
+                         Amtrx_bl(:), Bmtrx_bl(:)
+  real(dp), allocatable :: fxc(:, :, :)
+  real(dp), allocatable :: tmp_array(:, :, :)  ! (:,:,1): real, (:,:,2): imag
   real(dp) :: qkt(3), tsec(2), norm_factor
   integer, allocatable :: ipiv(:)
   ! counters and temporary integers
-  integer :: ipt, ii, jj, iv, ic, irp, jrp, rsp, csp, i_row, i_col, lrp1, lrp2, IVV, ICC, JVV, JCC, isp, ikp, errinfo, &
-             ipe, n_intp_r, maxncv, maxnv, maxnc, mpi_status(MPI_STATUS_SIZE), n_row, ldn_intp_r
+  integer :: ipt, ii, jj, iv, ic, irp, jrp, csp, i_row, i_col, lrp1, lrp2, IVV, ICC, JVV, JCC, isp, ikp, errinfo, &
+             ipe, n_intp_r, maxncv, maxnv, maxnc, mpi_status(MPI_STATUS_SIZE), n_row, ldn_intp_r, n_cplx
   ! Each processor in a w_grp store part of the wave function
   ! offset: index of grid point from which a processor start to store the wave function
   ! ncount: number of elements of wave functions that a processor stores
@@ -148,19 +147,18 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
   character(len=7)  :: iproc_string
   character(len=2)  :: isp_string, irp_string, jrp_string
   character(len=40) :: dset_zeta = "Zeta"
-  character(len=40) :: dset_vzeta = "VcZeta"
-  integer(HID_T) :: file_id, &  ! file identifier
+  character(len=40) :: dset_vczeta = "VcZeta"
+  integer(hid_t) :: file_id, &  ! file identifier
                     dset_zeta_id(nspin, gvec%syms%ntrans), &
                     dset_vczeta_id(nspin, gvec%syms%ntrans), & ! dataset identifier
                     dspace_zeta, dspace_vczeta, &             ! dataspace identifier
                     subdspace
-  integer(hsize_t) :: data_dims(2), subdim(2), shift(2), stride(2), block(2)
+  integer(hsize_t) :: data_dims(3), subdim(3), shift(3), stride(3), block(3)
   integer :: h5err
   ! scalapack and blacs variables
   integer :: context_system, icntxt_1d, descb_1d(9), info, MB_, mycol_1d, myn_intp_r, myrow_1d, ndim_ipiv, &
              npcol_1d, nprow_1d, RSRC_, desca_1d(9), desca_2d(9), descb_2d(9), nprow_2d, npcol_2d, nbl_2d, &
              ldrowA, ldcolA, myrow_2d, mycol_2d, icntxt_2d, ldrowB, ldcolB
-  logical, parameter :: use_old_code = .false.
 
 #ifdef DEBUG
   outdbg = 198812 + w_grp%inode
@@ -176,18 +174,16 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
   maxncv = isdf_in%maxncv
   maxnv = isdf_in%maxnv
   maxnc = isdf_in%maxnc
-  !
+
   ! Initialize h5 FORTRAN interface
-  !
   call h5open_f(h5err)
-  !
+
   ! create h5 file here
-  !
 #ifdef DEBUG
   if (w_grp%master .and. verbose) write (6, *) "create h5 file"
 #endif
   write (iproc_string, '(I7.7)') w_grp%inode
-  h5filename = "zeta_tmp_"//iproc_string//".h5"
+  h5filename = "zeta_"//iproc_string//".h5"
   call h5fcreate_f(h5filename, H5F_ACC_TRUNC_F, file_id, h5err)
   !
   ! each processor stores part of P, Q and zeta
@@ -210,11 +206,7 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
   !ALLOCATE( inv_ivlist(isdf_in%maxivv, nspin, kpt%nk, gvec%syms%ntrans) ) 
   ! For now, only deal with confined system. So we assume kpt%nk=1, and there is no dependence on k here
   !ALLOCATE( inv_iclist(isdf_in%maxicc, nspin, kpt%nk, gvec%syms%ntrans) )
-  if (w_grp%master) then
-    write (*, "(A)") " Allocate matrices"
-    write (*, "(A, F0.2, A)") "  tmp_array: ", 1.d0 * w_grp%mydim * isdf_in%n_intp_r / 2**17, " MB"
-  end if
-  allocate (tmp_array(w_grp%mydim, isdf_in%n_intp_r))
+
   ! inv_ivlist(:) maps the real index of valence states
   !   to the index of valence states used in the calculation
   !inv_ivlist = 0
@@ -275,9 +267,15 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
   !
   ! create dataspace and dataset here
   !
-  rank = 2
+  if (kpt%lcplx) then
+    n_cplx = 2
+  else
+    n_cplx = 1
+  end if
+  rank = 3
   data_dims(1) = w_grp%mydim
   data_dims(2) = n_intp_r
+  data_dims(3) = n_cplx
   ! create dataspace
 #ifdef DEBUG
   if (w_grp%master) write (*, *) "Create dataspace: dspace_zeta"
@@ -288,27 +286,23 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
   if (w_grp%master) write (*, *) "Create dataspace: dspace_vczeta"
 #endif
   call h5screate_simple_f(rank, data_dims, dspace_vczeta, h5err)
-  ! create hdf5 datasets for zeta and V_c*zeta for each spin and
-  ! group representation
+  ! create hdf5 datasets for zeta and V_c*zeta for each spin and group representation
   do isp = 1, nspin
-    write (isp_string, '(i2.2)') isp
+    ! zeta
     do jrp = 1, gvec%syms%ntrans
-      write (jrp_string, '(i2.2)') jrp
-      dset_zeta = "zeta_isp"//isp_string//"_jrp"//jrp_string
-      ! create dataset for each spin and representation
+      write (dset_zeta, '(A,I1.1,A,I2.2)') "zeta_", isp, "_", jrp
       call h5dcreate_f(file_id, dset_zeta, H5T_NATIVE_DOUBLE, dspace_zeta, dset_zeta_id(isp, jrp), h5err)
-    end do
+    end do  ! jrp
+    ! V_c*zeta
     do jrp = 1, gvec%syms%ntrans/r_grp%num
       irp = r_grp%g_rep(jrp)
-      write (irp_string, '(i2.2)') irp
-      dset_vzeta = 'vczeta_isp'//isp_string//"_irp"//irp_string
-
-      call h5dcreate_f(file_id, dset_vzeta, H5T_NATIVE_DOUBLE, dspace_vczeta, dset_vczeta_id(isp, irp), h5err)
-    end do ! jrp
+      write (dset_vczeta, '(A,I1.1,A,I2.2)') "vczeta_", isp, "_", irp
+      call h5dcreate_f(file_id, dset_vczeta, H5T_NATIVE_DOUBLE, dspace_vczeta, dset_vczeta_id(isp, irp), h5err)
+    end do  ! jrp
   end do
 
-  isdf_in%Mmtrx_loc = zero ! Dimension: Mmtrx_loc(w_grp%myn_intp_r, n_intp_r, nspin, nspin, kpt%nk, 2, gvec%syms%ntrans)
-
+  isdf_in%ZMmtrx_loc = Zzero
+  ! Dimension: ZMmtrx_loc(w_grp%myn_intp_r, n_intp_r, nspin, nspin, kpt%nk, 2, gvec%syms%ntrans)
   norm_factor = 1.d0/gvec%hcub*gvec%syms%ntrans
   ! Here we assume there is only 1 r_grp and 1 w_grp
   call blacs_get(-1, 0, context_system)
@@ -371,11 +365,22 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
     descb_2d(2) = -1
   end if
 
+  ! Allocate tmp_array for hdf5 operations
+  if (kpt%lcplx) then
+    n_cplx = 2
+  else
+    n_cplx = 1
+  end if
+  if (w_grp%master) then
+    write (*, '(A)') " Allocate matrices"
+    write (*, '(A,F0.2,A)') "  tmp_array: ", 1.d0 * w_grp%mydim * isdf_in%n_intp_r * n_cplx / 2**17, " MB"
+  end if
+  allocate (tmp_array(w_grp%mydim, isdf_in%n_intp_r, n_cplx))
+
   ! assume kpt%wfn(isp,ikp)%nmem is the same for all isp and ikp
   if (w_grp%master) then
-    write (*, "(A)") " Allocate matrices"
-    write (*, "(A, F0.2, A)") "  tmp_Psi_intp_loc: ", 1.d0 * ldn_intp_r * kpt%wfn(1, 1)%nmem / 2**17, " MB"
-    write (*, "(A, F0.2, A)") "  tmp_Mmtrx_loc: ", 1.d0 * ldn_intp_r * n_intp_r / 2**17, " MB"
+    write (*, '(A,F0.2,A)') "  tmp_Psi_intp_loc: ", 1.d0 * ldn_intp_r * kpt%wfn(1, 1)%nmem / 2**17, " MB"
+    write (*, '(A,F0.2,A)') "  tmp_Mmtrx_loc: ", 1.d0 * ldn_intp_r * n_intp_r / 2**17, " MB"
   end if
   allocate (tmp_Psi_intp_loc(ldn_intp_r, kpt%wfn(1, 1)%nmem))
   allocate (tmp_Mmtrx_loc(ldn_intp_r, n_intp_r))
@@ -389,15 +394,15 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
 #ifdef DEBUG
       if (w_grp%master) write (*, "(4(A, I0))") "  ikp: ", ikp, "/", kpt%nk, "  isp: ", isp, "/", nspin
 #endif
-      ! construct isdf%Psi_intp_loc
+      ! construct isdf%ZPsi_intp_loc
       call stopwatch(peinf%master, "Start distribute_intp_pts")
-      call distribute_intp_pts(kpt%wfn(isp, ikp), isdf_in, gvec%syms%ntrans, isp, ikp)
+      call Zdistribute_intp_pts(kpt%wfn(isp, ikp), isdf_in, gvec%syms%ntrans, isp, ikp)
       call stopwatch(peinf%master, "Finish distribute_intp_pts")
       !do ipe = 0, w_grp%npes-1
       !  if (w_grp%inode .eq. ipe) then
-      !    if (ipe .eq. 0) write(6, *) isp, ikp, " Psi_intp_loc "
+      !    if (ipe .eq. 0) write(6, *) isp, ikp, " ZPsi_intp_loc "
       !    print *, " ipe = ", ipe
-      !    call printmatrix( isdf_in%Psi_intp_loc(1,1,1,1), w_grp%myn_intp_r, &
+      !    call printmatrix( isdf_in%ZPsi_intp_loc(1,1,1,1), w_grp%myn_intp_r, &
       !    kpt%wfn(1,1)%nmem, 6 )
       !  endif
       !  call MPI_BARRIER(w_grp%comm, info)
@@ -422,11 +427,11 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
       allocate (Xmtrx(w_grp%mydim, n_intp_r))
 
       ! initialize matrices with zero
-      P_intp = zero
-      Q_intp = zero
-      Amtrx = zero
-      P = zero
-      Q = zero
+      P_intp = Zzero
+      Q_intp = Zzero
+      Amtrx = Zzero
+      P = Zzero
+      Q = Zzero
 
       call timacc(53, 1, tsec)
 
@@ -448,69 +453,37 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
         do ipe = 0, w_grp%npes - 1
           if (w_grp%inode == ipe) then
             tmp_Psi_intp_loc(1:myn_intp_r, 1:kpt%wfn(isp, ikp)%nmem) = &
-              isdf_in%Psi_intp_loc(1:myn_intp_r, 1:kpt%wfn(isp, ikp)%nmem, isp, ikp)
+              isdf_in%ZPsi_intp_loc(1:myn_intp_r, 1:kpt%wfn(isp, ikp)%nmem, isp, ikp)
           end if
-          call MPI_BCAST(tmp_Psi_intp_loc(1, 1), ldn_intp_r*kpt%wfn(isp, ikp)%nmem, MPI_DOUBLE, ipe, w_grp%comm, info)
+          call MPI_BCAST(tmp_Psi_intp_loc(1, 1), ldn_intp_r*kpt%wfn(isp, ikp)%nmem, MPI_DOUBLE_SCALAR, ipe, &
+                         w_grp%comm, info)
           call timacc(78, 1, tsec)
           do iv = 1, isdf_in%nv(isp, ikp, jrp)
             IVV = isdf_in%ivlist(iv, isp, ikp, jrp)
             JVV = kpt%wfn(isp, ikp)%map(IVV)
             ! Compute P(n_intp_r, w_grp%mydim)
-            !
-            ! old code
-            !
-            !call dgemm( 'n', 't', w_grp%n_intp_end(ipe)-w_grp%n_intp_start(ipe)+1, &
-            !  w_grp%mydim, 1, one, &
-            !  tmp_Psi_intp_loc(1,JVV), ldn_intp_r, &
-            !  kpt%wfn(isp,ikp)%dwf(1,JVV), w_grp%ldn, one, &
-            !  P(w_grp%n_intp_start(ipe),1,jrp), n_intp_r, jrp )
-            !call dgemm( 'n', 't', w_grp%n_intp_end(ipe)-w_grp%n_intp_start(ipe)+1, &
-            !  myn_intp_r, 1, one, &
-            !  tmp_Psi_intp_loc(1,JVV), ldn_intp_r, &
-            !  isdf_in%Psi_intp_loc(1,JVV,isp,ikp), myn_intp_r, one, &
-            !  P_intp(w_grp%n_intp_start(ipe),1,jrp), n_intp_r, jrp )
-            !
-            ! new code
-            !
-            call dgemm_hl('n', 't', w_grp%n_intp_end(ipe) - w_grp%n_intp_start(ipe) + 1, w_grp%mydim, 1, one, &
-                          tmp_Psi_intp_loc(1, JVV), ldn_intp_r, kpt%wfn(isp, ikp)%dwf(1, JVV), w_grp%ldn, one, &
+            call Zgemm_hl('n', 't', w_grp%n_intp_end(ipe) - w_grp%n_intp_start(ipe) + 1, w_grp%mydim, 1, one, &
+                          tmp_Psi_intp_loc(1, JVV), ldn_intp_r, kpt%wfn(isp, ikp)%Zwf(1, JVV), w_grp%ldn, one, &
                           P(w_grp%n_intp_start(ipe), 1, jrp), n_intp_r, opt%linear_algebra)
-            call dgemm_hl('n', 't', w_grp%n_intp_end(ipe) - w_grp%n_intp_start(ipe) + 1, myn_intp_r, 1, one, &
-                          tmp_Psi_intp_loc(1, JVV), ldn_intp_r, isdf_in%Psi_intp_loc(1, JVV, isp, ikp), myn_intp_r, &
+            call Zgemm_hl('n', 't', w_grp%n_intp_end(ipe) - w_grp%n_intp_start(ipe) + 1, myn_intp_r, 1, one, &
+                          tmp_Psi_intp_loc(1, JVV), ldn_intp_r, isdf_in%ZPsi_intp_loc(1, JVV, isp, ikp), myn_intp_r, &
                           one, P_intp(w_grp%n_intp_start(ipe), 1, jrp), n_intp_r, opt%linear_algebra)
-
           end do  ! iv
 
           do ic = 1, isdf_in%nc(isp, ikp, jrp)
             ICC = isdf_in%iclist(ic, isp, ikp, jrp)
             JCC = kpt%wfn(isp, ikp)%map(ICC)
             ! Compute Q
-            !
-            ! old code
-            !
-            !call dgemm( 'n', 't', w_grp%n_intp_end(ipe)-w_grp%n_intp_start(ipe)+1, &
-            !  w_grp%mydim, 1, one, &
-            !  tmp_Psi_intp_loc(1,JCC), ldn_intp_r, &
-            !  kpt%wfn(isp,ikp)%dwf(1,JCC), w_grp%ldn, one, &
-            !  Q(w_grp%n_intp_start(ipe),1,jrp), n_intp_r )
-            !call dgemm( 'n', 't', w_grp%n_intp_end(ipe)-w_grp%n_intp_start(ipe)+1, &
-            !  myn_intp_r, 1, one, &
-            !  tmp_Psi_intp_loc(1,JCC), ldn_intp_r, &
-            !  isdf_in%Psi_intp_loc(1,JCC,isp,ikp), myn_intp_r, one, &
-            !  Q_intp(w_grp%n_intp_start(ipe),1,jrp), n_intp_r )
-            !
-            ! new code
-            !
-            call dgemm_hl('n', 't', w_grp%n_intp_end(ipe) - w_grp%n_intp_start(ipe) + 1, w_grp%mydim, 1, one, &
-                          tmp_Psi_intp_loc(1, JCC), ldn_intp_r, kpt%wfn(isp, ikp)%dwf(1, JCC), w_grp%ldn, one, &
+            call Zgemm_hl('n', 't', w_grp%n_intp_end(ipe) - w_grp%n_intp_start(ipe) + 1, w_grp%mydim, 1, one, &
+                          tmp_Psi_intp_loc(1, JCC), ldn_intp_r, kpt%wfn(isp, ikp)%Zwf(1, JCC), w_grp%ldn, one, &
                           Q(w_grp%n_intp_start(ipe), 1, jrp), n_intp_r, opt%linear_algebra)
-            call dgemm_hl('n', 't', w_grp%n_intp_end(ipe) - w_grp%n_intp_start(ipe) + 1, myn_intp_r, 1, one, &
-                          tmp_Psi_intp_loc(1, JCC), ldn_intp_r, isdf_in%Psi_intp_loc(1, JCC, isp, ikp), myn_intp_r, &
+            call Zgemm_hl('n', 't', w_grp%n_intp_end(ipe) - w_grp%n_intp_start(ipe) + 1, myn_intp_r, 1, one, &
+                          tmp_Psi_intp_loc(1, JCC), ldn_intp_r, isdf_in%ZPsi_intp_loc(1, JCC, isp, ikp), myn_intp_r, &
                           one, Q_intp(w_grp%n_intp_start(ipe), 1, jrp), n_intp_r, opt%linear_algebra)
           end do  ! ic
           call timacc(78, 2, tsec)
 
-        end do ! ipe
+        end do  ! ipe
 
 #ifdef DEBUG
         !if ( .true. .and. w_grp%master ) then
@@ -536,8 +509,8 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
           write (*, "(2(A, I0))") "  jrp: ", jrp, "/", gvec%syms%ntrans/r_grp%num
         end if
         irp = r_grp%g_rep(jrp)
-        Bmtrx = zero
-        Xmtrx = zero
+        Bmtrx = Zzero
+        Xmtrx = Zzero
         ! Calculate A and B
         !
         ! Loop over all the reps.
@@ -590,52 +563,33 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
         !
         ! solve linear equation A * X = B
         !
-#ifdef DEBUG
-        !if (.true. .and. w_grp%master) then
-        !  write(dbgunit, '(" irp =", i3, "  Amtrx = ")') irp
-        !  call printmatrix ( Amtrx(1:n_intp_r, 1:myn_intp_r, irp), &
-        !    n_intp_r,  myn_intp_r, dbgunit )
-        !  write(dbgunit, '(" irp =", i3, "  Bmtrx = ")') irp
-        !  call printmatrix ( Bmtrx(1:n_intp_r, 1:w_grp%mydim) , &
-        !    n_intp_r, w_grp%mydim, dbgunit )
-        !endif
-#endif
         ! Note that dgesv will change Amtrx, so we need a temporary Amtrx1
-        !Amtrx1(1:n_intp_r,1:n_intp_r) = Amtrx(1:n_intp_r,1:n_intp_r,irp)
-        !call dgesv(isdf_in%n_intp_r, w_grp%mydim, Amtrx1(1,1), n_intp_r, ipiv, Bmtrx, &
-        !  n_intp_r, einfo)
+        ! Amtrx1(1:n_intp_r,1:n_intp_r) = Amtrx(1:n_intp_r,1:n_intp_r,irp)
+        ! call dgesv(isdf_in%n_intp_r, w_grp%mydim, Amtrx1(1,1), n_intp_r, ipiv, Bmtrx, n_intp_r, einfo)
         ! Use Scalapack to solve the linear system
         call MPI_BARRIER(w_grp%comm, errinfo)
-        if (use_old_code) then
-          ndim_ipiv = numroc(n_intp_r, w_grp%ldn_intp_r, myrow_1d, desca_1d(RSRC_), nprow_1d) + desca_1d(MB_)
-          print *, "ndim_ipiv ", ndim_ipiv
+
+        call stopwatch(w_grp%master, "Call pZgemr2d to redistribute Amtrx to 2D grid")
+        call pZgemr2d(n_intp_r, n_intp_r, Amtrx(1, 1, irp), 1, 1, desca_1d, Amtrx_bl, 1, 1, desca_2d, icntxt_1d)
+
+        call stopwatch(w_grp%master, "Call pZgemr2d to redistribute Bmtrx to 2D grid")
+        call pZgemr2d(n_intp_r, gvec%nr, Bmtrx, 1, 1, descb_1d, Bmtrx_bl, 1, 1, descb_2d, icntxt_1d)
+
+        call stopwatch(w_grp%master, "Call pZgesv")
+        ndim_ipiv = numroc(n_intp_r, nbl_2d, myrow_2d, desca_2d(RSRC_), nprow_2d) + desca_2d(MB_)
+        if (myrow_2d /= -1 .and. mycol_2d /= -1) then
           allocate (ipiv(ndim_ipiv))
-          !if (w_grp%master) print *, "gvec%nr = ", gvec%nr
-          !if (w_grp%master) print *, "desca_1d ", desca_1d(1:9)
-          !if (w_grp%master) print *, "LOCc(n_intp_r)", numroc(n_intp_r, 1, 0, 0, 1)
-          call stopwatch(w_grp%master, "Call pdgesv ")
-          call pdgesv(n_intp_r, gvec%nr, Amtrx(1, 1, irp), 1, 1, desca_1d, ipiv, Bmtrx, 1, 1, descb_1d, info)
-          call stopwatch(w_grp%master, "Finish pdgesv ")
-        else
-          call stopwatch(w_grp%master, "Call pdgemr2d to redistribute Amtrx to 2D grid")
-          call pdgemr2d(n_intp_r, n_intp_r, Amtrx(1, 1, irp), 1, 1, desca_1d, Amtrx_bl, 1, 1, desca_2d, icntxt_1d)
-          call stopwatch(w_grp%master, "Call pdgemr2d to redistribute Bmtrx to 2D grid")
-          call pdgemr2d(n_intp_r, gvec%nr, Bmtrx, 1, 1, descb_1d, Bmtrx_bl, 1, 1, descb_2d, icntxt_1d)
-          call stopwatch(w_grp%master, "Call pdgesv ")
-          ndim_ipiv = numroc(n_intp_r, nbl_2d, myrow_2d, desca_2d(RSRC_), nprow_2d) + desca_2d(MB_)
-          !print *, "ndim_ipiv ", ndim_ipiv
-          if (myrow_2d /= -1 .and. mycol_2d /= -1) then
-            allocate (ipiv(ndim_ipiv))
-            call pdgesv(n_intp_r, gvec%nr, Amtrx_bl, 1, 1, desca_2d, ipiv, Bmtrx_bl, 1, 1, descb_2d, info)
-          end if
-          call stopwatch(w_grp%master, "Call pdgemr2d to redistribute Amtrx to 1D grid")
-          call pdgemr2d(n_intp_r, n_intp_r, Amtrx_bl, 1, 1, desca_2d, Amtrx(1, 1, irp), 1, 1, desca_1d, icntxt_1d)
-          call stopwatch(w_grp%master, "Call pdgemr2d to redistribute Bmtrx to 1D grid")
-          call pdgemr2d(n_intp_r, gvec%nr, Bmtrx_bl, 1, 1, descb_2d, Bmtrx, 1, 1, descb_1d, icntxt_1d)
+          call pZgesv(n_intp_r, gvec%nr, Amtrx_bl, 1, 1, desca_2d, ipiv, Bmtrx_bl, 1, 1, descb_2d, info)
         end if
 
+        call stopwatch(w_grp%master, "Call pZgemr2d to redistribute Amtrx to 1D grid")
+        call pZgemr2d(n_intp_r, n_intp_r, Amtrx_bl, 1, 1, desca_2d, Amtrx(1, 1, irp), 1, 1, desca_1d, icntxt_1d)
+
+        call stopwatch(w_grp%master, "Call pZgemr2d to redistribute Bmtrx to 1D grid")
+        call pZgemr2d(n_intp_r, gvec%nr, Bmtrx_bl, 1, 1, descb_2d, Bmtrx, 1, 1, descb_1d, icntxt_1d)
+
 #ifdef DEBUG
-        write (6, *) " inode ", w_grp%inode, " info = ", info
+        write (*, *) " inode ", w_grp%inode, " info = ", info
 #endif
 
         if (myrow_2d /= -1 .and. mycol_2d /= -1) deallocate (ipiv)
@@ -661,14 +615,19 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
         ! Copy Xmtrx to zeta
         !
         ! Xmtrx (w_grp%mydim, n_intp_r)
-        tmp_array(1:w_grp%mydim, 1:isdf_in%n_intp_r) = Xmtrx(1:w_grp%mydim, 1:isdf_in%n_intp_r)
+#ifdef CPLX
+        tmp_array(1:w_grp%mydim, 1:isdf_in%n_intp_r, 1) = real(Xmtrx(1:w_grp%mydim, 1:isdf_in%n_intp_r))
+        tmp_array(1:w_grp%mydim, 1:isdf_in%n_intp_r, 2) = aimag(Xmtrx(1:w_grp%mydim, 1:isdf_in%n_intp_r))
+#else
+        tmp_array(1:w_grp%mydim, 1:isdf_in%n_intp_r, 1) = Xmtrx(1:w_grp%mydim, 1:isdf_in%n_intp_r)
+#endif
         call h5dwrite_f(dset_zeta_id(isp, irp), H5T_NATIVE_DOUBLE, tmp_array, data_dims, h5err)
-        if (peinf%master) write (6, *) "done write hdf5"
-      end do ! jrp, jrp = 1, gvec%syms%ntrans/r_grp%num
-    end do ! isp
+        call stopwatch(peinf%master, "done write hdf5")
+      end do  ! jrp = 1, gvec%syms%ntrans/r_grp%num
+    end do  ! isp
     call MPI_BARRIER(peinf%comm, errinfo)
 
-    if (w_grp%master) write (6, *) "deallocate arrays"
+    call stopwatch(peinf%master, " deallocate arrays")
     deallocate (P)
     deallocate (Q)
     deallocate (P_intp)
@@ -679,11 +638,9 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
 
     call timacc(53, 2, tsec)
 
-!#ifdef DEBUG
-    if (peinf%master) write (6, *) "inode: ", peinf%inode, " start to calculate Mmtrx"
-    ! if (peinf%master) write(6,*) "r_grp%num ", r_grp%num
-!#endif
     call timacc(54, 1, tsec)
+
+    call stopwatch(peinf%master, " start to calculate Mmtrx")
     if (kflag < 2) then
       !
       allocate (rho_h(gvec%nr))  ! gvec%nr=w_grp%nr, the number of RS grid points in reduced RS domain
@@ -697,16 +654,18 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
         ! Now calculate <zeta_u(r,ispin)|V(r,r')|zeta_w(r',jspin)>, where u, w = 1, ..., n_intp
         ! and store it in Mmtrx(n_intp_r, n_intp_r)
         !
-        do rsp = 1, nspin
+        do isp = 1, nspin
           !
           ! Exp: n_intp_r=1000, r_grp%npes=10, w_grp%npes=5
           !      then w_grp%mygr=0 work on ii = 1,2,3,4,5,  11,12,13,14,15, 21,22,23,24,25, ...
           !           w_grp%mygr=1 work on ii = 6,7,8,9,10, 16,17,18,19,20, 26,27,28,29,30, ...
           !
           ! create a new subdataspace
-          rank = 2
+          rank = 3
           subdim(1) = w_grp%mydim
           subdim(2) = w_grp%npes
+          subdim(3) = n_cplx
+          write (6,*) subdim
           call h5screate_simple_f(rank, subdim, subdspace, h5err)
           ! Warning: currently, only works for: 1 w_grp per each r_grp
           !          this means r_grp%npes == w_grp%npes
@@ -716,6 +675,7 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
             !
             shift(1) = 0
             shift(2) = w_grp%mygr*w_grp%npes + i_row - 1
+            shift(3) = 0
             if (shift(2) + 1 > isdf_in%n_intp_r) cycle
             if (shift(2) + subdim(2) > isdf_in%n_intp_r) then
               subdim(2) = isdf_in%n_intp_r - shift(2)
@@ -725,40 +685,51 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
             !
             ! read rho_h_distr from hdf5 file
             !
-            stride = (/1, 1/)
-            block = (/1, 1/)
+            stride = (/1, 1, 1/)
+            block = (/1, 1, 1/)
             call h5sselect_hyperslab_f(dspace_zeta, H5S_SELECT_SET_F, shift, subdim, h5err, stride, block)
-            call h5dread_f(dset_zeta_id(rsp, irp), H5T_NATIVE_DOUBLE, tmp_array(1:w_grp%mydim, 1:w_grp%npes), &
+            call h5dread_f(dset_zeta_id(isp, irp), H5T_NATIVE_DOUBLE, tmp_array(1:subdim(1), 1:subdim(2), 1:n_cplx), &
                            data_dims, h5err, subdspace, dspace_zeta)
-            rho_h_distr(1:w_grp%mydim, 1:w_grp%npes) = tmp_array(1:w_grp%mydim, 1:w_grp%npes)
+#ifdef CPLX
+            rho_h_distr(1:subdim(1), 1:subdim(2)) = cmplx(tmp_array(1:subdim(1), 1:subdim(2), 1), &
+                                                          tmp_array(1:subdim(1), 1:subdim(2), 2), kind=dpc)
+#else
+            rho_h_distr(1:subdim(1), 1:subdim(2)) = tmp_array(1:subdim(1), 1:subdim(2), 1)
+#endif
+
 #ifdef DEBUG
             if (w_grp%master) write (dbgunit, *) " i_row ", i_row, ": done h5read_3"
 #endif
             !
             ! initialize rho_h
             !
-            rho_h = 0.d0
+            rho_h = Zzero
             !
             ii = w_grp%mygr*w_grp%npes + i_row + w_grp%inode
-            call dgather(1, rho_h_distr, rho_h)
-            call timacc(79, 1, tsec)
+            call Zgather(1, rho_h_distr, rho_h)
             if (ii <= isdf_in%n_intp_r) then
               !
               ! solve poisson equation to get: rho_h(r) = \int V_c(r,r') zeta_ii(r') dr'
               !
-              call dpoisson(gvec, rho_h, irp)
+              call timacc(79, 1, tsec)
+              call Zpoisson(gvec, rho_h, irp)
+              call timacc(79, 2, tsec)
             end if
-            call timacc(79, 2, tsec)
-            call dscatter(1, rho_h_distr, rho_h)
+            call Zscatter(1, rho_h_distr, rho_h)
             !
             ! subdim(1) = w_grp%mydim is the leading dimension of tmp_array
-            tmp_array(1:subdim(1), 1:subdim(2)) = rho_h_distr(1:subdim(1), 1:subdim(2))
+#ifdef CPLX
+            tmp_array(1:subdim(1), 1:subdim(2), 1) = real(rho_h_distr(1:subdim(1), 1:subdim(2)))
+            tmp_array(1:subdim(1), 1:subdim(2), 2) = aimag(rho_h_distr(1:subdim(1), 1:subdim(2)))
+#else
+            tmp_array(1:subdim(1), 1:subdim(2), 1) = rho_h_distr(1:subdim(1), 1:subdim(2))
+#endif
             call h5sselect_hyperslab_f(dspace_vczeta, H5S_SELECT_SET_F, shift, subdim, h5err, stride, block)
-            call h5dwrite_f(dset_vczeta_id(rsp, irp), H5T_NATIVE_DOUBLE, tmp_array(1:subdim(1), 1:subdim(2)), &
-                            data_dims, h5err, subdspace, dspace_vczeta)
+            call h5dwrite_f(dset_vczeta_id(isp, irp), H5T_NATIVE_DOUBLE, &
+                            tmp_array(1:subdim(1), 1:subdim(2), 1:n_cplx), data_dims, h5err, subdspace, dspace_vczeta)
             !if(w_grp%master) write(6,*) "done write hdf5"
           end do ! i_row
-        end do ! rsp
+        end do ! isp
       end do ! jrp
 
       deallocate (rho_h)
@@ -766,7 +737,7 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
 
     end if ! kflag < 2
 
-    if (peinf%master) write (6, *) "inode: ", w_grp%inode, " allocate zeta"
+    call stopwatch(peinf%master, " allocate zeta")
     allocate (zeta(w_grp%mydim, isdf_in%n_intp_r, nspin))
     if (kflag > 0) allocate (fzeta(w_grp%mydim, isdf_in%n_intp_r))
     if (kflag < 2) allocate (vzeta(w_grp%mydim, isdf_in%n_intp_r, nspin))
@@ -785,7 +756,14 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
 
       do isp = 1, nspin
         call h5dread_f(dset_zeta_id(isp, irp), H5T_NATIVE_DOUBLE, tmp_array, data_dims, h5err)
-        zeta(1:w_grp%mydim, 1:isdf_in%n_intp_r, isp) = tmp_array(1:w_grp%mydim, 1:isdf_in%n_intp_r)
+#ifdef CPLX
+        zeta(1:w_grp%mydim, 1:isdf_in%n_intp_r, isp) = cmplx(tmp_array(1:w_grp%mydim, 1:isdf_in%n_intp_r, 1), &
+                                                             tmp_array(1:w_grp%mydim, 1:isdf_in%n_intp_r, 2), &
+                                                             kind=dpc)
+#else
+        zeta(1:w_grp%mydim, 1:isdf_in%n_intp_r, isp) = tmp_array(1:w_grp%mydim, 1:isdf_in%n_intp_r, 1)
+#endif
+
 #ifdef DEBUG
         !if (w_grp%master) write(dbgunit,*) "done h5read_1"
         !if (w_grp%master) then
@@ -795,20 +773,25 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
 #endif
         if (kflag < 2) then
           call h5dread_f(dset_vczeta_id(isp, irp), H5T_NATIVE_DOUBLE, tmp_array, data_dims, h5err)
-          vzeta(1:w_grp%mydim, 1:isdf_in%n_intp_r, isp) = tmp_array(1:w_grp%mydim, 1:isdf_in%n_intp_r)
-        end if
-#ifdef DEBUG
-        !if (w_grp%master) write(dbgunit,*) "done h5read_2"
+#ifdef CPLX
+          vzeta(1:w_grp%mydim, 1:isdf_in%n_intp_r, isp) = cmplx(tmp_array(1:w_grp%mydim, 1:isdf_in%n_intp_r, 1), &
+                                                                tmp_array(1:w_grp%mydim, 1:isdf_in%n_intp_r, 2), &
+                                                                kind=dpc)
+#else
+          vzeta(1:w_grp%mydim, 1:isdf_in%n_intp_r, isp) = tmp_array(1:w_grp%mydim, 1:isdf_in%n_intp_r, 1)
 #endif
-      end do
-      ! calculate mtrx now
-      do rsp = 1, nspin
+        end if
+      end do  ! isp
+
+      ! calculate mtrx
+      do isp = 1, nspin
         do csp = 1, nspin
           do ipe = 0, w_grp%npes - 1
             !print *, "inode", w_grp%inode, kflag
             if (kflag > 0) then
+              ! TODO: check if this is correct for kflag > 0
               do ii = 1, isdf_in%n_intp_r
-                fzeta(1:w_grp%mydim, ii) = fxc(1:w_grp%mydim, rsp, csp) * zeta(1:w_grp%mydim, ii, csp)
+                fzeta(1:w_grp%mydim, ii) = fxc(1:w_grp%mydim, isp, csp) * zeta(1:w_grp%mydim, ii, csp)
               end do ! ii
 #ifdef DEBUG
               if (w_grp%master) then
@@ -820,21 +803,19 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
 #endif
 
               n_row = w_grp%n_intp_end(ipe) - w_grp%n_intp_start(ipe) + 1
-              ! old code
-              !call dgemm('T', 'N', n_row, n_intp_r, w_grp%mydim, &
-              !  norm_factor, zeta(1,w_grp%n_intp_start(ipe),rsp), w_grp%mydim, &
-              !  fzeta(1,1), w_grp%mydim, 1.d0, &
-              !  tmp_Mmtrx_loc(1, 1), ldn_intp_r)
-              ! new code
+              ! TODO: check if a conjugate is needed here
+              ! Old code:
+              ! call dgemm('T', 'N', n_row, n_intp_r, w_grp%mydim, norm_factor, zeta(1,w_grp%n_intp_start(ipe),isp), &
+              !            w_grp%mydim, fzeta(1,1), w_grp%mydim, 1.d0, tmp_Mmtrx_loc(1, 1), ldn_intp_r)
               call timacc(77, 1, tsec)
-              call dgemm_hl('T', 'N', n_row, n_intp_r, w_grp%mydim, norm_factor, &
-                            zeta(1, w_grp%n_intp_start(ipe), rsp), w_grp%mydim, fzeta(1, 1), w_grp%mydim, 1.d0, &
+              call Zgemm_hl('T', 'N', n_row, n_intp_r, w_grp%mydim, norm_factor, &
+                            zeta(1, w_grp%n_intp_start(ipe), isp), w_grp%mydim, fzeta(1, 1), w_grp%mydim, 1.d0, &
                             tmp_Mmtrx_loc(1, 1), ldn_intp_r, opt%linear_algebra)
               call timacc(77, 2, tsec)
-              call MPI_REDUCE(MPI_IN_PLACE, tmp_Mmtrx_loc(1, 1), n_row*n_intp_r, MPI_DOUBLE, MPI_SUM, ipe, w_grp%comm, &
-                              errinfo)
+              call MPI_REDUCE(MPI_IN_PLACE, tmp_Mmtrx_loc(1, 1), n_row*n_intp_r, MPI_DOUBLE_SCALAR, MPI_SUM, ipe, &
+                              w_grp%comm, errinfo)
               if (w_grp%inode == ipe) then
-                isdf_in%Mmtrx_loc(1:n_row, 1:n_intp_r, rsp, csp, ikp, 2, irp) = tmp_Mmtrx_loc(1:n_row, 1:n_intp_r)
+                isdf_in%ZMmtrx_loc(1:n_row, 1:n_intp_r, isp, csp, ikp, 2, irp) = tmp_Mmtrx_loc(1:n_row, 1:n_intp_r)
               end if
             end if ! kflag > 0
             if (kflag < 2) then
@@ -857,13 +838,13 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
 
               ! old code
               !call dgemm('T', 'N', n_row, n_intp_r, w_grp%mydim, &
-              !  norm_factor, zeta(1,w_grp%n_intp_start(ipe),rsp), w_grp%mydim, &
+              !  norm_factor, zeta(1,w_grp%n_intp_start(ipe),isp), w_grp%mydim, &
               !  vzeta(1,1,csp), w_grp%mydim, 0.d0, &
               !  tmp_Mmtrx_loc(1, 1), ldn_intp_r)
               ! new code
               call timacc(77, 1, tsec)
-              call dgemm_hl('T', 'N', n_row, n_intp_r, w_grp%mydim, norm_factor, &
-                            zeta(1, w_grp%n_intp_start(ipe), rsp), w_grp%mydim, vzeta(1, 1, csp), w_grp%mydim, 0.d0, &
+              call Zgemm_hl('T', 'N', n_row, n_intp_r, w_grp%mydim, norm_factor, &
+                            zeta(1, w_grp%n_intp_start(ipe), isp), w_grp%mydim, vzeta(1, 1, csp), w_grp%mydim, 0.d0, &
                             tmp_Mmtrx_loc(1, 1), ldn_intp_r, opt%linear_algebra)
               call timacc(77, 2, tsec)
               !write(6000+w_grp%inode, *) "tmp_Mmtrx_loc = "
@@ -871,23 +852,23 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
               !  ldn_intp_r, n_intp_r, 6000+w_grp%inode )
               !call MPI_REDUCE(MPI_IN_PLACE, tmp_Mmtrx_loc(1,1), ldn_intp_r*n_intp_r, &
               !  MPI_DOUBLE, MPI_SUM, ipe, w_grp%comm, errinfo)
-              call MPI_REDUCE(tmp_Mmtrx_loc(1, 1), isdf_in%Mmtrx_loc(1, 1, rsp, csp, ikp, 1, irp), n_row*n_intp_r, &
-                              MPI_DOUBLE, MPI_SUM, ipe, w_grp%comm, errinfo)
+              call MPI_REDUCE(tmp_Mmtrx_loc(1, 1), isdf_in%ZMmtrx_loc(1, 1, isp, csp, ikp, 1, irp), n_row*n_intp_r, &
+                              MPI_DOUBLE_SCALAR, MPI_SUM, ipe, w_grp%comm, errinfo)
               !if (w_grp%inode .eq. ipe) then
-              !  isdf_in%Mmtrx_loc(1:n_row, 1:n_intp_r, rsp, csp, ikp, 1, irp) = &
+              !  isdf_in%ZMmtrx_loc(1:n_row, 1:n_intp_r, isp, csp, ikp, 1, irp) = &
               !   tmp_Mmtrx_loc(1:n_row, 1:n_intp_r)
               !endif
               !if (ipe .eq. w_grp%inode) then
-              !write(6000+w_grp%inode, *) "isdf_in%Mmtrx_loc = "
-              !call printmatrix ( isdf_in%Mmtrx_loc (1,1,rsp,csp,ikp,1,irp), &
+              !write(6000+w_grp%inode, *) "isdf_in%ZMmtrx_loc = "
+              !call printmatrix ( isdf_in%ZMmtrx_loc (1,1,isp,csp,ikp,1,irp), &
               !  ldn_intp_r, n_intp_r, 6000+w_grp%inode )
               !endif
               !
-            end if ! kflag < 2
-          end do ! ipe
-        end do ! csp
-      end do ! rsp
-    end do ! jrp
+            end if  ! kflag < 2
+          end do  ! ipe
+        end do  ! csp
+      end do  ! isp
+    end do  ! jrp
     call timacc(54, 2, tsec)
 
     deallocate (zeta)
@@ -923,7 +904,7 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
 #ifdef DEBUG
   write (6, *) "Remove file "//trim(h5filename)
 #endif
-  call execute_command_line("rm "//trim(h5filename))
+  ! call execute_command_line("rm "//trim(h5filename))
   !
   ! clean up all the ALLOCATEd variables
   !
@@ -936,12 +917,12 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
 #ifdef DEBUG
   if (w_grp%master .and. .true.) then
     do jrp = 1, gvec%syms%ntrans
-      write (dbgunit, '(a,i2,a)') " Mmtrx_loc (:, :, rsp=1, csp=1, ikp=1, 1, jrp=", jrp, ") = "
-      call printmatrix(isdf_in%Mmtrx_loc(1, 1, 1, 1, 1, 1, jrp), w_grp%myn_intp_r, n_intp_r, dbgunit)
+      write (dbgunit, '(a,i2,a)') " ZMmtrx_loc (:, :, isp=1, csp=1, ikp=1, 1, jrp=", jrp, ") = "
+      call printmatrix(isdf_in%ZMmtrx_loc(1, 1, 1, 1, 1, 1, jrp), w_grp%myn_intp_r, n_intp_r, dbgunit)
     end do
     do jrp = 1, gvec%syms%ntrans
-      write (dbgunit, '(a,i2,a)') " Mmtrx_loc (:, :, rsp=1, csp=1, ikp=1, 2, jrp=", jrp, ") = "
-      call printmatrix(isdf_in%Mmtrx_loc(1, 1, 1, 1, 1, 2, jrp), w_grp%myn_intp_r, n_intp_r, dbgunit)
+      write (dbgunit, '(a,i2,a)') " ZMmtrx_loc (:, :, isp=1, csp=1, ikp=1, 2, jrp=", jrp, ") = "
+      call printmatrix(isdf_in%ZMmtrx_loc(1, 1, 1, 1, 1, 2, jrp), w_grp%myn_intp_r, n_intp_r, dbgunit)
     end do
   end if
 #endif
@@ -955,10 +936,10 @@ subroutine isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, 
 #endif
   return
 
-end subroutine isdf_parallel_sym_UltraLowMem
+end subroutine Zisdf_parallel_sym_UltraLowMem
 
-! prepare isdf%Psi_intp_loc
-subroutine distribute_intp_pts(wfn, isdf_in, ntrans, isp, ikp)
+! prepare isdf%ZPsi_intp_loc
+subroutine Zdistribute_intp_pts(wfn, isdf_in, ntrans, isp, ikp)
 
   use mpi_module
   use typedefs
@@ -969,7 +950,7 @@ subroutine distribute_intp_pts(wfn, isdf_in, ntrans, isp, ikp)
   type(ISDF), intent(inout) :: isdf_in
   type(wavefunction), intent(in) :: wfn
   integer, intent(in) :: ntrans, isp, ikp
-  real(dp) :: dummy(wfn%nmem)
+  SCALAR :: dummy(wfn%nmem)
   integer, parameter :: nchecks = 1000
   integer :: inode_dest, inode_source, ipt, iptf, iptr, ii, jj, mpi_err, tag
   integer(KIND=MPI_ADDRESS_KIND) :: max_tag
@@ -1038,11 +1019,11 @@ subroutine distribute_intp_pts(wfn, isdf_in, ntrans, isp, ikp)
       jj = iptr - ioff1(inode_source) + 1
       if (inode_source == inode_dest) then
         ! w_grp%inode .eq. inode_dest
-        isdf_in%Psi_intp_loc(ipt - w_grp%n_intp_start(inode_dest) + 1, 1:wfn%nmem, isp, ikp) = wfn%dwf(jj, 1:wfn%nmem)
+        isdf_in%ZPsi_intp_loc(ipt - w_grp%n_intp_start(inode_dest) + 1, 1:wfn%nmem, isp, ikp) = wfn%Zwf(jj, 1:wfn%nmem)
       else ! source and dest process are different
-        dummy(1:wfn%nmem) = wfn%dwf(jj, 1:wfn%nmem)
+        dummy(1:wfn%nmem) = wfn%Zwf(jj, 1:wfn%nmem)
         tag = ipt
-        call MPI_SEND(dummy(1), wfn%nmem, MPI_DOUBLE, inode_dest, tag, w_grp%comm, mpi_err)
+        call MPI_SEND(dummy(1), wfn%nmem, MPI_DOUBLE_SCALAR, inode_dest, tag, w_grp%comm, mpi_err)
         ! print *, mpi_err
       end if
     end if
@@ -1050,9 +1031,9 @@ subroutine distribute_intp_pts(wfn, isdf_in, ntrans, isp, ikp)
       ! if the current process is the destination process
       ! and the source process is not the destination process
       tag = ipt
-      call MPI_RECV(dummy(1), wfn%nmem, MPI_DOUBLE, inode_source, tag, w_grp%comm, mpistatus, mpi_err)
+      call MPI_RECV(dummy(1), wfn%nmem, MPI_DOUBLE_SCALAR, inode_source, tag, w_grp%comm, mpistatus, mpi_err)
       ! print *, mpi_err
-      isdf_in%Psi_intp_loc(ipt - w_grp%n_intp_start(inode_dest) + 1, 1:wfn%nmem, isp, ikp) = dummy(1:wfn%nmem)
+      isdf_in%ZPsi_intp_loc(ipt - w_grp%n_intp_start(inode_dest) + 1, 1:wfn%nmem, isp, ikp) = dummy(1:wfn%nmem)
     end if
   end do ! ipt
 

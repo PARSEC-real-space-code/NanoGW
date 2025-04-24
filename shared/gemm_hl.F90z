@@ -8,8 +8,7 @@
 !
 ! =========================================================
 
-subroutine Zgemm_hl(transA, transB, M, N, K, alpha, &
-                    A, LDA, B, LDB, beta, C, LDC, opt_linear_algebra)
+subroutine Zgemm_hl(transA, transB, M, N, K, alpha, A, LDA, B, LDB, beta, C, LDC, opt_linear_algebra)
 #ifdef HIPMAGMA
   use iso_c_binding
   use magma
@@ -25,32 +24,30 @@ subroutine Zgemm_hl(transA, transB, M, N, K, alpha, &
   SCALAR, intent(inout) :: C(LDC, *)
   integer, intent(in) :: opt_linear_algebra
   real(dp) :: tsec
-  !SCALAR, allocatable :: tmp_C(:,:)
-  !SCALAR :: residue
-  !integer :: ii
+  ! SCALAR, allocatable :: tmp_C(:,:)
+  ! SCALAR :: residue
+  ! integer :: ii
 #ifdef HIPMAGMA
   magma_devptr_t :: queue, dA, dB, dC
   integer :: dev, LDDA, LDDB, kDA, kDB, info
   integer, parameter :: nsize_thr = 80000, max_dev_per_node = 20
   integer :: mydev, num_dev = 1, devices(max_dev_per_node)
-  !if(peinf%inode .eq. 0) write(6,*) A(1,1)
-  !print *, "opt_linear_algebra", opt_linear_algebra
+  ! if (peinf%inode .eq. 0) write(6,*) A(1,1)
+  ! print *, "opt_linear_algebra", opt_linear_algebra
   if (opt_linear_algebra == 2) then
     if (M*N*K > nsize_thr) then
-      !if (.True.) then
-! According to tests, GPU becomes faster than CPU when
-! M*N*K is greater than a certain
-! number "nsize_threshold"
+      ! According to tests, GPU becomes faster than CPU when
+      ! M*N*K is greater than a certain number "nsize_threshold"
       call timacc(91, 1, tsec)
       if (peinf%master) print *, "call magmaf"
       call magmaf_init()
-      !dev = 0 ! to be changed later for multi GPU configuration
+      ! dev = 0 ! to be changed later for multi GPU configuration
       num_dev = magmaf_num_gpus()
       if (peinf%master) print *, "num_dev ", num_dev
-      !call magmaf_getdevices(devices, max_dev_per_node, num_dev) ! not work
+      ! call magmaf_getdevices(devices, max_dev_per_node, num_dev)  ! not work
       mydev = mod(peinf%inode, num_dev)
       call magmaf_setdevice(mydev)
-      !print *, " inode = ", peinf%inode, " mygpu = ", mydev
+      ! print *, " inode = ", peinf%inode, " mygpu = ", mydev
       if (peinf%inode == 0) write (6, *) "break point 1 ", A(1, 1)
       call magmaf_queue_create(mydev, queue)
       select case (transA(1))
@@ -82,11 +79,10 @@ subroutine Zgemm_hl(transA, transB, M, N, K, alpha, &
       call magmaf_Zsetmatrix(LDDB, kDB, B, LDB, dB, LDDB, queue)
       call magmaf_Zsetmatrix(M, N, C, LDC, dC, M, queue)
       if (peinf%inode == 0) write (6, *) "break point 4 ", A(1, 1)
-      call magmablasf_Zgemm(transA(1), transB(1), M, N, K, alpha, &
-                            dA, LDDA, dB, LDDB, beta, dC, M, queue)
+      call magmablasf_Zgemm(transA(1), transB(1), M, N, K, alpha, dA, LDDA, dB, LDDB, beta, dC, M, queue)
       if (peinf%inode == 0) write (6, *) "break point 5 "
       ! Get the result (matrix C) from GPU to CPU
-      !allocate (tmp_C(M,N))
+      ! allocate (tmp_C(M,N))
       call magmaf_Zgetmatrix(M, N, dC, M, C, LDC, queue)
       if (peinf%inode == 0) write (6, *) "break point 6 "
       ! Done, free GPU memory
@@ -97,31 +93,28 @@ subroutine Zgemm_hl(transA, transB, M, N, K, alpha, &
       call magmaf_queue_destroy(queue)
       call magmaf_finalize()
       if (peinf%inode == 0) write (6, *) "break point 8 "
-      !call Zgemm( transA, transB, M, N, K, alpha, &
-      !  A, LDA, B, LDB, beta, C, LDC )
-      !residue = 0.d0
-      !do ii = 1, M
-      !  residue = residue + sum( (tmp_C(ii,1:N) - C(ii,1:N))**2 )
-      !enddo
-      !if (peinf%inode .eq. 0) write(6, '(a,i3,a,3e11.4,3i6,2e11.4,2i6,2e11.4)') "inode ", peinf%inode, " residue ", residue, tmp_C(1,1), C(1,1), M, N, K, alpha, beta, LDA, LDB, A(1,1), B(1,1)
-      !deallocate (tmp_C)
+      ! call Zgemm( transA, transB, M, N, K, alpha, A, LDA, B, LDB, beta, C, LDC )
+      ! residue = 0.d0
+      ! do ii = 1, M
+      !   residue = residue + sum( (tmp_C(ii,1:N) - C(ii,1:N))**2 )
+      ! enddo
+      ! deallocate (tmp_C)
       call timacc(91, 2, tsec)
       if (peinf%master) print *, "finish magmaf"
     else
       call timacc(92, 1, tsec)
       ! call lapack routine *gemm
-      call Zgemm(transA(1), transB(1), M, N, K, alpha, &
-                 A, LDA, B, LDB, beta, C, LDC)
+      call Zgemm(transA(1), transB(1), M, N, K, alpha, A, LDA, B, LDB, beta, C, LDC)
       call timacc(92, 2, tsec)
     end if
     return
   end if
 #endif
   if (opt_linear_algebra == 1) then
+    call timacc(92, 1, tsec)
     ! call lapack routine *gemm
-    call Zgemm(transA(1), transB(1), M, N, K, alpha, &
-               A, LDA, B, LDB, beta, C, LDC)
-    !if (peinf%inode .eq. 0) write(6, '(a,i3,e11.4,3i6,2e11.4,2i6,2e11.4)') "inode ", peinf%inode, C(1,1), M, N, K, alpha, beta, LDA, LDB, A(1,1), B(1,1)
+    call Zgemm(transA(1), transB(1), M, N, K, alpha, A, LDA, B, LDB, beta, C, LDC)
+    call timacc(92, 2, tsec)
   end if
 
 end subroutine Zgemm_hl

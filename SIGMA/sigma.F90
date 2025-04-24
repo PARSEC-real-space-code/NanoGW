@@ -637,6 +637,18 @@ program sigma
     isdf_in%n_intp_r = n_intp_r
     allocate (isdf_in%intp_r(n_intp_r))
     isdf_in%intp_r = intp_r
+
+    deallocate (intp_r)
+    deallocate (ncv)
+    if (isdf_in%lessmemory /= 4) then
+      deallocate (invpairmap)
+      deallocate (pairmap)
+    end if
+    deallocate (nv)
+    deallocate (ivlist)
+    deallocate (nc)
+    deallocate (iclist)
+
     ! set up parameters of w_grp:
     !
     w_grp%n_intp_r = isdf_in%n_intp_r
@@ -678,63 +690,60 @@ program sigma
              isdf_in%lessmemory == 3 .or. &
              isdf_in%lessmemory == 4) then
       ! print *, " w_grp%myn_intp_r ", w_grp%myn_intp_r
-      allocate (isdf_in%Psi_intp_loc(w_grp%myn_intp_r, kpt%wfn(1, 1)%nmem, nspin, kpt%nk))
-      isdf_in%Psi_intp_loc = zero
-      allocate (isdf_in%Mmtrx_loc(w_grp%myn_intp_r, n_intp_r, nspin, nspin, &
-                                  kpt%nk, 2, gvec%syms%ntrans))
-      isdf_in%Mmtrx_loc = zero
+      if (kpt%lcplx) then
+        allocate (isdf_in%zPsi_intp_loc(w_grp%myn_intp_r, kpt%wfn(1, 1)%nmem, nspin, kpt%nk))
+        isdf_in%zPsi_intp_loc = zzero
+        allocate (isdf_in%zMmtrx_loc(w_grp%myn_intp_r, n_intp_r, nspin, nspin, kpt%nk, 2, gvec%syms%ntrans))
+        isdf_in%zMmtrx_loc = zzero
+      else
+        allocate (isdf_in%dPsi_intp_loc(w_grp%myn_intp_r, kpt%wfn(1, 1)%nmem, nspin, kpt%nk))
+        isdf_in%dPsi_intp_loc = zero
+        allocate (isdf_in%dMmtrx_loc(w_grp%myn_intp_r, n_intp_r, nspin, nspin, kpt%nk, 2, gvec%syms%ntrans))
+        isdf_in%dMmtrx_loc = zero
+      end if
       ! for lessmemory .eq. 4 we need to allocate PsiV_intp_bl and PsiC_intp_bl
     else ! do not save memory
       ! Cmtrx will be intialized with zeros in isdf_parallel.f90
       allocate (isdf_in%Cmtrx(n_intp_r, maxncv, nspin, kpt%nk, gvec%syms%ntrans))
-      allocate (isdf_in%Mmtrx(n_intp_r, n_intp_r, nspin, nspin, kpt%nk, 2, &
-                              gvec%syms%ntrans))
+      allocate (isdf_in%Mmtrx(n_intp_r, n_intp_r, nspin, nspin, kpt%nk, 2, gvec%syms%ntrans))
       isdf_in%Mmtrx = zero
     end if
     !
-    deallocate (intp_r)
-    deallocate (ncv)
-    if (isdf_in%lessmemory /= 4) then
-      deallocate (invpairmap)
-      deallocate (pairmap)
-    end if ! isdf_in%lessmemory
-    deallocate (nv)
-    deallocate (ivlist)
-    deallocate (nc)
-    deallocate (iclist)
     !
     ! --- perform ISDF method to interpolate pair products of wave functions ---
     !
-    call stopwatch(peinf%master, "before call isdf")
-    if (peinf%master) print *, 'call isdf subroutine'
+    ! call stopwatch(peinf%master, "call isdf subroutine")
     kflag = 1
     if (nolda) kflag = 0
     call timacc(52, 1, tsec)
     verbose = .false.
     if (isdf_in%lessmemory == 1) then
-      if (peinf%master) print *, " call isdf_parallel_sym_lessmemory2"
-      call isdf_parallel_sym_lessmemory2(gvec, pol_in, kpt, nspin, isdf_in, &
-                                         kflag, opt, verbose)
+      call stopwatch(peinf%master, " call isdf_parallel_sym_lessmemory2")
+      call isdf_parallel_sym_lessmemory2(gvec, pol_in, kpt, nspin, isdf_in, kflag, opt, verbose)
       if (peinf%master) print *, " done isdf"
     else if (isdf_in%lessmemory == 2 .or. &
              isdf_in%lessmemory == 3 .or. &
              isdf_in%lessmemory == 4) then
-      if (peinf%master) print *, " call isdf_parallel_sym_UltraLowMem"
-      call isdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, verbose)
-      if (peinf%master) print *, " done isdf"
-      do kk = 91, 92
-        jj = 3
-        call timacc(kk, jj, tsec)
-        if (peinf%master) print *, kk, tsec(1), tsec(2), "sec", jj
-      end do
+      call stopwatch(peinf%master, " call isdf_parallel_sym_UltraLowMem")
+      if (kpt%lcplx) then
+        call zisdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, verbose)
+      else
+        call disdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt, verbose)
+      end if
+      call stopwatch(peinf%master, " done isdf")
+      ! do kk = 91, 92
+      !   jj = 3
+      !   call timacc(kk, jj, tsec)
+      !   if (peinf%master) print *, kk, tsec(1), tsec(2), "sec", jj
+      ! end do
     else
-      if (peinf%master) print *, " Call isdf_parallel_sym"
+      if (peinf%master) print *, " call isdf_parallel_sym"
       call isdf_parallel_sym(gvec, pol_in, kpt, nspin, isdf_in, kflag, verbose)
-      if (peinf%master) print *, 'done isdf'
+      call stopwatch(peinf%master, " done isdf")
     end if
     call MPI_BARRIER(peinf%comm, info)
     call timacc(52, 2, tsec)
-    call stopwatch(peinf%master, "after call isdf")
+    ! call stopwatch(peinf%master, "after call isdf")
   end if ! if (doisdf)
   ! The outputs are Cmtrx and Mmtrx, which are used by k_integrate_isdf() for
   ! calculation of K(i,j,k,l) later !!
@@ -750,7 +759,7 @@ program sigma
   !-------------------------------------------------------------------
   ! Print out warnings, information etc.
   !
-  if (kpt%lcplx) tamm_d = .true.
+  ! if (kpt%lcplx) tamm_d = .true.  ! seems polyfit method also works for cplx wfn
   if (peinf%master) then
     write (*, '(/,A,/,/,A,/,2A,/)') repeat('-', 65), ' Self-energy input data: ', ' ', repeat('-', 23)
     if (sig_in%xc == XC_GW) then
@@ -904,8 +913,8 @@ program sigma
           allocate (sig(isp, ik)%sgoffd(2, 2*sig(isp, ik)%noffd))
         end if
       end if
-    end do
-  end do
+    end do  ! isp
+  end do  ! ik
   allocate (q_p(gvec%syms%ntrans, nspin, nkpt))
 
   !-------------------------------------------------------------------
@@ -968,9 +977,22 @@ program sigma
   end if
   do it_scf = 0, n_it
     if (kpt%lcplx) then
-      call zcalculate_sigma(nspin, kpt_sig%nk, n_it, it_scf, nr_buff, static_type, sig_en, dft_code, chkpt_in, gvec, &
-                            kpt, qpt, k_c, k_p, pol, sig_in, sig, q_p, nolda, tamm_d, writeqp, snorm, cohsex, hqp_sym, &
-                            lstop, ecuts, qpmix, sig_cut, max_sig, isdf_in, doisdf, opt)
+      if (sig_in%lanczos) then
+        if (isdf_in%lessmemory == 2) then
+          if (peinf%master) print *, "ERROR: Complex calculations are not yet supported with lessmemory = 2"
+        else if (isdf_in%lessmemory == 3) then
+          if (peinf%master) print *, "ERROR: Complex calculations are not yet supported with lessmemory = 3"
+        else if (isdf_in%lessmemory == 4) then
+          if (peinf%master) print *, "call calculate_sigma_lanczos_lowcomsym"
+          call zcalculate_sigma_lanczos_lowcomsym(nspin, kpt_sig%nk, sig_en, dft_code, gvec, kpt, qpt, k_c, k_p, &
+                                                  sig_in, sig, q_p, nolda, tamm_d, writeqp, snorm, cohsex, ecuts, &
+                                                  sig_cut, max_sig, isdf_in, doisdf, opt)
+        end if
+      else
+        call zcalculate_sigma(nspin, kpt_sig%nk, n_it, it_scf, nr_buff, static_type, sig_en, dft_code, chkpt_in, gvec, &
+                              kpt, qpt, k_c, k_p, pol, sig_in, sig, q_p, nolda, tamm_d, writeqp, snorm, cohsex, &
+                              hqp_sym, lstop, ecuts, qpmix, sig_cut, max_sig, isdf_in, doisdf, opt)
+      end if
     else
       if (sig_in%lanczos) then
         if (isdf_in%lessmemory == 2) then
@@ -979,13 +1001,13 @@ program sigma
                                                     sig_in, sig, q_p, nolda, tamm_d, writeqp, snorm, cohsex, lstop, &
                                                     ecuts, sig_cut, max_sig, isdf_in, doisdf, opt)
         else if (isdf_in%lessmemory == 3) then
-          if (peinf%master) print *, "call calculate_sigma_lanczos_BLOCK "
+          if (peinf%master) print *, "call calculate_sigma_lanczos_BLOCK"
           call dcalculate_sigma_lanczos_BLOCK(nspin, kpt_sig%nk, sig_en, dft_code, gvec, kpt, qpt, k_c, k_p, sig_in, &
                                               sig, q_p, nolda, tamm_d, writeqp, snorm, cohsex, ecuts, sig_cut, &
                                               max_sig, isdf_in, doisdf, opt)
           lstop = .true.
         else if (isdf_in%lessmemory == 4) then
-          if (peinf%master) print *, "call calculate_sigma_lanczos_lowcomsym "
+          if (peinf%master) print *, "call calculate_sigma_lanczos_lowcomsym"
           call dcalculate_sigma_lanczos_lowcomsym(nspin, kpt_sig%nk, sig_en, dft_code, gvec, kpt, qpt, k_c, k_p, &
                                                   sig_in, sig, q_p, nolda, tamm_d, writeqp, snorm, cohsex, ecuts, &
                                                   sig_cut, max_sig, isdf_in, doisdf, opt)
@@ -1035,17 +1057,21 @@ program sigma
     deallocate (isdf_in%iclist)
     if (isdf_in%lessmemory == 1) then
       deallocate (isdf_in%Psi_intp)
-    else if (isdf_in%lessmemory == 2 .or. &
-             isdf_in%lessmemory == 3 .or. &
-             isdf_in%lessmemory == 4) then
-      deallocate (isdf_in%Psi_intp_loc)
+    else if (isdf_in%lessmemory == 2 .or. isdf_in%lessmemory == 3 .or. isdf_in%lessmemory == 4) then
+      if (kpt%lcplx) then
+        deallocate (isdf_in%zPsi_intp_loc)
+      else
+        deallocate (isdf_in%dPsi_intp_loc)
+      end if
     else
       deallocate (isdf_in%Cmtrx)
     end if
-    if (isdf_in%lessmemory == 2 .or. &
-        isdf_in%lessmemory == 3 .or. &
-        isdf_in%lessmemory == 4) then
-      deallocate (isdf_in%Mmtrx_loc)
+    if (isdf_in%lessmemory == 2 .or. isdf_in%lessmemory == 3 .or. isdf_in%lessmemory == 4) then
+      if (kpt%lcplx) then
+        deallocate (isdf_in%zMmtrx_loc)
+      else
+        deallocate (isdf_in%dMmtrx_loc)
+      end if
     else
       deallocate (isdf_in%Mmtrx)
     end if

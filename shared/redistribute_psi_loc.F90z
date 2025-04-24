@@ -111,13 +111,13 @@ subroutine Zredistribute_Psi_loc(isdf_in, nval, ncond)
   !      mycstart, mycend
   !  endif
   !enddo
-  call mpi_barrier(w_grp%comm, mpi_err)
-  allocate (isdf_in%PsiV_intp_bl(isdf_in%n_intp_r, mynv, 1, 1))
-  allocate (isdf_in%PsiC_intp_bl(isdf_in%n_intp_r, mync, 1, 1))
-  isdf_in%PsiV_intp_bl = 0.d0
-  isdf_in%PsiC_intp_bl = 0.d0
-  ! redistribute to PsiV_intp_bl
-  allocate (tmparray(ldn_intp_r*ldv))
+  call  MPI_BARRIER(w_grp%comm, mpi_err)
+  allocate (isdf_in%ZPsiV_intp_bl(isdf_in%n_intp_r, mynv, 1, 1))
+  allocate (isdf_in%ZPsiC_intp_bl(isdf_in%n_intp_r, mync, 1, 1))
+  isdf_in%ZPsiV_intp_bl = Zzero
+  isdf_in%ZPsiC_intp_bl = Zzero
+  ! redistribute to ZPsiV_intp_bl
+  allocate (tmparray(ldn_intp_r * ldv))
   do ipe = 0, w_grp%npes - 1
     send_node = ipe
     j1 = w_grp%n_intp_start(ipe)
@@ -134,46 +134,42 @@ subroutine Zredistribute_Psi_loc(isdf_in, nval, ncond)
         if (send_node /= recv_node) then
           !print *, " inode ", w_grp%inode, " comm "
           if (w_grp%inode == send_node) then
-            call mpi_send(isdf_in%Psi_intp_loc(1, i1, 1, 1), &
-                          (j2 - j1 + 1)*(i2 - i1 + 1), &
-                          MPI_DOUBLE_SCALAR, recv_node, tag, &
-                          w_grp%comm, mpi_err)
+            call MPI_SEND(isdf_in%ZPsi_intp_loc(1, i1, 1, 1), (j2 - j1 + 1)*(i2 - i1 + 1), MPI_DOUBLE_SCALAR, &
+                          recv_node, tag, w_grp%comm, mpi_err)
           end if
           if (w_grp%inode == recv_node) then
-            call mpi_recv(tmparray, (j2 - j1 + 1)*(i2 - i1 + 1), &
-                          MPI_DOUBLE_SCALAR, send_node, tag, &
-                          w_grp%comm, mpistatus, mpi_err)
-            isdf_in%PsiV_intp_bl(j1:j2, 1:(i2 - i1 + 1), 1, 1) = &
+            call MPI_RECV(tmparray, (j2 - j1 + 1)*(i2 - i1 + 1), MPI_DOUBLE_SCALAR, send_node, tag, w_grp%comm, &
+                          mpistatus, mpi_err)
+            isdf_in%ZPsiV_intp_bl(j1:j2, 1:(i2 - i1 + 1), 1, 1) = &
               reshape(tmparray(1:(j2 - j1 + 1)*(i2 - i1 + 1)), (/j2 - j1 + 1, i2 - i1 + 1/))
           end if
         else ! send_node .eq. recv_node
           !print *, " inode ", w_grp%inode, " copy "
           if (w_grp%inode == recv_node) then
-            isdf_in%PsiV_intp_bl(j1:j2, 1:(i2 - i1 + 1), 1, 1) = &
-              isdf_in%Psi_intp_loc(1:(j2 - j1 + 1), i1:i2, 1, 1)
+            isdf_in%ZPsiV_intp_bl(j1:j2, 1:(i2 - i1 + 1), 1, 1) = isdf_in%ZPsi_intp_loc(1:(j2 - j1 + 1), i1:i2, 1, 1)
           end if
         end if
         !if (w_grp%inode .eq. recv_node) then
-        !  print *, "PsiV_intp_bl ", w_grp%inode, " recv "
-        !  call printmatrix(isdf_in%PsiV_intp_bl(1,1,1,1), isdf_in%n_intp_r, mynv, 6)
+        !  print *, "ZPsiV_intp_bl ", w_grp%inode, " recv "
+        !  call printmatrix(isdf_in%ZPsiV_intp_bl(1,1,1,1), isdf_in%n_intp_r, mynv, 6)
         !endif
         !call mpi_barrier(w_grp%comm, mpi_err)
       end do ! icgrp
     end do ! ivgrp
   end do ! ipe
   deallocate (tmparray)
-  ! if (w_grp%master) print *, " finish redistribut PsiV_intp_bl "
+  ! if (w_grp%master) print *, " finish redistribut ZPsiV_intp_bl "
   ! do ipe = 0, w_grp%npes-1
   ! if (w_grp%inode .eq. ipe) then
-  !   print *, "PsiV_intp_bl ", ipe
-  !   call printmatrix(isdf_in%PsiV_intp_bl(1,1,1,1), isdf_in%n_intp_r, mynv, 6)
+  !   print *, "ZPsiV_intp_bl ", ipe
+  !   call printmatrix(isdf_in%ZPsiV_intp_bl(1,1,1,1), isdf_in%n_intp_r, mynv, 6)
   ! endif
   ! call mpi_barrier(w_grp%comm, mpi_err)
   ! enddo
   ! do ipe = 0, w_grp%npes-1
   ! if (w_grp%inode .eq. ipe) then
-  !   print *, "Psi_intp_loc", ipe
-  !   call printmatrix(isdf_in%Psi_intp_loc(1,1,1,1), w_grp%myn_intp_r, nval, 6)
+  !   print *, "ZPsi_intp_loc", ipe
+  !   call printmatrix(isdf_in%ZPsi_intp_loc(1,1,1,1), w_grp%myn_intp_r, nval, 6)
   ! endif
   ! call mpi_barrier(w_grp%comm, mpi_err)
   ! enddo
@@ -195,25 +191,25 @@ subroutine Zredistribute_Psi_loc(isdf_in, nval, ncond)
         if (send_node /= recv_node) then
           !print *, " inode ", w_grp%inode, " comm "
           if (w_grp%inode == send_node) then
-            call mpi_send(isdf_in%Psi_intp_loc(1, nval + i1, 1, 1), (j2 - j1 + 1)*(i2 - i1 + 1), MPI_DOUBLE_SCALAR, &
+            call MPI_SEND(isdf_in%ZPsi_intp_loc(1, nval + i1, 1, 1), (j2 - j1 + 1)*(i2 - i1 + 1), MPI_DOUBLE_SCALAR, &
                           recv_node, tag, w_grp%comm, mpi_err)
           end if
           if (w_grp%inode == recv_node) then
-            call mpi_recv(tmparray, (j2 - j1 + 1)*(i2 - i1 + 1), MPI_DOUBLE_SCALAR, send_node, tag, w_grp%comm, &
+            call MPI_RECV(tmparray, (j2 - j1 + 1)*(i2 - i1 + 1), MPI_DOUBLE_SCALAR, send_node, tag, w_grp%comm, &
                           mpistatus, mpi_err)
-            isdf_in%PsiC_intp_bl(j1:j2, 1:(i2 - i1 + 1), 1, 1) = &
+            isdf_in%ZPsiC_intp_bl(j1:j2, 1:(i2 - i1 + 1), 1, 1) = &
               reshape(tmparray(1:(j2 - j1 + 1)*(i2 - i1 + 1)), (/j2 - j1 + 1, i2 - i1 + 1/))
           end if
         else ! send_node .eq. recv_node
           !print *, " inode ", w_grp%inode, " copy "
           if (w_grp%inode == recv_node) then
-            isdf_in%PsiC_intp_bl(j1:j2, 1:(i2 - i1 + 1), 1, 1) = &
-              isdf_in%Psi_intp_loc(1:(j2 - j1 + 1), (nval + i1):(nval + i2), 1, 1)
+            isdf_in%ZPsiC_intp_bl(j1:j2, 1:(i2 - i1 + 1), 1, 1) = &
+              isdf_in%ZPsi_intp_loc(1:(j2 - j1 + 1), (nval + i1):(nval + i2), 1, 1)
           end if
         end if
         !if (w_grp%inode .eq. recv_node) then
-        !  print *, "PsiC_intp_bl ", w_grp%inode, " recv "
-        !  call printmatrix(isdf_in%PsiC_intp_bl(1,1,1,1), isdf_in%n_intp_r, mync, 6)
+        !  print *, "ZPsiC_intp_bl ", w_grp%inode, " recv "
+        !  call printmatrix(isdf_in%ZPsiC_intp_bl(1,1,1,1), isdf_in%n_intp_r, mync, 6)
         !endif
         !call mpi_barrier(w_grp%comm, mpi_err)
       end do ! icgrp
@@ -224,18 +220,18 @@ subroutine Zredistribute_Psi_loc(isdf_in, nval, ncond)
   deallocate (cstart)
   deallocate (vend)
   deallocate (cend)
-  !if (w_grp%master) print *, " finish redistribut PsiC_intp_bl "
+  !if (w_grp%master) print *, " finish redistribut ZPsiC_intp_bl "
   !do ipe = 0, w_grp%npes-1
   !if (w_grp%inode .eq. ipe) then
-  !  print *, "PsiC_intp_bl ", ipe
-  !  call printmatrix(isdf_in%PsiC_intp_bl(1,1,1,1), isdf_in%n_intp_r, mync, 6)
+  !  print *, "ZPsiC_intp_bl ", ipe
+  !  call printmatrix(isdf_in%ZPsiC_intp_bl(1,1,1,1), isdf_in%n_intp_r, mync, 6)
   !endif
   !call mpi_barrier(w_grp%comm, mpi_err)
   !enddo
   !do ipe = 0, w_grp%npes-1
   !if (w_grp%inode .eq. ipe) then
-  !  print *, "Psi_intp_loc", ipe
-  !  call printmatrix(isdf_in%Psi_intp_loc(1,nval+1,1,1), w_grp%myn_intp_r, ncond, 6)
+  !  print *, "ZPsi_intp_loc", ipe
+  !  call printmatrix(isdf_in%ZPsi_intp_loc(1,nval+1,1,1), w_grp%myn_intp_r, ncond, 6)
   !endif
   !call mpi_barrier(w_grp%comm, mpi_err)
   !enddo

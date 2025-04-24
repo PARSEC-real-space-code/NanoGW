@@ -92,15 +92,14 @@ subroutine matvec_isdf_UltraLowMem(vec, Hvec, ncv_loc, isdf_in, wfn, cvpair, sqr
       ic = tmp_cvpair(2, icv)
       tmp_vec(intp_start:intp_end) = &
         tmp_vec(intp_start:intp_end) + &
-        isdf_in%Psi_intp_loc(1:w_grp%myn_intp_r, ic, 1, 1)* &
-        isdf_in%Psi_intp_loc(1:w_grp%myn_intp_r, iv, 1, 1)* &
+        isdf_in%dPsi_intp_loc(1:w_grp%myn_intp_r, ic, 1, 1)* &
+        isdf_in%dPsi_intp_loc(1:w_grp%myn_intp_r, iv, 1, 1)* &
         tmp_Hvec(icv)
       ! if (w_grp%master) print *, iv, ic, tmp_vec(1:5)
     end do ! icv
   end do ! ipe
   if (w_grp%npes > 1) then
-    call MPI_allreduce(MPI_IN_PLACE, tmp_vec, isdf_in%n_intp_r, MPI_DOUBLE, MPI_SUM, &
-                       w_grp%comm, err)
+    call MPI_allreduce(MPI_IN_PLACE, tmp_vec, isdf_in%n_intp_r, MPI_DOUBLE, MPI_SUM, w_grp%comm, err)
   end if
   !if (w_grp%master) print *, "Inside matvec_isdf_UltraLowMem, tmp_vec", tmp_vec(1:5)
   !stop
@@ -113,7 +112,7 @@ subroutine matvec_isdf_UltraLowMem(vec, Hvec, ncv_loc, isdf_in, wfn, cvpair, sqr
 !  print *, "Cmtrx R^1/2 vec", tmp_vec(1:10), sum(tmp_vec)
 
   call dgemv('N', w_grp%myn_intp_r, isdf_in%n_intp_r, 1.0d0, &
-             isdf_in%Mmtrx_loc(1, 1, 1, 1, 1, 1, 1), &
+             isdf_in%dMmtrx_loc(1, 1, 1, 1, 1, 1, 1), &
              w_grp%myn_intp_r, tmp_vec, 1, 0.0d0, MC_vec, 1)
   !print *, "Mmtrx(1,1:n_intp_r)", isdf_in%Mmtrx(1,1:isdf_in%n_intp_r,1,1,1,1,1)
   !print *, "tmp_vec(1:n_intp_r)", tmp_vec(1:isdf_in%n_intp_r)
@@ -142,8 +141,8 @@ subroutine matvec_isdf_UltraLowMem(vec, Hvec, ncv_loc, isdf_in, wfn, cvpair, sqr
       iv = tmp_cvpair(1, icv)
       ic = tmp_cvpair(2, icv)
       tmp_vec(1:w_grp%myn_intp_r) = &
-        isdf_in%Psi_intp_loc(1:w_grp%myn_intp_r, ic, 1, 1)* &
-        isdf_in%Psi_intp_loc(1:w_grp%myn_intp_r, iv, 1, 1)
+        isdf_in%dPsi_intp_loc(1:w_grp%myn_intp_r, ic, 1, 1)* &
+        isdf_in%dPsi_intp_loc(1:w_grp%myn_intp_r, iv, 1, 1)
       tmp_Hvec(icv) = &
         ddot(w_grp%myn_intp_r, tmp_vec(1), 1, MC_vec(1), 1)
     end do ! icv

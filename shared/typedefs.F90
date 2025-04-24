@@ -51,9 +51,12 @@ module typedefs
     real(dp), pointer :: Cmtrx(:, :, :, :, :)
     real(dp), pointer :: Mmtrx(:, :, :, :, :, :, :)
     real(dp), pointer :: Psi_intp(:, :, :, :)
-    real(dp), pointer :: Mmtrx_loc(:, :, :, :, :, :, :)
-    real(dp), pointer :: Psi_intp_loc(:, :, :, :)
-    real(dp), pointer :: PsiC_intp_bl(:, :, :, :), PsiV_intp_bl(:, :, :, :)
+    real(dp), pointer :: dMmtrx_loc(:, :, :, :, :, :, :)
+    complex(dpc), pointer :: zMmtrx_loc(:, :, :, :, :, :, :)
+    real(dp), pointer :: dPsi_intp_loc(:, :, :, :)
+    complex(dpc), pointer :: zPsi_intp_loc(:, :, :, :)
+    real(dp), pointer :: dPsiC_intp_bl(:, :, :, :), dPsiV_intp_bl(:, :, :, :)
+    complex(dpc), pointer :: zPsiC_intp_bl(:, :, :, :), zPsiV_intp_bl(:, :, :, :)
     integer :: xvgrp, xcgrp, myvgrp, mycgrp, mynv, mync, ldv, ldc, myvstart, myvend, mycstart, mycend
 
     ! We assume nkp = nspin = 1 for now, kp and spin indices
@@ -62,9 +65,8 @@ module typedefs
     ! Index arrays for calculate_sigma_lanczos_lowcomsym
     ! Arrays map to the real index of wave functions
     integer, pointer :: lrep(:), lrep_bound(:, :)
-    ! Index arrays for PsiV_intp_bl and PsiC_intp_bl
-    ! Arrays map to the index of local arrays PsiV_intp_bl and
-    ! PsiC_intp_bl
+    ! Index arrays for ZPsiV_intp_bl and ZPsiC_intp_bl
+    ! Arrays map to the index of local arrays ZPsiV_intp_bl and ZPsiC_intp_bl
     integer, pointer :: lvrep(:), lvrep_bound(:, :), &
                         lcrep(:), lcrep_bound(:, :)
     integer, pointer :: myncv_sym(:), mync_sym(:), mynv_sym(:)
