@@ -107,8 +107,8 @@ subroutine Zisdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt,
   ! Issue need to be addressed: if there are N wfn_grp, does it mean these matrix need to be
   ! calculated by all processors at the same time, or can we distribute the workload later ??
   !
-  SCALAR, allocatable :: P(:, :, :), P_intp(:, :, :), &   ! P on reduced domain
-                         Q(:, :, :), Q_intp(:, :, :), &   ! Q on reduced domain
+  SCALAR, allocatable :: P(:, :, :), P_intp(:, :, :), &  ! P on reduced domain
+                         Q(:, :, :), Q_intp(:, :, :), &  ! Q on reduced domain
                          zeta(:, :, :), vzeta(:, :, :), fzeta(:, :), &
                          tmp_Psi_intp_loc(:, :), tmp_Mmtrx_loc(:, :), &
                          ! matrices and vectors used for solving linear equations
@@ -140,18 +140,14 @@ subroutine Zisdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt,
   integer, external :: numroc
   type(xc_type) :: xc_lda
   !
-  ! tmporary hdf5 file "zeta_tmp_iproc.h5", where iproc is the index of a processor
+  ! tmporary hdf5 file "zeta_iproc.h5", where iproc is the index of a processor
   ! the following variables is used for temporarily storing zeta and Vcoul_zeta
   !
-  character(len=40) :: h5filename ! File name
-  character(len=7)  :: iproc_string
-  character(len=2)  :: isp_string, irp_string, jrp_string
-  character(len=40) :: dset_zeta = "Zeta"
-  character(len=40) :: dset_vczeta = "VcZeta"
+  character(len=40) :: h5filename, dset_zeta, dset_vczeta
   integer(hid_t) :: file_id, &  ! file identifier
                     dset_zeta_id(nspin, gvec%syms%ntrans), &
-                    dset_vczeta_id(nspin, gvec%syms%ntrans), & ! dataset identifier
-                    dspace_zeta, dspace_vczeta, &             ! dataspace identifier
+                    dset_vczeta_id(nspin, gvec%syms%ntrans), &  ! dataset identifier
+                    dspace_zeta, dspace_vczeta, &  ! dataspace identifier
                     subdspace
   integer(hsize_t) :: data_dims(3), subdim(3), shift(3), stride(3), block(3)
   integer :: h5err
@@ -176,15 +172,14 @@ subroutine Zisdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt,
   maxnc = isdf_in%maxnc
 
   ! Initialize h5 FORTRAN interface
-  call h5open_f(h5err)
+  call H5open_f(h5err)
 
   ! create h5 file here
 #ifdef DEBUG
   if (w_grp%master .and. verbose) write (6, *) "create h5 file"
 #endif
-  write (iproc_string, '(I7.7)') w_grp%inode
-  h5filename = "zeta_"//iproc_string//".h5"
-  call h5fcreate_f(h5filename, H5F_ACC_TRUNC_F, file_id, h5err)
+  write (h5filename, '(A,I7.7,A)') "zeta_", w_grp%inode, ".h5"
+  call H5Fcreate_f(h5filename, H5F_ACC_TRUNC_F, file_id, h5err)
   !
   ! each processor stores part of P, Q and zeta
   !
@@ -240,8 +235,8 @@ subroutine Zisdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt,
   ! Generate Coulomb potential
   !
   if (kflag < 2) then
-    call dinitialize_FFT(w_grp%inode, fft_box)
-    call dcreate_coul_0D(gvec%bdot, qkt, fft_box)
+    call Zinitialize_FFT(w_grp%inode, fft_box)
+    call Zcreate_coul_0D(gvec%bdot, qkt, fft_box)
     if (w_grp%master) write (*, *) " finished creating FFT plans and coul_0D"
   end if
   !
@@ -276,28 +271,29 @@ subroutine Zisdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt,
   data_dims(1) = w_grp%mydim
   data_dims(2) = n_intp_r
   data_dims(3) = n_cplx
+  if (peinf%master) write (*, '(A,3(X,I0))') " hdf5_data_dims =", data_dims(1), data_dims(2), data_dims(3)
   ! create dataspace
 #ifdef DEBUG
   if (w_grp%master) write (*, *) "Create dataspace: dspace_zeta"
 #endif
-  call h5screate_simple_f(rank, data_dims, dspace_zeta, h5err)
+  call H5Screate_simple_f(rank, data_dims, dspace_zeta, h5err)
   ! create dataspace for vc_zeta
 #ifdef DEBUG
   if (w_grp%master) write (*, *) "Create dataspace: dspace_vczeta"
 #endif
-  call h5screate_simple_f(rank, data_dims, dspace_vczeta, h5err)
+  call H5Screate_simple_f(rank, data_dims, dspace_vczeta, h5err)
   ! create hdf5 datasets for zeta and V_c*zeta for each spin and group representation
   do isp = 1, nspin
     ! zeta
     do jrp = 1, gvec%syms%ntrans
       write (dset_zeta, '(A,I1.1,A,I2.2)') "zeta_", isp, "_", jrp
-      call h5dcreate_f(file_id, dset_zeta, H5T_NATIVE_DOUBLE, dspace_zeta, dset_zeta_id(isp, jrp), h5err)
+      call H5Dcreate_f(file_id, dset_zeta, H5T_NATIVE_DOUBLE, dspace_zeta, dset_zeta_id(isp, jrp), h5err)
     end do  ! jrp
     ! V_c*zeta
     do jrp = 1, gvec%syms%ntrans/r_grp%num
       irp = r_grp%g_rep(jrp)
       write (dset_vczeta, '(A,I1.1,A,I2.2)') "vczeta_", isp, "_", irp
-      call h5dcreate_f(file_id, dset_vczeta, H5T_NATIVE_DOUBLE, dspace_vczeta, dset_vczeta_id(isp, irp), h5err)
+      call H5Dcreate_f(file_id, dset_vczeta, H5T_NATIVE_DOUBLE, dspace_vczeta, dset_vczeta_id(isp, irp), h5err)
     end do  ! jrp
   end do
 
@@ -505,8 +501,8 @@ subroutine Zisdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt,
       ! Calculate zeta(r,n_intp_r,jrp) for all representations
       do jrp = 1, gvec%syms%ntrans/r_grp%num
         if (w_grp%master) then
-          write (*, "(A)") repeat('-', 65)
-          write (*, "(2(A, I0))") "  jrp: ", jrp, "/", gvec%syms%ntrans/r_grp%num
+          write (*, '(A)') repeat('-', 65)
+          write (*, '(2(A,I0))') "  jrp: ", jrp, "/", gvec%syms%ntrans/r_grp%num
         end if
         irp = r_grp%g_rep(jrp)
         Bmtrx = Zzero
@@ -621,8 +617,7 @@ subroutine Zisdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt,
 #else
         tmp_array(1:w_grp%mydim, 1:isdf_in%n_intp_r, 1) = Xmtrx(1:w_grp%mydim, 1:isdf_in%n_intp_r)
 #endif
-        call h5dwrite_f(dset_zeta_id(isp, irp), H5T_NATIVE_DOUBLE, tmp_array, data_dims, h5err)
-        call stopwatch(peinf%master, "done write hdf5")
+        call H5Dwrite_f(dset_zeta_id(isp, irp), H5T_NATIVE_DOUBLE, tmp_array, data_dims, h5err)
       end do  ! jrp = 1, gvec%syms%ntrans/r_grp%num
     end do  ! isp
     call MPI_BARRIER(peinf%comm, errinfo)
@@ -665,8 +660,7 @@ subroutine Zisdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt,
           subdim(1) = w_grp%mydim
           subdim(2) = w_grp%npes
           subdim(3) = n_cplx
-          write (6,*) subdim
-          call h5screate_simple_f(rank, subdim, subdspace, h5err)
+          call H5Screate_simple_f(rank, subdim, subdspace, h5err)
           ! Warning: currently, only works for: 1 w_grp per each r_grp
           !          this means r_grp%npes == w_grp%npes
           do i_row = 1, isdf_in%n_intp_r, r_grp%npes
@@ -679,26 +673,22 @@ subroutine Zisdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt,
             if (shift(2) + 1 > isdf_in%n_intp_r) cycle
             if (shift(2) + subdim(2) > isdf_in%n_intp_r) then
               subdim(2) = isdf_in%n_intp_r - shift(2)
-              call h5sclose_f(subdspace, h5err)
-              call h5screate_simple_f(rank, subdim, subdspace, h5err)
+              call H5Sclose_f(subdspace, h5err)
+              call H5Screate_simple_f(rank, subdim, subdspace, h5err)
             end if
             !
             ! read rho_h_distr from hdf5 file
             !
             stride = (/1, 1, 1/)
             block = (/1, 1, 1/)
-            call h5sselect_hyperslab_f(dspace_zeta, H5S_SELECT_SET_F, shift, subdim, h5err, stride, block)
-            call h5dread_f(dset_zeta_id(isp, irp), H5T_NATIVE_DOUBLE, tmp_array(1:subdim(1), 1:subdim(2), 1:n_cplx), &
+            call H5Sselect_hyperslab_f(dspace_zeta, H5S_SELECT_SET_F, shift, subdim, h5err, stride, block)
+            call H5Dread_f(dset_zeta_id(isp, irp), H5T_NATIVE_DOUBLE, tmp_array(1:subdim(1), 1:subdim(2), :), &
                            data_dims, h5err, subdspace, dspace_zeta)
 #ifdef CPLX
             rho_h_distr(1:subdim(1), 1:subdim(2)) = cmplx(tmp_array(1:subdim(1), 1:subdim(2), 1), &
                                                           tmp_array(1:subdim(1), 1:subdim(2), 2), kind=dpc)
 #else
             rho_h_distr(1:subdim(1), 1:subdim(2)) = tmp_array(1:subdim(1), 1:subdim(2), 1)
-#endif
-
-#ifdef DEBUG
-            if (w_grp%master) write (dbgunit, *) " i_row ", i_row, ": done h5read_3"
 #endif
             !
             ! initialize rho_h
@@ -724,10 +714,9 @@ subroutine Zisdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt,
 #else
             tmp_array(1:subdim(1), 1:subdim(2), 1) = rho_h_distr(1:subdim(1), 1:subdim(2))
 #endif
-            call h5sselect_hyperslab_f(dspace_vczeta, H5S_SELECT_SET_F, shift, subdim, h5err, stride, block)
-            call h5dwrite_f(dset_vczeta_id(isp, irp), H5T_NATIVE_DOUBLE, &
+            call H5Sselect_hyperslab_f(dspace_vczeta, H5S_SELECT_SET_F, shift, subdim, h5err, stride, block)
+            call H5Dwrite_f(dset_vczeta_id(isp, irp), H5T_NATIVE_DOUBLE, &
                             tmp_array(1:subdim(1), 1:subdim(2), 1:n_cplx), data_dims, h5err, subdspace, dspace_vczeta)
-            !if(w_grp%master) write(6,*) "done write hdf5"
           end do ! i_row
         end do ! isp
       end do ! jrp
@@ -746,16 +735,16 @@ subroutine Zisdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt,
       irp = r_grp%g_rep(jrp)
       do isp = 1, nspin
         ! open dataspace
-        call h5sclose_f(dspace_zeta, h5err)
-        call h5dget_space_f(dset_zeta_id(isp, irp), dspace_zeta, h5err)
+        call H5Sclose_f(dspace_zeta, h5err)
+        call H5Dget_space_f(dset_zeta_id(isp, irp), dspace_zeta, h5err)
         if (kflag < 2) then
-          call h5sclose_f(dspace_vczeta, h5err)
-          call h5dget_space_f(dset_vczeta_id(isp, irp), dspace_vczeta, h5err)
+          call H5Sclose_f(dspace_vczeta, h5err)
+          call H5Dget_space_f(dset_vczeta_id(isp, irp), dspace_vczeta, h5err)
         end if
       end do
 
       do isp = 1, nspin
-        call h5dread_f(dset_zeta_id(isp, irp), H5T_NATIVE_DOUBLE, tmp_array, data_dims, h5err)
+        call H5Dread_f(dset_zeta_id(isp, irp), H5T_NATIVE_DOUBLE, tmp_array, data_dims, h5err)
 #ifdef CPLX
         zeta(1:w_grp%mydim, 1:isdf_in%n_intp_r, isp) = cmplx(tmp_array(1:w_grp%mydim, 1:isdf_in%n_intp_r, 1), &
                                                              tmp_array(1:w_grp%mydim, 1:isdf_in%n_intp_r, 2), &
@@ -764,15 +753,8 @@ subroutine Zisdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt,
         zeta(1:w_grp%mydim, 1:isdf_in%n_intp_r, isp) = tmp_array(1:w_grp%mydim, 1:isdf_in%n_intp_r, 1)
 #endif
 
-#ifdef DEBUG
-        !if (w_grp%master) write(dbgunit,*) "done h5read_1"
-        !if (w_grp%master) then
-        !  write(dbgunit, '("Read zeta() irp",i3," isp ",i3 )') irp, isp
-        !  call printmatrix( zeta(1,1,isp), w_grp%mydim, isdf_in%n_intp_r, 6 )
-        !endif
-#endif
         if (kflag < 2) then
-          call h5dread_f(dset_vczeta_id(isp, irp), H5T_NATIVE_DOUBLE, tmp_array, data_dims, h5err)
+          call H5Dread_f(dset_vczeta_id(isp, irp), H5T_NATIVE_DOUBLE, tmp_array, data_dims, h5err)
 #ifdef CPLX
           vzeta(1:w_grp%mydim, 1:isdf_in%n_intp_r, isp) = cmplx(tmp_array(1:w_grp%mydim, 1:isdf_in%n_intp_r, 1), &
                                                                 tmp_array(1:w_grp%mydim, 1:isdf_in%n_intp_r, 2), &
@@ -883,28 +865,27 @@ subroutine Zisdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt,
   end if
   if (myrow_1d /= -1) call blacs_gridexit(icntxt_1d)
   ! close dataspaces
-  call h5sclose_f(dspace_zeta, h5err)
-  call h5sclose_f(dspace_vczeta, h5err)
-  call h5sclose_f(subdspace, h5err)
+  call H5Sclose_f(dspace_zeta, h5err)
+  call H5Sclose_f(dspace_vczeta, h5err)
+  call H5Sclose_f(subdspace, h5err)
   ! close dataset
   do isp = 1, nspin
     do jrp = 1, gvec%syms%ntrans
-      call h5dclose_f(dset_zeta_id(isp, jrp), h5err)
+      call H5Dclose_f(dset_zeta_id(isp, jrp), h5err)
     end do
     do jrp = 1, gvec%syms%ntrans/r_grp%num
       irp = r_grp%g_rep(jrp)
-      call h5dclose_f(dset_vczeta_id(isp, irp), h5err)
+      call H5Dclose_f(dset_vczeta_id(isp, irp), h5err)
     end do ! jrp
   end do
   ! close file
-  call h5fclose_f(file_id, h5err)
+  call H5Fclose_f(file_id, h5err)
   ! close FORTRAN interface
-  call h5close_f(h5err)
+  call H5close_f(h5err)
 
-#ifdef DEBUG
-  write (6, *) "Remove file "//trim(h5filename)
+#ifndef DEBUG
+  call execute_command_line("rm "//trim(h5filename))
 #endif
-  ! call execute_command_line("rm "//trim(h5filename))
   !
   ! clean up all the ALLOCATEd variables
   !

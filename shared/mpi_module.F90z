@@ -370,28 +370,24 @@ contains
 #ifdef MPI
       idum = 0
       idum(w_grp%inode) = ndim*w_grp%offset + 1
-      call MPI_ALLREDUCE(idum, offset, w_grp%npes, MPI_INTEGER, MPI_SUM, &
-                         w_grp%comm, info)
+      call MPI_ALLREDUCE(idum, offset, w_grp%npes, MPI_INTEGER, MPI_SUM, w_grp%comm, info)
       idum = 0
       idum(w_grp%inode) = ndim*w_grp%mydim
-      call MPI_ALLREDUCE(idum, ncount, w_grp%npes, MPI_INTEGER, MPI_SUM, &
-                         w_grp%comm, info)
+      call MPI_ALLREDUCE(idum, ncount, w_grp%npes, MPI_INTEGER, MPI_SUM, w_grp%comm, info)
 
+      
       do jpe = 0, w_grp%npes - 1
         do ipe = 0, w_grp%npes - 1
           !tag = ipe + w_grp%npes*jpe
           ! The tag will be out of bound for large systems
           tag = jpe
           if (jpe == ipe) then
-            if (ipe == w_grp%inode) call Zcopy(ncount(jpe), &
-                                               f_distr(1, ipe + 1), 1, f_loc(offset(jpe)), 1)
+            if (ipe == w_grp%inode) call Zcopy(ncount(jpe), f_distr(1, ipe + 1), 1, f_loc(offset(jpe)), 1)
           else
             if (jpe == w_grp%inode) &
-              call MPI_SEND(f_distr(1, ipe + 1), ncount(jpe), &
-                            MPI_DOUBLE_SCALAR, ipe, tag, w_grp%comm, info)
+              call MPI_SEND(f_distr(1, ipe + 1), ncount(jpe), MPI_DOUBLE_SCALAR, ipe, tag, w_grp%comm, info)
             if (ipe == w_grp%inode) &
-              call MPI_RECV(f_loc(offset(jpe)), ncount(jpe), &
-                            MPI_DOUBLE_SCALAR, jpe, tag, w_grp%comm, status, info)
+              call MPI_RECV(f_loc(offset(jpe)), ncount(jpe), MPI_DOUBLE_SCALAR, jpe, tag, w_grp%comm, status, info)
           end if
         end do
         call MPI_BARRIER(w_grp%comm, info)
