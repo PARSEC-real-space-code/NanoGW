@@ -1134,19 +1134,19 @@ program sigma
   routnam(22) = "k_int_isdf 2"; timerlist(22) = 66
   routnam(23) = "k_int_isdf 3"; timerlist(23) = 67
   routnam(24) = "ISDF_intp_vectors"; timerlist(24) = 53
-  routnam(25) = "ISDF_dgemm1"; timerlist(25) = 78
-  routnam(26) = "ISDF_Hadamard"; timerlist(26) = 80
+  routnam(25) = "ISDF__Xgemm1"; timerlist(25) = 78
+  routnam(26) = "ISDF__Hadamard"; timerlist(26) = 80
   routnam(27) = "ISDF_<z|K|z>"; timerlist(27) = 54
-  routnam(28) = "ISDF_dgemm2"; timerlist(28) = 77
-  routnam(29) = "ISDF_dpoisson"; timerlist(29) = 79
-  routnam(30) = "Lanczos_matvec"; timerlist(30) = 58
-  routnam(31) = "Lanczos_poly"; timerlist(31) = 57
-  routnam(32) = "matvec_sqR@vec"; timerlist(32) = 68
-  routnam(33) = "matvec_Hadamard"; timerlist(33) = 69
-  routnam(34) = "matvec_C@vec"; timerlist(34) = 71
-  routnam(35) = "matvec_M@vec"; timerlist(35) = 72
-  routnam(36) = "matvec_mpi"; timerlist(36) = 70
-  routnam(37) = "matvec_vec_final"; timerlist(37) = 73
+  routnam(28) = "ISDF__Xgemm2"; timerlist(28) = 77
+  routnam(29) = "ISDF__Xpoisson"; timerlist(29) = 79
+  routnam(30) = "Lanczos_poly"; timerlist(30) = 57
+  routnam(31) = "Lanczos_matvec"; timerlist(31) = 58
+  routnam(32) = "matvec__sqR@vec"; timerlist(32) = 68
+  routnam(33) = "matvec__Hadamard"; timerlist(33) = 69
+  routnam(34) = "matvec__C@vec"; timerlist(34) = 71
+  routnam(35) = "matvec__M@vec"; timerlist(35) = 72
+  routnam(36) = "matvec__mpi"; timerlist(36) = 70
+  routnam(37) = "matvec__vec_final"; timerlist(37) = 73
 
 #ifdef HIPMAGMA
   !if (opt%linear_algebra .eq. 2 .or. opt%eigsolver .eq. 2) then

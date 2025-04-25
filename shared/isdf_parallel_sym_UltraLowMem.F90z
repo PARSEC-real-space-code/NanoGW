@@ -405,14 +405,14 @@ subroutine Zisdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt,
       !enddo
 
       if (w_grp%master) then
-        write (*, "(A)") " Allocate matrices"
-        write (*, "(A, F0.2, A)") "  P: ", 1.d0 * n_intp_r * w_grp%mydim * gvec%syms%ntrans / 2**17, " MB"
-        write (*, "(A, F0.2, A)") "  Q: ", 1.d0 * n_intp_r * w_grp%mydim * gvec%syms%ntrans / 2**17, " MB"
-        write (*, "(A, F0.2, A)") "  P_intp: ", 1.d0 * n_intp_r * myn_intp_r * gvec%syms%ntrans / 2**17, " MB"
-        write (*, "(A, F0.2, A)") "  Q_intp: ", 1.d0 * n_intp_r * myn_intp_r * gvec%syms%ntrans / 2**17, " MB"
-        write (*, "(A, F0.2, A)") "  Amtrx: ", 1.d0 * n_intp_r * myn_intp_r * gvec%syms%ntrans / 2**17, " MB"
-        write (*, "(A, F0.2, A)") "  Bmtrx: ", 1.d0 * n_intp_r * w_grp%mydim / 2**17, " MB"
-        write (*, "(A, F0.2, A)") "  Xmtrx: ", 1.d0 * w_grp%mydim * n_intp_r / 2**17, " MB"
+        write (*, '(A)') " Allocate matrices"
+        write (*, '(A,F0.2,A)') "  P: ", 1.d0 * n_intp_r * w_grp%mydim * gvec%syms%ntrans / 2**17, " MB"
+        write (*, '(A,F0.2,A)') "  Q: ", 1.d0 * n_intp_r * w_grp%mydim * gvec%syms%ntrans / 2**17, " MB"
+        write (*, '(A,F0.2,A)') "  P_intp: ", 1.d0 * n_intp_r * myn_intp_r * gvec%syms%ntrans / 2**17, " MB"
+        write (*, '(A,F0.2,A)') "  Q_intp: ", 1.d0 * n_intp_r * myn_intp_r * gvec%syms%ntrans / 2**17, " MB"
+        write (*, '(A,F0.2,A)') "  Amtrx: ", 1.d0 * n_intp_r * myn_intp_r * gvec%syms%ntrans / 2**17, " MB"
+        write (*, '(A,F0.2,A)') "  Bmtrx: ", 1.d0 * n_intp_r * w_grp%mydim / 2**17, " MB"
+        write (*, '(A,F0.2,A)') "  Xmtrx: ", 1.d0 * w_grp%mydim * n_intp_r / 2**17, " MB"
       end if
       allocate (P(n_intp_r, w_grp%mydim, gvec%syms%ntrans))
       allocate (Q(n_intp_r, w_grp%mydim, gvec%syms%ntrans))
