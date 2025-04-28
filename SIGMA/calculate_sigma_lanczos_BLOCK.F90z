@@ -290,7 +290,7 @@ subroutine Zcalculate_sigma_lanczos_BLOCK(nspin, nkpt, &
               isdf_in%ZPsi_intp_loc(1:myn_intp_r, jn + kk - 1, 1, 1)
           end do
           if (w_grp%npes > 1) then
-            call mpi_allreduce(MPI_IN_PLACE, tmp_Cvec, isdf_in%n_intp_r*blksz, &
+            call MPI_ALLREDUCE(MPI_IN_PLACE, tmp_Cvec, isdf_in%n_intp_r*blksz, &
                                MPI_DOUBLE, MPI_SUM, w_grp%comm, info)
           end if
           !if (w_grp%master) print *, "tmp_Cvec", tmp_Cvec(1:10)
@@ -306,7 +306,7 @@ subroutine Zcalculate_sigma_lanczos_BLOCK(nspin, nkpt, &
                      tmp_Cvec, isdf_in%n_intp_r, 0.d0, tmp_CvecM, myn_intp_r)
          !!tmp_Cvec = 0.d0
          !!tmp_Cvec(myn_intp_start:myn_intp_end) = tmp_CvecM(1:myn_intp_r)
-         !!call mpi_allreduce(MPI_IN_PLACE, tmp_Cvec, isdf_in%n_intp_r,&
+         !!call MPI_ALLREDUCE(MPI_IN_PLACE, tmp_Cvec, isdf_in%n_intp_r,&
          !!  MPI_DOUBLE, MPI_SUM, w_grp%comm, info)
           !if (w_grp%master) print *, "tmp_CvecM", tmp_CvecM(1:10)
           ! Pvec stores the icv_start to icv_end elements of the global_Pvec
@@ -351,7 +351,7 @@ subroutine Zcalculate_sigma_lanczos_BLOCK(nspin, nkpt, &
             Pvec(1:myncv, kk) = Pvec(1:myncv, kk)*sqrtR(1:myncv)
             pnorm2(kk) = ddot(myncv, Pvec(1, kk), 1, Pvec(1, kk), 1)
           end do
-          call mpi_allreduce(MPI_IN_PLACE, pnorm2, blksz, MPI_DOUBLE, &
+          call MPI_ALLREDUCE(MPI_IN_PLACE, pnorm2, blksz, MPI_DOUBLE, &
                              MPI_SUM, w_grp%comm, info)
           do kk = 1, blksz
             pnorm(kk) = sqrt(pnorm2(kk))

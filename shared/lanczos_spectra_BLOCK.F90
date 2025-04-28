@@ -63,14 +63,14 @@ subroutine lanczos_spectra_isdf_BLOCK(v0, v0_norm, ncv_loc, zz, nz, niter, isdf_
   do ii = 1, blksz
     a_elmt(1, ii) = ddot(ncv_loc, wvec(1, ii), 1, vec(1, ii), 1)
     !if (peinf%master) print *, "before allreduce a_elmt ", a_elmt(1,2)
-    call mpi_allreduce(MPI_IN_PLACE, a_elmt(1, ii), 1, &
+    call MPI_ALLREDUCE(MPI_IN_PLACE, a_elmt(1, ii), 1, &
                        MPI_DOUBLE, MPI_SUM, peinf%comm, info)
     !if (peinf%master) print *, "after allreduce a_elmt ", a_elmt(1,2)
     ! wvec = wvec - a_elmt(1) * vec
     call daxpy(ncv_loc, -a_elmt(1, ii), vec(1, ii), 1, wvec(1, ii), 1)
     b_elmt(2, ii) = ddot(ncv_loc, wvec(1, ii), 1, wvec(1, ii), 1)
     !if (peinf%master) print *, "before allreduce b_elmt ", b_elmt(2,2)
-    call mpi_allreduce(MPI_IN_PLACE, b_elmt(2, ii), 1, &
+    call MPI_ALLREDUCE(MPI_IN_PLACE, b_elmt(2, ii), 1, &
                        MPI_DOUBLE, MPI_SUM, peinf%comm, info)
     !if (peinf%master) print *, "before allreduce b_elmt ", b_elmt(2,2)
     b_elmt(2, ii) = sqrt(b_elmt(2, ii))
@@ -95,12 +95,12 @@ subroutine lanczos_spectra_isdf_BLOCK(v0, v0_norm, ncv_loc, zz, nz, niter, isdf_
     wvec = wvec + tmpvec
     do ii = 1, blksz
       a_elmt(k, ii) = ddot(ncv_loc, wvec(1, ii), 1, vec(1, ii), 1)
-      call mpi_allreduce(MPI_IN_PLACE, a_elmt(k, ii), 1, &
+      call MPI_ALLREDUCE(MPI_IN_PLACE, a_elmt(k, ii), 1, &
                          MPI_DOUBLE, MPI_SUM, peinf%comm, info)
       if (k + 1 <= niter) then
         call daxpy(ncv_loc, -a_elmt(k, ii), vec(1, ii), 1, wvec(1, ii), 1)
         b_elmt(k + 1, ii) = ddot(ncv_loc, wvec(1, ii), 1, wvec(1, ii), 1)
-        call mpi_allreduce(MPI_IN_PLACE, b_elmt(k + 1, ii), 1, &
+        call MPI_ALLREDUCE(MPI_IN_PLACE, b_elmt(k + 1, ii), 1, &
                            MPI_DOUBLE, MPI_SUM, peinf%comm, info)
         b_elmt(k + 1, ii) = sqrt(b_elmt(k + 1, ii))
       end if

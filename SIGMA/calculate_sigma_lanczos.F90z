@@ -193,7 +193,7 @@ subroutine Zcalculate_sigma_lanczos(nspin, nkpt, sig_en, dft_code, gvec, kpt, qp
       if (peinf%inode == iprocs) then
         print *, icv_start, icv_end, intp_start, intp_end, ncv_loc, n_intp_loc
       end if
-      call MPI_Barrier(peinf%comm, info)
+      call MPI_BARRIER(peinf%comm, info)
     end do
     do ij = icv_start, icv_end ! ij
       iv = k_p(1, 1)%col(1, ij)
@@ -259,7 +259,7 @@ subroutine Zcalculate_sigma_lanczos(nspin, nkpt, sig_en, dft_code, gvec, kpt, qp
                      isdf_in%n_intp_r, tmp_Cvec, 1, 0.d0, tmp_CvecM, 1)
           tmp_Cvec(1:isdf_in%n_intp_r) = 0.d0
           tmp_Cvec(intp_start:intp_end) = tmp_CvecM(1:n_intp_loc)
-          call mpi_allreduce(MPI_IN_PLACE, tmp_Cvec, isdf_in%n_intp_r, MPI_DOUBLE, MPI_SUM, peinf%comm, info)
+          call MPI_ALLREDUCE(MPI_IN_PLACE, tmp_Cvec, isdf_in%n_intp_r, MPI_DOUBLE, MPI_SUM, peinf%comm, info)
           if (peinf%master) print *, " inode ", w_grp%inode, "Mmtrx @ tmp_Cvec ", tmp_Cvec(1:10)
           ! Pvec stores the icv_start to icv_end elements of the global_Pvec
           ! compute Pvec(1:ncv_loc) = tmp_Cvec(1:isdf_in%n_intp_r)*tmp_Cmtrx(1:isdf_in%n_intp_r, 1:ncv_loc)
@@ -281,7 +281,7 @@ subroutine Zcalculate_sigma_lanczos(nspin, nkpt, sig_en, dft_code, gvec, kpt, qp
           !endif
           Pvec(1:ncv_loc) = Pvec(1:ncv_loc)*sqrtR(1:ncv_loc)
           pnorm2 = ddot(ncv_loc, Pvec, 1, Pvec, 1)
-          call mpi_allreduce(MPI_IN_PLACE, pnorm2, 1, MPI_DOUBLE, MPI_SUM, peinf%comm, info)
+          call MPI_ALLREDUCE(MPI_IN_PLACE, pnorm2, 1, MPI_DOUBLE, MPI_SUM, peinf%comm, info)
           if (peinf%master) print *, "pnorm**2 ", pnorm2
           !stop
           if (jn <= nval) then ! occupied states

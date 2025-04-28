@@ -670,7 +670,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
                   !if (peinf%master) print *, " cvstart ", cvstart
                 end do ! iv
               end do ! jvrep
-              !call mpi_barrier(w_grp%comm, mpi_err)
+              !call MPI_BARRIER(w_grp%comm, mpi_err)
               !ij = 0
               !if (w_grp%master) then
               !print *, " iv ic sqrtR Pvec "
@@ -680,7 +680,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
               !  enddo
               !enddo
               !endif
-              !call mpi_barrier(w_grp%comm, mpi_err)
+              !call MPI_BARRIER(w_grp%comm, mpi_err)
               ! if (w_grp%master) print *, "sqrtR ", sqrtR(1:5)
               ! if (w_grp%master) print *, "Pvec(:,1) ", Pvec(1:5, 1)
               ! if (w_grp%master) print *, "Pvec(:,2) ", Pvec(1:5, 2)

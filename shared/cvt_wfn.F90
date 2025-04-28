@@ -41,7 +41,7 @@ subroutine cvt_wfn(gvec, wfn, nspin, nk, n_intp, intp)
         tmpvec(1:w_grp%mydim)
     end do ! istate loop
   end do ! isp loop
-  call MPI_AllREDUCE(tmprho, rho, gvec%nr*nspin, MPI_DOUBLE, MPI_SUM, &
+  call MPI_ALLREDUCE(tmprho, rho, gvec%nr*nspin, MPI_DOUBLE, MPI_SUM, &
                      w_grp%comm, errinfo)
   deallocate (tmpvec)
   deallocate (tmprho)

@@ -69,7 +69,7 @@ subroutine mapinverse(m, n1, map1, n2, map2, map1to2)
     end do
   end do
   call MPI_BARRIER(peinf%comm, err)
-  call mpi_allreduce(MPI_IN_PLACE, map1to2, n1, MPI_INTEGER, MPI_SUM, &
+  call MPI_ALLREDUCE(MPI_IN_PLACE, map1to2, n1, MPI_INTEGER, MPI_SUM, &
                      peinf%comm, err)
 ! call int_psum( n1, peinf%npes, peinf%comm, map1to2 )
   !--new code end here--

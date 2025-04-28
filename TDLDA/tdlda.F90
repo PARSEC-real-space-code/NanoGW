@@ -259,7 +259,7 @@ program tdlda
     call timacc(51, 2, tsec)
     call stopwatch(peinf%master, "after call cvt")
     ! broadcast intp to all processors
-    call MPI_bcast(intp(1), n_intp, MPI_INTEGER, peinf%masterid, peinf%comm, info)
+    call MPI_BCAST(intp(1), n_intp, MPI_INTEGER, peinf%masterid, peinf%comm, info)
     ! pick out the interpolation points in reduced zone
     n_intp_r = 0
     do ipt = 1, n_intp

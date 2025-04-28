@@ -285,7 +285,7 @@ subroutine Zsetup_s(gvec, kpt, qpt, kpt_sig, sig_in, sig, pol_in, pol, k_p, k_c,
 
   end if
   ! Weiwei Gao: For debug, consider to remove later
-  call MPI_Barrier(peinf%comm, info)
+  call MPI_BARRIER(peinf%comm, info)
   if (sig_in%ndiag_s + sig_in%noffd_s == 0) return
 
   do jk = 1, kpt%nk

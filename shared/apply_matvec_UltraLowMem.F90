@@ -99,7 +99,7 @@ subroutine matvec_isdf_UltraLowMem(vec, Hvec, ncv_loc, isdf_in, wfn, cvpair, sqr
     end do ! icv
   end do ! ipe
   if (w_grp%npes > 1) then
-    call MPI_allreduce(MPI_IN_PLACE, tmp_vec, isdf_in%n_intp_r, MPI_DOUBLE, MPI_SUM, w_grp%comm, err)
+    call MPI_ALLREDUCE(MPI_IN_PLACE, tmp_vec, isdf_in%n_intp_r, MPI_DOUBLE, MPI_SUM, w_grp%comm, err)
   end if
   !if (w_grp%master) print *, "Inside matvec_isdf_UltraLowMem, tmp_vec", tmp_vec(1:5)
   !stop
@@ -120,7 +120,7 @@ subroutine matvec_isdf_UltraLowMem(vec, Hvec, ncv_loc, isdf_in, wfn, cvpair, sqr
   ! sum(isdf_in%Mmtrx(1,1:isdf_in%n_intp_r,1,1,1,1,1)*tmp_vec(1:isdf_in%n_intp_r))
   !tmp_vec = 0.d0
   !tmp_vec(intp_start:intp_end) = MC_vec(1:n_intp_loc)
-  !call MPI_allreduce( MPI_IN_PLACE, tmp_vec, isdf_in%n_intp_r, MPI_DOUBLE, MPI_SUM, &
+  !call MPI_ALLREDUCE( MPI_IN_PLACE, tmp_vec, isdf_in%n_intp_r, MPI_DOUBLE, MPI_SUM, &
   !  peinf%comm, err )
   !if (w_grp%master) print *, "Mmtrx Cmtrx R^1/2 vec", MC_vec(1:10)
 

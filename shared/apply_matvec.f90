@@ -102,7 +102,7 @@ subroutine matvec_isdf(vec, Hvec, ncv_loc, isdf_in, wfn, tmpCmtrx, sqrtR)
 !   allocate(isdf_in%Mmtrx( n_intp_r, n_intp_r, nspin, nspin, kpt%nk, 2, gvec%syms%ntrans ))
 !  Calculate Mmtrx(1) = <zeta(i)| V_coul(r,r') | zeta(j)> and
 !            Mmtrx(2) = <zeta(i)| f^LDA(r) | zeta(j)>
-  call MPI_allreduce(MPI_IN_PLACE, tmp_vec, isdf_in%n_intp_r, MPI_DOUBLE, MPI_SUM, &
+  call MPI_ALLREDUCE(MPI_IN_PLACE, tmp_vec, isdf_in%n_intp_r, MPI_DOUBLE, MPI_SUM, &
                      peinf%comm, err)
   if (peinf%master) print *, "Cmtrx R^1/2 vec", tmp_vec(1:10)
 
@@ -117,7 +117,7 @@ subroutine matvec_isdf(vec, Hvec, ncv_loc, isdf_in, wfn, tmpCmtrx, sqrtR)
   ! sum(isdf_in%Mmtrx(1,1:isdf_in%n_intp_r,1,1,1,1,1)*tmp_vec(1:isdf_in%n_intp_r))
   tmp_vec = 0.d0
   tmp_vec(intp_start:intp_end) = MC_vec(1:n_intp_loc)
-  call MPI_allreduce(MPI_IN_PLACE, tmp_vec, isdf_in%n_intp_r, MPI_DOUBLE, MPI_SUM, &
+  call MPI_ALLREDUCE(MPI_IN_PLACE, tmp_vec, isdf_in%n_intp_r, MPI_DOUBLE, MPI_SUM, &
                      peinf%comm, err)
   if (peinf%master) print *, "Mmtrx Cmtrx R^1/2 vec", tmp_vec(1:10)
   deallocate (MC_vec)

@@ -235,7 +235,7 @@ subroutine Zcalculate_sigma_lanczos_UltraLowMem(nspin, nkpt, &
             isdf_in%ZPsi_intp_loc(1:myn_intp_r, m1, 1, 1)* &
             isdf_in%ZPsi_intp_loc(1:myn_intp_r, jn, 1, 1)
           if (w_grp%npes > 1) then
-            call mpi_allreduce(MPI_IN_PLACE, tmp_Cvec, isdf_in%n_intp_r, &
+            call MPI_ALLREDUCE(MPI_IN_PLACE, tmp_Cvec, isdf_in%n_intp_r, &
                                MPI_DOUBLE, MPI_SUM, w_grp%comm, info)
           end if
           !if (w_grp%master) print *, "tmp_Cvec", tmp_Cvec(1:10)
@@ -248,7 +248,7 @@ subroutine Zcalculate_sigma_lanczos_UltraLowMem(nspin, nkpt, &
                      tmp_Cvec, 1, 0.d0, tmp_CvecM, 1)
          !!tmp_Cvec = 0.d0
          !!tmp_Cvec(myn_intp_start:myn_intp_end) = tmp_CvecM(1:myn_intp_r)
-         !!call mpi_allreduce(MPI_IN_PLACE, tmp_Cvec, isdf_in%n_intp_r,&
+         !!call MPI_ALLREDUCE(MPI_IN_PLACE, tmp_Cvec, isdf_in%n_intp_r,&
          !!  MPI_DOUBLE, MPI_SUM, w_grp%comm, info)
           !if (w_grp%master) print *, "tmp_CvecM", tmp_CvecM(1:10)
           ! Pvec stores the icv_start to icv_end elements of the global_Pvec
@@ -280,7 +280,7 @@ subroutine Zcalculate_sigma_lanczos_UltraLowMem(nspin, nkpt, &
           if (w_grp%master) print *, "iband ", jn, Pvec(1:5)
           Pvec(1:myncv) = Pvec(1:myncv)*sqrtR(1:myncv)
           pnorm2 = ddot(myncv, Pvec, 1, Pvec, 1)
-          call mpi_allreduce(MPI_IN_PLACE, pnorm2, 1, MPI_DOUBLE, &
+          call MPI_ALLREDUCE(MPI_IN_PLACE, pnorm2, 1, MPI_DOUBLE, &
                              MPI_SUM, w_grp%comm, info)
           call stopwatch(peinf%master, "Finished Pvec ")
           !if (w_grp%master) print *, "pnorm**2 ", pnorm2

@@ -286,7 +286,7 @@ subroutine Zmatvec_isdf_lowcomsym(vec, Hvec, ncv_loc, isdf_in, sqrtR, tamm_d, &
   !print *, "Mmtrx(1,1:n_intp_r)*tmp_vec(1:n_intp_r)", &
   ! sum(isdf_in%Mmtrx(1,1:isdf_in%n_intp_r,1,1,1,1,1)*tmp_vec(1:isdf_in%n_intp_r))
   call timacc(70, 1, tsec)
-  !call mpi_barrier(peinf%comm, err)
+  !call MPI_BARRIER(peinf%comm, err)
   !call stopwatch(peinf%master,'matvec: mpi_allreduce start')
   tmp_vec(1:n_intp_r, 1:blksz) = 0.d0
   tmp_vec(intp_start:intp_end, 1:blksz) = MC_vec(1:w_grp%myn_intp_r, 1:blksz)

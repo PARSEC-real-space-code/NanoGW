@@ -295,7 +295,7 @@ subroutine input_s(sig, kpt_sig, snorm, writeqp, readvxc, readocc, cohsex, &
       write (6, '(i8,i8,i8)') ii, sig%off1(ii), sig%off2(ii)
     end do
   end if
-  call MPI_Barrier(peinf%comm, ii)
+  call MPI_BARRIER(peinf%comm, ii)
 
 end subroutine input_s
 !===================================================================

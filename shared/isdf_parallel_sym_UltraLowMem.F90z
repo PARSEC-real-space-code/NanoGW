@@ -389,15 +389,6 @@ subroutine Zisdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt,
       call stopwatch(peinf%master, "Start distribute_intp_pts")
       call Zdistribute_intp_pts(kpt%wfn(isp, ikp), isdf_in, gvec%syms%ntrans, isp, ikp)
       call stopwatch(peinf%master, "Finish distribute_intp_pts")
-      !do ipe = 0, w_grp%npes-1
-      !  if (w_grp%inode .eq. ipe) then
-      !    if (ipe .eq. 0) write(6, *) isp, ikp, " ZPsi_intp_loc "
-      !    print *, " ipe = ", ipe
-      !    call printmatrix( isdf_in%ZPsi_intp_loc(1,1,1,1), w_grp%myn_intp_r, &
-      !    kpt%wfn(1,1)%nmem, 6 )
-      !  endif
-      !  call MPI_BARRIER(w_grp%comm, info)
-      !enddo
 
       if (w_grp%master) then
         write (*, '(A)') " Allocate matrices"
@@ -872,7 +863,7 @@ subroutine Zdistribute_intp_pts(wfn, isdf_in, ntrans, isp, ikp)
   logical :: flag
   integer :: ioff1(0:w_grp%npes - 1), ioff2(0:w_grp%npes - 1), mpistatus(MPI_STATUS_SIZE)
 
-  call MPI_Comm_get_attr(w_grp%comm, MPI_TAG_UB, max_tag, flag, mpi_err)
+  call MPI_COMM_GET_ATTR(w_grp%comm, MPI_TAG_UB, max_tag, flag, mpi_err)
   if (w_grp%master) print *, "MPI MAX_TAG = ", MAX_TAG
   ioff1 = 0
   ioff2 = 0

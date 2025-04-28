@@ -116,7 +116,7 @@ subroutine matvec_isdf_BLOCK(vec, Hvec, ncv_loc, isdf_in, wfn, cvpair, ncv, sqrt
   !if (w_grp%master) print *, "breakpoint 2"
   call timacc(72, 1, tsec)
   if (w_grp%npes > 1) then
-    call MPI_allreduce(MPI_IN_PLACE, tmp_vec, isdf_in%n_intp_r*blksz, &
+    call MPI_ALLREDUCE(MPI_IN_PLACE, tmp_vec, isdf_in%n_intp_r*blksz, &
                        MPI_DOUBLE, MPI_SUM, &
                        w_grp%comm, err)
   end if
@@ -147,7 +147,7 @@ subroutine matvec_isdf_BLOCK(vec, Hvec, ncv_loc, isdf_in, wfn, cvpair, ncv, sqrt
   ! sum(isdf_in%Mmtrx(1,1:isdf_in%n_intp_r,1,1,1,1,1)*tmp_vec(1:isdf_in%n_intp_r))
   !tmp_vec = 0.d0
   !tmp_vec(intp_start:intp_end) = MC_vec(1:n_intp_loc)
-  !call MPI_allreduce( MPI_IN_PLACE, tmp_vec, isdf_in%n_intp_r, MPI_DOUBLE, MPI_SUM, &
+  !call MPI_ALLREDUCE( MPI_IN_PLACE, tmp_vec, isdf_in%n_intp_r, MPI_DOUBLE, MPI_SUM, &
   !  peinf%comm, err )
   !if (w_grp%master) print *, "Mmtrx Cmtrx R^1/2 vec", MC_vec(1:10)
 ! apply CMC_vec = Cmtrx^T MC_vec
