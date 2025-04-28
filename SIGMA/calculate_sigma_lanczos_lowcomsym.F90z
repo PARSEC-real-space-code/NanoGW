@@ -68,7 +68,6 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
   ! local variables
   character(len=100) :: file_name
 
-  logical :: staticcorr
   integer :: ii, jj, irp, iq, ik, jk, isp, isig, info, neig_qp, ien, ic, iv, icv, jn, m1, inode, &
              myn_intp_start, myn_intp_end, myn_intp_r, npoly, ncond, nval, nbnd, jnblock, ncplx
   real(dp) :: tsec(2), rtmp, deltae, emin, emax, en0
@@ -128,7 +127,6 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
   !-------------------------------------------------------------------
   ! Prepare to calculate self-energy.
   !
-  staticcorr = .false.
 
   if (nspin /= 1) then
     call die("For now, GW lanczos is only implemented for nspin = 1.")
