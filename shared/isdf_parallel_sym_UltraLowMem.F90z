@@ -440,24 +440,24 @@ subroutine Zisdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt,
             IVV = isdf_in%ivlist(iv, isp, ikp, jrp)
             JVV = kpt%wfn(isp, ikp)%map(IVV)
             ! Compute P(n_intp_r, w_grp%mydim)
-            call Zgemm_hl('n', 't', w_grp%n_intp_end(ipe) - w_grp%n_intp_start(ipe) + 1, w_grp%mydim, 1, one, &
-                          tmp_Psi_intp_loc(1, JVV), ldn_intp_r, kpt%wfn(isp, ikp)%Zwf(1, JVV), w_grp%ldn, one, &
+            call Zgemm_hl('n', 't', w_grp%n_intp_end(ipe) - w_grp%n_intp_start(ipe) + 1, w_grp%mydim, 1, Zone, &
+                          tmp_Psi_intp_loc(1, JVV), ldn_intp_r, kpt%wfn(isp, ikp)%Zwf(1, JVV), w_grp%ldn, Zone, &
                           P(w_grp%n_intp_start(ipe), 1, jrp), n_intp_r, opt%linear_algebra)
-            call Zgemm_hl('n', 't', w_grp%n_intp_end(ipe) - w_grp%n_intp_start(ipe) + 1, myn_intp_r, 1, one, &
+            call Zgemm_hl('n', 't', w_grp%n_intp_end(ipe) - w_grp%n_intp_start(ipe) + 1, myn_intp_r, 1, Zone, &
                           tmp_Psi_intp_loc(1, JVV), ldn_intp_r, isdf_in%ZPsi_intp_loc(1, JVV, isp, ikp), myn_intp_r, &
-                          one, P_intp(w_grp%n_intp_start(ipe), 1, jrp), n_intp_r, opt%linear_algebra)
+                          Zone, P_intp(w_grp%n_intp_start(ipe), 1, jrp), n_intp_r, opt%linear_algebra)
           end do  ! iv
 
           do ic = 1, isdf_in%nc(isp, ikp, jrp)
             ICC = isdf_in%iclist(ic, isp, ikp, jrp)
             JCC = kpt%wfn(isp, ikp)%map(ICC)
             ! Compute Q
-            call Zgemm_hl('n', 't', w_grp%n_intp_end(ipe) - w_grp%n_intp_start(ipe) + 1, w_grp%mydim, 1, one, &
-                          tmp_Psi_intp_loc(1, JCC), ldn_intp_r, kpt%wfn(isp, ikp)%Zwf(1, JCC), w_grp%ldn, one, &
+            call Zgemm_hl('n', 't', w_grp%n_intp_end(ipe) - w_grp%n_intp_start(ipe) + 1, w_grp%mydim, 1, Zone, &
+                          tmp_Psi_intp_loc(1, JCC), ldn_intp_r, kpt%wfn(isp, ikp)%Zwf(1, JCC), w_grp%ldn, Zone, &
                           Q(w_grp%n_intp_start(ipe), 1, jrp), n_intp_r, opt%linear_algebra)
-            call Zgemm_hl('n', 't', w_grp%n_intp_end(ipe) - w_grp%n_intp_start(ipe) + 1, myn_intp_r, 1, one, &
+            call Zgemm_hl('n', 't', w_grp%n_intp_end(ipe) - w_grp%n_intp_start(ipe) + 1, myn_intp_r, 1, Zone, &
                           tmp_Psi_intp_loc(1, JCC), ldn_intp_r, isdf_in%ZPsi_intp_loc(1, JCC, isp, ikp), myn_intp_r, &
-                          one, Q_intp(w_grp%n_intp_start(ipe), 1, jrp), n_intp_r, opt%linear_algebra)
+                          Zone, Q_intp(w_grp%n_intp_start(ipe), 1, jrp), n_intp_r, opt%linear_algebra)
           end do  ! ic
           call timacc(78, 2, tsec)
 
@@ -740,7 +740,7 @@ subroutine Zisdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt,
               !            w_grp%mydim, fzeta(1,1), w_grp%mydim, 1.d0, tmp_Mmtrx_loc(1, 1), ldn_intp_r)
               call timacc(77, 1, tsec)
               call Zgemm_hl('T', 'N', n_row, n_intp_r, w_grp%mydim, norm_factor, &
-                            zeta(1, w_grp%n_intp_start(ipe), isp), w_grp%mydim, fzeta(1, 1), w_grp%mydim, 1.d0, &
+                            zeta(1, w_grp%n_intp_start(ipe), isp), w_grp%mydim, fzeta(1, 1), w_grp%mydim, Zone, &
                             tmp_Mmtrx_loc(1, 1), ldn_intp_r, opt%linear_algebra)
               call timacc(77, 2, tsec)
               call MPI_REDUCE(MPI_IN_PLACE, tmp_Mmtrx_loc(1, 1), n_row*n_intp_r, MPI_DOUBLE_SCALAR, MPI_SUM, ipe, &
@@ -766,7 +766,7 @@ subroutine Zisdf_parallel_sym_UltraLowMem(gvec, kpt, nspin, isdf_in, kflag, opt,
               ! new code
               call timacc(77, 1, tsec)
               call Zgemm_hl('T', 'N', n_row, n_intp_r, w_grp%mydim, norm_factor, &
-                            zeta(1, w_grp%n_intp_start(ipe), isp), w_grp%mydim, vzeta(1, 1, csp), w_grp%mydim, 0.d0, &
+                            zeta(1, w_grp%n_intp_start(ipe), isp), w_grp%mydim, vzeta(1, 1, csp), w_grp%mydim, Zzero, &
                             tmp_Mmtrx_loc(1, 1), ldn_intp_r, opt%linear_algebra)
               call timacc(77, 2, tsec)
               call MPI_REDUCE(tmp_Mmtrx_loc(1, 1), isdf_in%ZMmtrx_loc(1, 1, isp, csp, ikp, 1, irp), n_row*n_intp_r, &
