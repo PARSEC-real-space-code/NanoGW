@@ -42,16 +42,16 @@ subroutine finalize(verbose, comm, count1, count2, routnam, timerlist)
 !-------------------------------------------------------------------
 
   if (verbose) then
-    write (6, '(/,a,/)') repeat('-', 96)
+    write (*, '(/,A,/)') repeat("-", 96)
 #ifdef MPI
-    write (6, '(33x,a10,22x,a10,19x,a1)') 'CPU [s]', 'WALL [s]', '#'
-    write (6, '(23x,3a10,2x,3a10)') 'min.', 'master', 'max.', 'min.', 'master', 'max.'
+    write (*, '(33X,A10,22X,A10,19X,A1)') "CPU [s]", "WALL [s]", "#"
+    write (*, '(23X,3A10,2X,3A10)') "min.", "master", "max.", "min.", "master", "max."
 #else
-    write (6, '(22x,a10,2x,a10,7x,a1)') 'CPU [s]', 'WALL [s]', '#'
+    write (*, '(22X,A10,2X,A10,7X,A1)') "CPU [s]", "WALL [s]", "#"
 #endif
   end if
   do ii = 1, count1 + count2
-    if (ii == count1 + 1 .and. verbose) write (6, *)
+    if (ii == count1 + 1 .and. verbose) write (*, *)
     jj = 3
     call timacc(timerlist(ii), jj, tsec)
 #ifdef MPI
@@ -60,10 +60,9 @@ subroutine finalize(verbose, comm, count1, count2, routnam, timerlist)
 #endif
     if (verbose .and. jj > 0) then
 #ifdef MPI
-      write (6, '(1x,a22,3f10.2,2x,3f10.2,i10)') &
-        routnam(ii), tmin(1), tsec(1), tmax(1), tmin(2), tsec(2), tmax(2), jj
+      write (*, '(1X,A22,3F10.2,2X,3F10.2,I10)') routnam(ii), tmin(1), tsec(1), tmax(1), tmin(2), tsec(2), tmax(2), jj
 #else
-      write (6, '(1x,a22,f10.2,2x,f10.2,i10)') routnam(ii), tsec(1), tsec(2), jj
+      write (*, '(1X,A22,F10.2,2X,F10.2,I10)') routnam(ii), tsec(1), tsec(2), jj
 #endif
     end if
   end do ! ii
@@ -76,13 +75,12 @@ subroutine finalize(verbose, comm, count1, count2, routnam, timerlist)
 
   if (verbose) then
 #ifdef MPI
-    write (6, '(/,1x,a6,16x,3f10.2,2x,3f10.2,/)') &
-      'TOTAL:', tmin(1), tsec(1), tmax(1), tmin(2), tsec(2), tmax(2)
+    write (*, '(/,1X,A6,16X,3F10.2,2X,3F10.2,/)') "TOTAL:", tmin(1), tsec(1), tmax(1), tmin(2), tsec(2), tmax(2)
 #else
-    write (6, '(/,1x,a6,16x,f10.2,2x,f10.2,/)') 'TOTAL:', tsec(1), tsec(2)
+    write (*, '(/,1X,A6,16X,f10.2,2X,F10.2,/)') "TOTAL:", tsec(1), tsec(2)
 #endif
     call get_date(datelabel)
-    write (6, '(3a,/,a)') ' Finished ', datelabel, ' UTC', repeat('-', 96)
+    write (*, '(2A,/,A)') " Finished ", datelabel, repeat('-', 96)
   end if
 
 #ifdef MPI
