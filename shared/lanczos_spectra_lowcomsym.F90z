@@ -65,123 +65,87 @@ subroutine Zlanczos_spectra_isdf_lowcomsym(v0, v0_norm, ncv_loc, zz, nz, niter, 
 
   SCALAR :: vec(ncv_loc, blksz), wvec(ncv_loc, blksz), tmpvec(ncv_loc, blksz)
 
-  ! normalize the vector
+  ! normalize v
   do ii = 1, blksz
     vec(1:ncv_loc, ii) = v0(1:ncv_loc, ii)/v0_norm(ii)
   end do
 
   b_elmt(1, :) = one
 
-  ! compute wvec = H*vec
-  ! if (peinf%master) print *, "vec = ", vec(1:5,1), "...", vec(ncv_loc-4:ncv_loc,1)
-  if (tamm_d) then ! TDA - poly fitting
-    call Zmatvec_isdf_lowcomsym(vec, wvec, ncv_loc, isdf_in, sqrtR, .true., &
-                                blksz, nmrep, gvec &
-#ifdef DCU
-                                , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
-                                hipblasHandle &
-#elif defined _CUDA
-                                , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
-                                vstep, tmp_vec, streamid &
-#endif
-                                )
-  else
-    call Zpolynomial_matvec_isdf_lowcomsym(vec, wvec, ncv_loc, polynomial, npoly, isdf_in, sqrtR, &
-                                           blksz, nmrep, gvec &
-#ifdef DCU
-                                           , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
-                                           hipblasHandle &
-#elif defined _CUDA
-                                           , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
-                                           vstep, tmp_vec, streamid &
-#endif
-                                           )
-  end if
-  ! if (peinf%master) print *, "wvec = ",wvec(1:10, 2), "...", vec(ncv_loc-4:ncv_loc,2)
-  !
-  !call stopwatch(peinf%master,'mpi_allreduce 0 start')
-  ! a(1) = w* @ v
-  do ii = 1, blksz
-    a_tmp(ii) = Zdot_c(ncv_loc, wvec(1, ii), 1, vec(1, ii), 1)
-  end do
+  do k = 1, niter
 
-  call MPI_ALLREDUCE(MPI_IN_PLACE, a_tmp, blksz, MPI_DOUBLE_SCALAR, MPI_SUM, peinf%comm, info)
-  a_elmt(1, :) = a_tmp
+    if (k > 1) then
+      ! b = ||w||
+      do ii = 1, blksz
+        b_tmp(ii) = real(Zdot_c(ncv_loc, wvec(1, ii), 1, wvec(1, ii), 1), kind=dp)
+      end do  ! ii
+      call MPI_ALLREDUCE(MPI_IN_PLACE, b_tmp, blksz, MPI_DOUBLE_PRECISION, MPI_SUM, peinf%comm, info)
+      b_elmt(k, :) = sqrt(b_tmp)
 
-  ! wvec = wvec - a_elmt(1) * vec
-  do ii = 1, blksz
-    call Zaxpy(ncv_loc, -a_elmt(1, ii), vec(1, ii), 1, wvec(1, ii), 1)
-    b_tmp(ii) = real(Zdot_c(ncv_loc, wvec(1, ii), 1, wvec(1, ii), 1), kind=dp)
-  end do
-  call MPI_ALLREDUCE(MPI_IN_PLACE, b_tmp, blksz, MPI_DOUBLE_PRECISION, MPI_SUM, peinf%comm, info)
-  b_elmt(2, :) = sqrt(b_tmp)
-  ! call stopwatch(peinf%master,'mpi_allreduce 0 finish')
-
-  do k = 2, niter
-    do ii = 1, blksz
-      wvec(1:ncv_loc, ii) = wvec(1:ncv_loc, ii)/b_elmt(k, ii)
-      vec(1:ncv_loc, ii) = -vec(1:ncv_loc, ii)*b_elmt(k, ii)
-    end do ! ii loop
-    ! swap wvec and vec
-    tmpvec = vec
-    vec = wvec
-    wvec = tmpvec
-    ! wvec = wvec + H*vec
-    if (tamm_d) then ! TDA - poly fitting
-      call Zmatvec_isdf_lowcomsym(vec, tmpvec, ncv_loc, isdf_in, sqrtR, .true., &
-                                 blksz, nmrep, gvec &
-#ifdef DCU
-                                 , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
-                                 hipblasHandle &
-#elif defined _CUDA
-                                 , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
-                                 vstep, tmp_vec, streamid &
-#endif
-                                 )
-    else ! not TDA
-      call Zpolynomial_matvec_isdf_lowcomsym(vec, tmpvec, ncv_loc, polynomial, npoly, isdf_in, sqrtR, &
-                                            blksz, nmrep, gvec &
-#ifdef DCU
-                                            , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
-                                            hipblasHandle &
-#elif defined _CUDA
-                                            , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
-                                            vstep, tmp_vec, streamid &
-#endif
-                                            )
+      ! tmp = - v b
+      ! v = w / b
+      do ii = 1, blksz
+        tmpvec(1:ncv_loc, ii) = -vec(1:ncv_loc, ii)*b_elmt(k, ii)
+        vec(1:ncv_loc, ii) = wvec(1:ncv_loc, ii)/b_elmt(k, ii)
+      end do  ! ii
     end if
-    wvec = wvec + tmpvec
-    !call stopwatch(peinf%master,'mpi_allreduce k start')
+
+    ! w = H @ v
+    if (tamm_d) then ! TDA - no poly fitting
+      call Zmatvec_isdf_lowcomsym(vec, wvec, ncv_loc, isdf_in, sqrtR, .true., &
+                                  blksz, nmrep, gvec &
+#ifdef DCU
+                                  , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
+                                  hipblasHandle &
+#elif defined _CUDA
+                                  , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
+                                  vstep, tmp_vec, streamid &
+#endif
+                                  )
+    else ! not TDA - poly fitting
+      call Zpolynomial_matvec_isdf_lowcomsym(vec, wvec, ncv_loc, polynomial, npoly, isdf_in, sqrtR, &
+                                             blksz, nmrep, gvec &
+#ifdef DCU
+                                             , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
+                                             hipblasHandle &
+#elif defined _CUDA
+                                             , d_PsiV, d_PsiC, d_Cmtrx, d_pvec, d_cvec, d_lcrep, &
+                                             vstep, tmp_vec, streamid &
+#endif
+                                             )
+    end if
+
+    ! a = w* @ v
     do ii = 1, blksz
       a_tmp(ii) = Zdot_c(ncv_loc, wvec(1, ii), 1, vec(1, ii), 1)
     end do
     call MPI_ALLREDUCE(MPI_IN_PLACE, a_tmp, blksz, MPI_DOUBLE_SCALAR, MPI_SUM, peinf%comm, info)
     a_elmt(k, :) = a_tmp
+
+    ! w = w - a v + tmp
     if (k < niter) then
       do ii = 1, blksz
         call Zaxpy(ncv_loc, -a_elmt(k, ii), vec(1, ii), 1, wvec(1, ii), 1)
-        b_tmp(ii) = real(Zdot_c(ncv_loc, wvec(1, ii), 1, wvec(1, ii), 1), kind=dp)
       end do  ! ii
-      call MPI_ALLREDUCE(MPI_IN_PLACE, b_tmp, blksz, MPI_DOUBLE_PRECISION, MPI_SUM, peinf%comm, info)
-      b_elmt(k + 1, :) = sqrt(b_tmp)
+      if (k > 1) then
+        wvec = wvec + tmpvec
+      end if
     end if
-    !call stopwatch(peinf%master,'mpi_allreduce k finish')
+
   end do  ! k
 
+  ! <vec| 1/(z-H) |vec>
   spectra = zzero
-
   do ii = 1, blksz
     do iz = 1, nz
       do j = niter, 1, -1
         numerator = b_elmt(j, ii) * b_elmt(j, ii) * zone
-        if (j == 1) numerator = zone
+        ! if (j == 1) numerator = zone  ! This is done by setting b1 = 1
         denominator = zz(iz, ii) - a_elmt(j, ii) - spectra(iz, ii)
         spectra(iz, ii) = numerator/denominator
-        !if (nz .eq. 1) print *, "check ", j, numerator, denominator
-      end do ! j
-      !print *, "spectra ", iz, zz(iz), spectra(iz)
-    end do ! iz
-  end do ! ii
+      end do  ! j
+    end do  ! iz
+  end do  ! ii
 
 end subroutine
 
