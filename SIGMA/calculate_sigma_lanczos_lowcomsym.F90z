@@ -83,7 +83,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
              maxnblks, nmrep, ibnd, lrp1, lrp2, nx, nx_select, n_intp_r, icend
   integer, allocatable :: blks(:, :, :), tmp_lrep(:, :), tmp_lvrep(:, :), tmp_lcrep(:, :), nblks(:), tmp_count(:), &
                           occ(:, :)
-  real(dp) :: pnorm2(opt%jnblock), pnorm(opt%jnblock), fit_error, max_fit_error
+  real(dp) :: fit_error, max_fit_error
   real(dp), allocatable :: eta(:)  ! eta_n in the paper, 1 for occupied and -1 for empty, (ib)
   !real(dp) :: MC_vec(w_grp%myn_intp_r, opt%jnblock), &
   !  CMC_vec(w_grp%ldncv, opt%jnblock), &
@@ -682,7 +682,7 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
               ! if (w_grp%master) print *, "sqrtR ", sqrtR(1:5)
               ! if (w_grp%master) print *, "Pvec(:,1) ", Pvec(1:5, 1)
               ! if (w_grp%master) print *, "Pvec(:,2) ", Pvec(1:5, 2)
-              pnorm2 = 0.d0
+
               do kk = 1, blksz
                 ! if not TDA, |P_nm>_vc=(nm|vc)
                 ! if TDA, |P_nm>_vc=(nm|vc)(Ec-Ev)^0.5,
@@ -690,11 +690,6 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
                   Pvec(1:isdf_in%myncv_sym(nmrep), kk) = &
                     Pvec(1:isdf_in%myncv_sym(nmrep), kk)*sqrtR(1:isdf_in%myncv_sym(nmrep))
                 end if
-                pnorm2(kk) = real(Zdot_c(isdf_in%myncv_sym(nmrep), Pvec(1, kk), 1, Pvec(1, kk), 1), kind=dp)
-              end do ! kk
-              call MPI_ALLREDUCE(MPI_IN_PLACE, pnorm2, blksz, MPI_DOUBLE_PRECISION, MPI_SUM, peinf%comm, info)
-              do kk = 1, blksz
-                pnorm(kk) = sqrt(pnorm2(kk))
               end do ! kk
 
               call stopwatch(peinf%master, " Running Lanczos solver")
@@ -707,9 +702,8 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
                 ezz(1:sig_in%nen, kk) = (-zz(1:sig_in%nen)+kpt%wfn(isp, ik)%e1(jk))*eta(kk) + zi*ecuts
               end do ! kk
               ezz(sig_in%nen + 1, 1:blksz) = zzero
-
               ! compute <Pvec| 1/(ezz-H_aux) |Pvec>
-              call Zlanczos_spectra_isdf_lowcomsym(Pvec, pnorm, isdf_in%myncv_sym(nmrep), ezz, sig_in%nen + 1, &
+              call Zlanczos_spectra_isdf_lowcomsym(Pvec, isdf_in%myncv_sym(nmrep), ezz, sig_in%nen + 1, &
                                                    opt%lanczos_niter, isdf_in, sqrtR, polynomial, npoly, &
                                                    sigma_corr_tmp, tamm_d, blksz, nmrep, gvec &
 #ifdef DCU
@@ -725,11 +719,11 @@ subroutine Zcalculate_sigma_lanczos_lowcomsym(nspin, nkpt, sig_en, dft_code, gve
               do kk = 1, blksz
                 if (tamm_d) then
                   ! TODO: Check if factor sqrt(2) is correct in sigma_corr adjustment
-                  sigma_corr_tmp(1:sig_in%nen, kk) = -sigma_corr_tmp(1:sig_in%nen, kk)*eta(kk)*2.0**0.5*pnorm2(kk)
+                  sigma_corr_tmp(1:sig_in%nen, kk) = -sigma_corr_tmp(1:sig_in%nen, kk)*eta(kk)*2.0**0.5
                 else
                   sigma_corr_tmp(1:sig_in%nen, kk) = (sigma_corr_tmp(sig_in%nen + 1, kk) &
                                                       -sigma_corr_tmp(1:sig_in%nen, kk)) &
-                                                     *eta(kk)*2.0*pnorm2(kk)/ezz(1:sig_in%nen, kk)
+                                                     *eta(kk)*2.0/ezz(1:sig_in%nen, kk)
                 end if
                 sigma_corr(1:sig_in%nen) = sigma_corr(1:sig_in%nen) + sigma_corr_tmp(1:sig_in%nen, kk)
 #ifdef DEBUG
